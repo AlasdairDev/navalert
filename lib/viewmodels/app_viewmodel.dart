@@ -5,8 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/models.dart';
-import '../data/database_service.dart';
+import '../models/models.dart';
+import '../services/database_service.dart';
 
 /// App-wide ViewModel — app state, user settings, transport preferences,
 /// emergency contacts, fake-call configuration, favorites, the

@@ -5,7 +5,7 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import 'models.dart';
+import '../models/models.dart';
 
 /// Offline-first local storage (Requirement R5).
 /// Implements the full NavAlert database schema — Figure 34 and

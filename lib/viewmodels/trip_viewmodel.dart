@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/models.dart';
+import '../models/models.dart';
 import '../services/adaptive_alarm_engine.dart';
-import '../data/database_service.dart';
+import '../services/database_service.dart';
 import '../services/sound_service.dart';
 import '../services/trip_notification_service.dart';
 
@@ -329,7 +330,17 @@ class TripViewModel extends ChangeNotifier {
         await launchUrl(web, mode: LaunchMode.externalApplication);
       }
     } catch (_) {
-      await launchUrl(web, mode: LaunchMode.externalApplication);
+      try {
+        await launchUrl(web, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        // UC-6 Exception 1 — rerouting interface unavailable: copy the
+        // return coordinates to the clipboard and surface an error.
+        await Clipboard.setData(ClipboardData(
+            text: '${t.destinationLat},${t.destinationLng}'));
+        error = 'Google Maps unavailable — destination coordinates '
+            'copied to clipboard.';
+        notifyListeners();
+      }
     }
   }
 

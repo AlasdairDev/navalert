@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:uuid/uuid.dart';
 
-import '../data/models.dart';
+import '../models/models.dart';
 
 /// Commute guide engine (Requirement R6, Specific Objective 3).
 ///

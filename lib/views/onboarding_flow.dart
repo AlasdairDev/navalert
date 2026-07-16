@@ -174,7 +174,7 @@ class _PermissionsViewState extends State<PermissionsView> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
@@ -207,7 +207,7 @@ class _PermissionsViewState extends State<PermissionsView> {
                   'Allow alarms to run reliably in the background.', _battery,
                   (v) => _toggle(Permission.ignoreBatteryOptimizations,
                       (g) => _battery = g, v)),
-              const Spacer(),
+              const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
@@ -494,7 +494,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
           ? null
           : AppBar(title: const Text('Fake Call Setup')),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
@@ -564,7 +564,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                       label: const Text('Play')),
                 ],
               ),
-              const Spacer(),
+              const SizedBox(height: 32),
               SizedBox(
                 width: double.infinity,
                 child:

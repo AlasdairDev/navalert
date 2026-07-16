@@ -4,8 +4,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
-import '../data/database_service.dart';
-import '../data/models.dart';
+import '../services/database_service.dart';
+import '../models/models.dart';
 import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';

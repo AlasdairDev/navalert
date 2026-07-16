@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/database_service.dart';
-import '../data/models.dart';
+import '../services/database_service.dart';
+import '../models/models.dart';
 import '../services/geocoding_service.dart';
 import '../services/route_engine.dart';
 

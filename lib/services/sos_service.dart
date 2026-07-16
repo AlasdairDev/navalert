@@ -5,8 +5,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
-import '../data/database_service.dart';
-import '../data/models.dart';
+import 'database_service.dart';
+import '../models/models.dart';
 
 /// Emergency SOS (Requirement R8, Specific Objective 4 — UC-7).
 ///

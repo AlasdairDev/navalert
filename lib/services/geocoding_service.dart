@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
-import '../data/models.dart';
+import '../models/models.dart';
 
 /// Destination search using the free Nominatim API over OpenStreetMap
 /// (Specific Objective 6). Results are biased to Metro Manila.

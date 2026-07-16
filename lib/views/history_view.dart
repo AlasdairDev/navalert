@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
-import '../data/models.dart';
+import '../models/models.dart';
 import '../viewmodels/history_viewmodel.dart';
 
 /// Figure 30 — Trip History with search filter, calendar date filter and

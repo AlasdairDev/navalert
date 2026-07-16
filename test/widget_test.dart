@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:navalert/services/adaptive_alarm_engine.dart';
 import 'package:navalert/services/route_engine.dart';
-import 'package:navalert/data/models.dart';
+import 'package:navalert/models/models.dart';
 
 void main() {
   group('AdaptiveAlarmEngine (R1–R4)', () {

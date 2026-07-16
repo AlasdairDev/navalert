@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../data/models.dart';
-import '../data/database_service.dart';
+import '../models/models.dart';
+import '../services/database_service.dart';
 
 /// Trip History ViewModel (Figure 30) — keyword search plus the
 /// calendar date filter shown in the Trip History header.
