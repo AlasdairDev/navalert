@@ -90,7 +90,7 @@ class TripViewModel extends ChangeNotifier {
 
     const settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 8,
+      distanceFilter: 2,
     );
     _lastFixAt = DateTime.now();
     _sub = Geolocator.getPositionStream(
@@ -106,8 +106,8 @@ class TripViewModel extends ChangeNotifier {
     if (defaultTargetPlatform != TargetPlatform.android) return null;
     return AndroidSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 8,
-      intervalDuration: const Duration(seconds: 4),
+      distanceFilter: 2,
+      intervalDuration: const Duration(seconds: 1),
       foregroundNotificationConfig: const ForegroundNotificationConfig(
         notificationTitle: 'NavAlert trip monitoring',
         notificationText: 'Tracking your commute so you never miss your stop.',

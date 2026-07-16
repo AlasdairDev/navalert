@@ -45,6 +45,7 @@ dependencies:
   flutter_local_notifications: ^17.2.3
 
   cupertino_icons: ^1.0.8
+  flutter_map_cancellable_tile_provider: ^3.0.2
 
 dev_dependencies:
   flutter_test:

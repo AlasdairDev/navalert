@@ -11,8 +11,12 @@ import 'route_view.dart';
 
 /// Figure 20 — Destination Search Screen ("Where to?") using the
 /// Nominatim API over OpenStreetMap.
+///
+/// When [pickForFavorite] is true (Figure 31 — Favorites ⊕) the selected
+/// place is saved as a favorite instead of starting trip planning.
 class SearchView extends StatefulWidget {
-  const SearchView({super.key});
+  const SearchView({super.key, this.pickForFavorite = false});
+  final bool pickForFavorite;
 
   @override
   State<SearchView> createState() => _SearchViewState();
@@ -39,6 +43,18 @@ class _SearchViewState extends State<SearchView> {
   Future<void> _select(PlaceResult place) async {
     final home = context.read<HomeViewModel>();
     final app = context.read<AppViewModel>();
+
+    // Figure 31 — ⊕ Add Favorite: save the place and return.
+    if (widget.pickForFavorite) {
+      final messenger = ScaffoldMessenger.of(context);
+      await app.addFavorite(
+          place.name, place.displayName, place.lat, place.lng);
+      messenger.showSnackBar(
+          SnackBar(content: Text('${place.name} added to Favorites.')));
+      if (mounted) Navigator.of(context).pop();
+      return;
+    }
+
     showDialog(
         context: context,
         barrierDismissible: false,
@@ -57,18 +73,29 @@ class _SearchViewState extends State<SearchView> {
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
     return Scaffold(
-      appBar: AppBar(title: const Text('Where to?')),
+      appBar: AppBar(
+          title:
+              Text(widget.pickForFavorite ? 'Add Favorite' : 'Where to?')),
       body: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
               child: Column(children: [
-                Row(children: const [
-                  Icon(Icons.circle, size: 10, color: NavAlertColors.accent),
-                  SizedBox(width: 10),
-                  Text('Current Location',
-                      style: TextStyle(color: NavAlertColors.textSecondary)),
+                // Precise reverse-geocoded address of where the commuter
+                // currently is (falls back to the generic label offline).
+                Row(children: [
+                  const Icon(Icons.circle,
+                      size: 10, color: NavAlertColors.accent),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(vm.currentAddress ?? 'Current Location',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            color: NavAlertColors.textSecondary,
+                            fontSize: 12)),
+                  ),
                 ]),
                 const SizedBox(height: 10),
                 TextField(

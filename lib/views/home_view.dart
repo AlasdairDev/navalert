@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
@@ -55,14 +56,29 @@ class _HomeViewState extends State<HomeView> {
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'ph.edu.pup.navalert',
+                // Cancels obsolete tile requests while panning/zooming and
+                // prefetches a buffer of tiles around the viewport so
+                // dragging stays smooth.
+                tileProvider: CancellableNetworkTileProvider(),
+                panBuffer: 1,
+                keepBuffer: 4,
               ),
               MarkerLayer(markers: [
+                // Google-Maps-style blue current-location dot.
                 Marker(
                   point: center,
-                  width: 40,
-                  height: 40,
-                  child: const Icon(Icons.my_location,
-                      color: NavAlertColors.primary, size: 30),
+                  width: 22,
+                  height: 22,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(0xFF4285F4),
+                      border: Border.all(color: Colors.white, width: 3),
+                      boxShadow: const [
+                        BoxShadow(color: Colors.black38, blurRadius: 4),
+                      ],
+                    ),
+                  ),
                 ),
               ]),
             ],
@@ -149,13 +165,18 @@ class _HomeViewState extends State<HomeView> {
             child: FloatingActionButton(
               backgroundColor: Colors.white,
               onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                messenger.showSnackBar(const SnackBar(
+                    content: Text('Getting your GPS location…'),
+                    duration: Duration(seconds: 2)));
                 await vm.refreshCurrentLocation();
                 if (vm.currentLat != null) {
                   _mapController.move(
-                      LatLng(vm.currentLat!, vm.currentLng!), 15.5);
+                      LatLng(vm.currentLat!, vm.currentLng!), 16.5);
+                  messenger.hideCurrentSnackBar();
                 }
               },
-              child: const Icon(Icons.location_on, color: Colors.black87),
+              child: const Icon(Icons.my_location, color: Colors.black87),
             ),
           ),
         ],

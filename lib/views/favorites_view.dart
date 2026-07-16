@@ -43,12 +43,13 @@ class FavoritesView extends StatelessWidget {
         title: const Text('Favorites'),
         automaticallyImplyLeading: false,
         actions: [
-          // Figure 31 — ⊕ add a favorite via destination search
+          // Figure 31 — ⊕ add a favorite via place search (saves the
+          // selected place instead of starting trip planning).
           IconButton(
             icon: const Icon(Icons.add_circle_outline,
                 color: NavAlertColors.accent),
-            onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const SearchView())),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => const SearchView(pickForFavorite: true))),
           ),
         ],
       ),

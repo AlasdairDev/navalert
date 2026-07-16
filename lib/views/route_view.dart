@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
@@ -208,10 +209,16 @@ class _RouteViewState extends State<RouteView> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: [
-                  Row(children: const [
-                    Icon(Icons.circle, size: 10, color: NavAlertColors.accent),
-                    SizedBox(width: 10),
-                    Text('Current Location'),
+                  Row(children: [
+                    const Icon(Icons.circle,
+                        size: 10, color: NavAlertColors.accent),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(trip.originLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13)),
+                    ),
                   ]),
                   const Divider(height: 16),
                   Row(children: [
@@ -240,42 +247,86 @@ class _RouteViewState extends State<RouteView> {
               ),
             ),
           ),
-          // Map
+          // Map — route drawn along real streets with origin dot and
+          // destination pin, like Google Maps (Figure 21).
           Expanded(
-            child: FlutterMap(
-              options: MapOptions(
-                initialCenter: LatLng((origin.latitude + target.latitude) / 2,
-                    (origin.longitude + target.longitude) / 2),
-                initialZoom: 12,
-              ),
-              children: [
-                TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'ph.edu.pup.navalert',
+            child: Builder(builder: (context) {
+              final path = home.routePath.isNotEmpty
+                  ? home.routePath
+                      .map((p) => LatLng(p[0], p[1]))
+                      .toList(growable: false)
+                  : [origin, target];
+              return FlutterMap(
+                options: MapOptions(
+                  initialCameraFit: CameraFit.coordinates(
+                    coordinates: [origin, target],
+                    padding: const EdgeInsets.all(48),
+                  ),
                 ),
-                PolylineLayer(polylines: [
-                  Polyline(
-                      points: [origin, target],
-                      strokeWidth: 4,
-                      color: NavAlertColors.accent),
-                ]),
-                MarkerLayer(markers: [
-                  Marker(
+                children: [
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'ph.edu.pup.navalert',
+                    tileProvider: CancellableNetworkTileProvider(),
+                    panBuffer: 1,
+                    keepBuffer: 4,
+                  ),
+                  PolylineLayer(polylines: [
+                    // White casing under the route line for contrast.
+                    Polyline(
+                        points: path, strokeWidth: 9, color: Colors.white),
+                    Polyline(
+                        points: path,
+                        strokeWidth: 5.5,
+                        color: const Color(0xFF4285F4)),
+                  ]),
+                  MarkerLayer(markers: [
+                    // Origin: blue dot with white ring (current location).
+                    Marker(
                       point: origin,
-                      width: 36,
-                      height: 36,
-                      child: const Icon(Icons.my_location,
-                          color: NavAlertColors.primary)),
-                  Marker(
+                      width: 22,
+                      height: 22,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF4285F4),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black38, blurRadius: 4),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Destination: red map pin anchored at its tip.
+                    Marker(
                       point: target,
-                      width: 40,
-                      height: 40,
-                      child: const Icon(Icons.location_on,
-                          color: NavAlertColors.danger, size: 36)),
-                ]),
-              ],
-            ),
+                      width: 44,
+                      height: 44,
+                      alignment: Alignment.topCenter,
+                      child: const Icon(Icons.location_pin,
+                          color: NavAlertColors.danger,
+                          size: 44,
+                          shadows: [
+                            Shadow(color: Colors.black45, blurRadius: 6),
+                          ]),
+                    ),
+                  ]),
+                  if (home.loadingPath)
+                    const Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: EdgeInsets.only(top: 8),
+                        child: Chip(
+                          label: Text('Tracing route…',
+                              style: TextStyle(fontSize: 11)),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            }),
           ),
           // Suggested routes / commute guide panel (Figure 22)
           Container(

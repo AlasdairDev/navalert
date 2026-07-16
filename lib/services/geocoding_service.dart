@@ -8,6 +8,7 @@ import '../models/models.dart';
 /// (Specific Objective 6). Results are biased to Metro Manila.
 class GeocodingService {
   static const _base = 'https://nominatim.openstreetmap.org/search';
+  static const _reverseBase = 'https://nominatim.openstreetmap.org/reverse';
   // Nominatim usage policy requires an identifying User-Agent.
   static const _headers = {
     'User-Agent': 'NavAlert-Capstone/1.0 (PUP BSIT; contact: navalert@pup.edu.ph)'
@@ -45,5 +46,24 @@ class GeocodingService {
         lng: double.parse(m['lon'] as String),
       );
     }).toList();
+  }
+
+  /// Reverse-geocodes coordinates into a precise street address
+  /// (Nominatim /reverse) so "Current Location" can show the actual
+  /// place the commuter is standing at.
+  Future<String?> reverse(double lat, double lng) async {
+    final uri = Uri.parse(_reverseBase).replace(queryParameters: {
+      'lat': '$lat',
+      'lon': '$lng',
+      'format': 'jsonv2',
+      'zoom': '17',
+      'addressdetails': '0',
+    });
+    final res = await http.get(uri, headers: _headers).timeout(
+          const Duration(seconds: 10),
+        );
+    if (res.statusCode != 200) return null;
+    final m = jsonDecode(res.body) as Map<String, dynamic>;
+    return m['display_name'] as String?;
   }
 }
