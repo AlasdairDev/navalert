@@ -145,10 +145,55 @@ class _HistoryViewState extends State<HistoryView> {
                     : '${t.startedAt!.toLocal()}'.substring(0, 16),
                 style: const TextStyle(
                     fontSize: 11, color: NavAlertColors.textSecondary)),
+            const Spacer(),
+            // Delete with confirmation — nothing is removed until the
+            // user explicitly confirms in the dialog.
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.delete_outline,
+                  size: 20, color: NavAlertColors.textSecondary),
+              tooltip: 'Delete trip',
+              onPressed: () => _confirmDelete(t),
+            ),
           ]),
         ]),
       ),
     );
+  }
+
+  /// Click-to-confirm deletion: shows a dialog first; the trip (and its
+  /// alarm/overshoot/SOS records) is only deleted when "Delete" is tapped.
+  Future<void> _confirmDelete(Trip t) async {
+    final vm = context.read<HistoryViewModel>();
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this trip?'),
+        content: Text(
+          '${t.originLabel.split(',').first} → '
+          '${t.destinationLabel.split(',').first}\n\n'
+          'This will permanently remove the trip and its alarm records '
+          'from your history. This cannot be undone.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: NavAlertColors.danger,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await vm.deleteTrip(t);
+    messenger.showSnackBar(const SnackBar(content: Text('Trip deleted.')));
   }
 
   Widget _chip(String text, Color color) => Container(

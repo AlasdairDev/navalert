@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
@@ -31,6 +32,14 @@ class SosService {
     final contacts = await DatabaseService.instance.getContacts();
     if (contacts.isEmpty) {
       throw StateError('No emergency contacts saved.');
+    }
+
+    // R8 — SmsManager needs the SEND_SMS runtime permission; without it
+    // every native send throws SecurityException and the automatic SOS
+    // silently degrades to the manual composer. Request it here so the
+    // first SOS asks once and every later SOS is fully automatic.
+    if (!await Permission.sms.isGranted) {
+      await Permission.sms.request();
     }
 
     Position? pos;

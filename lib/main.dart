@@ -15,10 +15,14 @@ import 'views/launch_view.dart';
 /// Metro Manila PUV Commuters.
 ///
 /// Capstone project — BSIT, Polytechnic University of the Philippines.
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  // Lock Screen Widget channel (Figure 25).
-  await TripNotificationService.instance.init();
+  // Lock Screen Widget channel (Figure 25). Initialized in the background —
+  // the first frame must never block on a plugin handshake (a hung
+  // platform channel would otherwise leave the app on a black screen).
+  // TripNotificationService.init() is idempotent and is awaited again
+  // inside showTrip() before any notification is posted.
+  TripNotificationService.instance.init();
   runApp(const NavAlertApp());
 }
 

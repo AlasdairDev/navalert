@@ -25,6 +25,15 @@ class HomeViewModel extends ChangeNotifier {
   /// shown instead of the generic "Current Location" label.
   String? currentAddress;
 
+  /// Google-Maps-style short form of [currentAddress]: only the primary
+  /// place name + area (first two components), fit for a single line.
+  String? get currentAddressShort {
+    final a = currentAddress;
+    if (a == null || a.isEmpty) return null;
+    final parts = a.split(',').map((p) => p.trim()).toList();
+    return parts.take(2).join(', ');
+  }
+
   /// Road geometry of the planned route ([lat, lng] pairs) drawn on the
   /// map like Google Maps. Falls back to a straight origin→destination
   /// segment when the routing service is unreachable.

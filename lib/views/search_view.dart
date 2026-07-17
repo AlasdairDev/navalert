@@ -7,16 +7,13 @@ import '../core/theme.dart';
 import '../models/models.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
+import 'pin_on_map_view.dart';
 import 'route_view.dart';
 
 /// Figure 20 — Destination Search Screen ("Where to?") using the
 /// Nominatim API over OpenStreetMap.
-///
-/// When [pickForFavorite] is true (Figure 31 — Favorites ⊕) the selected
-/// place is saved as a favorite instead of starting trip planning.
 class SearchView extends StatefulWidget {
-  const SearchView({super.key, this.pickForFavorite = false});
-  final bool pickForFavorite;
+  const SearchView({super.key});
 
   @override
   State<SearchView> createState() => _SearchViewState();
@@ -44,17 +41,6 @@ class _SearchViewState extends State<SearchView> {
     final home = context.read<HomeViewModel>();
     final app = context.read<AppViewModel>();
 
-    // Figure 31 — ⊕ Add Favorite: save the place and return.
-    if (widget.pickForFavorite) {
-      final messenger = ScaffoldMessenger.of(context);
-      await app.addFavorite(
-          place.name, place.displayName, place.lat, place.lng);
-      messenger.showSnackBar(
-          SnackBar(content: Text('${place.name} added to Favorites.')));
-      if (mounted) Navigator.of(context).pop();
-      return;
-    }
-
     showDialog(
         context: context,
         barrierDismissible: false,
@@ -73,44 +59,99 @@ class _SearchViewState extends State<SearchView> {
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
     return Scaffold(
-      appBar: AppBar(
-          title:
-              Text(widget.pickForFavorite ? 'Add Favorite' : 'Where to?')),
+      appBar: AppBar(title: const Text('Where to?')),
       body: SafeArea(
         child: Column(
           children: [
+            // Figure 20 — origin → destination header: current-location
+            // dot connected by a line to the search field. The address is
+            // shown Google-Maps style: primary name only, single line.
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-              child: Column(children: [
-                // Precise reverse-geocoded address of where the commuter
-                // currently is (falls back to the generic label offline).
-                Row(children: [
-                  const Icon(Icons.circle,
-                      size: 10, color: NavAlertColors.accent),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(vm.currentAddress ?? 'Current Location',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: NavAlertColors.textSecondary,
-                            fontSize: 12)),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _controller,
-                  autofocus: true,
-                  style: const TextStyle(color: Colors.black87),
-                  decoration: const InputDecoration(
-                    hintText: 'Search destination…',
-                    fillColor: Colors.white,
-                    prefixIcon: Icon(Icons.search, color: Colors.black54),
-                  ),
-                  onChanged: _onChanged,
-                  onSubmitted: (q) => context.read<HomeViewModel>().search(q),
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Column(children: [
+                      const SizedBox(height: 5),
+                      const Icon(Icons.circle,
+                          size: 12, color: NavAlertColors.accent),
+                      Expanded(
+                        child: Container(
+                          width: 2,
+                          margin: const EdgeInsets.symmetric(vertical: 3),
+                          color: NavAlertColors.surface,
+                        ),
+                      ),
+                      const Icon(Icons.location_on,
+                          size: 14, color: NavAlertColors.warning),
+                      const SizedBox(height: 18),
+                    ]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              vm.currentAddressShort ?? 'Current Location',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600)),
+                          const Text('Your location',
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: NavAlertColors.textSecondary)),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _controller,
+                            autofocus: true,
+                            style: const TextStyle(color: Colors.black87),
+                            decoration: const InputDecoration(
+                              hintText: 'Search destination…',
+                              fillColor: Colors.white,
+                              prefixIcon: Icon(Icons.search,
+                                  color: Colors.black54),
+                            ),
+                            onChanged: _onChanged,
+                            onSubmitted: (q) =>
+                                context.read<HomeViewModel>().search(q),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ]),
+              ),
+            ),
+            // UC-4 step 2 — the commuter may pin the exact drop-off
+            // point on the map instead of searching by name.
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Card(
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.pin_drop,
+                      color: NavAlertColors.accent),
+                  title: const Text('Pin on the map',
+                      style: TextStyle(fontSize: 14)),
+                  subtitle: const Text(
+                      'Drop a pin at your exact drop-off point.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: NavAlertColors.textSecondary)),
+                  trailing: const Icon(Icons.chevron_right, size: 18),
+                  onTap: () async {
+                    final picked = await Navigator.of(context)
+                        .push<PlaceResult>(MaterialPageRoute(
+                            builder: (_) => const PinOnMapView()));
+                    if (picked != null && context.mounted) {
+                      await _select(picked);
+                    }
+                  },
+                ),
+              ),
             ),
             if (vm.searching) const LinearProgressIndicator(),
             if (vm.searchError != null)

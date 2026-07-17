@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/hardware_buttons.dart';
-import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
+import '../viewmodels/history_viewmodel.dart';
 import 'emergency_view.dart';
 import 'fake_call_view.dart';
 import 'favorites_view.dart';
@@ -74,7 +74,13 @@ class _ShellViewState extends State<ShellView> {
       body: IndexedStack(index: _index, children: pages),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
-        onTap: (i) => setState(() => _index = i),
+        onTap: (i) {
+          setState(() => _index = i);
+          // IndexedStack keeps pages alive, so refresh Trip History
+          // whenever its tab is opened — otherwise trips completed
+          // after startup would never appear.
+          if (i == 0) context.read<HistoryViewModel>().load();
+        },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.star_border), label: 'Favorites'),
@@ -88,8 +94,3 @@ class _ShellViewState extends State<ShellView> {
   }
 }
 
-/// Helper used across views to jump to a destination from favorites.
-void openHomeTabWithFavorite(BuildContext context) {
-  // Placeholder for cross-tab navigation; favorites push RouteView directly.
-  context.read<AppViewModel>();
-}

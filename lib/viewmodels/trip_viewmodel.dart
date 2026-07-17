@@ -50,6 +50,7 @@ class TripViewModel extends ChangeNotifier {
   AdaptiveAlarmEngine? _engine;
   StreamSubscription<Position>? _sub;
   Timer? _escalationTimer;
+  Timer? _snoozeTimer;
   Timer? _signalWatchdog;
   DateTime? _lastFixAt;
   DateTime? _alarmShownAt;
@@ -88,9 +89,12 @@ class TripViewModel extends ChangeNotifier {
         distanceM: distanceM,
         etaMinutes: etaMinutes);
 
+    // distanceFilter 0: fixes keep arriving even when the vehicle is
+    // stopped in traffic — otherwise a long red light would trip the
+    // "Signal Lost" watchdog with GPS working perfectly.
     const settings = LocationSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 2,
+      distanceFilter: 0,
     );
     _lastFixAt = DateTime.now();
     _sub = Geolocator.getPositionStream(
@@ -106,7 +110,7 @@ class TripViewModel extends ChangeNotifier {
     if (defaultTargetPlatform != TargetPlatform.android) return null;
     return AndroidSettings(
       accuracy: LocationAccuracy.bestForNavigation,
-      distanceFilter: 2,
+      distanceFilter: 0,
       intervalDuration: const Duration(seconds: 1),
       foregroundNotificationConfig: const ForegroundNotificationConfig(
         notificationTitle: 'NavAlert trip monitoring',
@@ -229,6 +233,8 @@ class TripViewModel extends ChangeNotifier {
   void _cancelEscalation() {
     _escalationTimer?.cancel();
     _escalationTimer = null;
+    _snoozeTimer?.cancel();
+    _snoozeTimer = null;
   }
 
   Future<void> _logAlarm(int stage, String label, String message) async {
@@ -248,15 +254,34 @@ class TripViewModel extends ChangeNotifier {
     ));
   }
 
-  /// Snooze — escalates to Stage 3 on the third snooze (Figure 28).
+  /// Snooze — silences the alarm for the escalation window, then re-fires
+  /// the same stage if the rider is still en route. Escalates straight to
+  /// Stage 3 on the third snooze (Figure 28).
   Future<void> snoozeAlarm() async {
     _snoozeCount++;
+    final snoozedStage = switch (phase) {
+      TripPhase.alarmStage1 => 1,
+      TripPhase.alarmStage2 => 2,
+      _ => 0,
+    };
     _cancelEscalation();
     await _sound.stopAll();
     if (_snoozeCount >= 3 && phase != TripPhase.alarmStage3) {
       _fireStage(3);
-    } else {
-      phase = TripPhase.monitoring;
+      notifyListeners();
+      return;
+    }
+    phase = TripPhase.monitoring;
+    // Bring the alarm back after the snooze window — a snoozed alarm must
+    // return, otherwise a drowsy rider who taps Snooze once is never
+    // warned again.
+    if (snoozedStage > 0) {
+      _snoozeTimer = Timer(stageEscalationDelay, () {
+        if (phase == TripPhase.monitoring && isActive) {
+          _fireStage(snoozedStage);
+          notifyListeners();
+        }
+      });
     }
     notifyListeners();
   }

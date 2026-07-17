@@ -39,6 +39,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Use the Skia renderer: Impeller's OpenGLES backend renders a
+             black screen on emulators and some budget GLES-only devices —
+             NavAlert targets Android 8.0+ commuter phones (Table 30). -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <!-- Lock Screen Widget action buttons (Figure 25) -->
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"

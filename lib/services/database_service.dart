@@ -327,6 +327,12 @@ class DatabaseService {
       .map(Trip.fromMap)
       .toList();
 
+  /// Deletes a trip. Its route suggestions, steps, alarm events,
+  /// overshoot events and SOS events go with it via the ON DELETE
+  /// CASCADE foreign keys (Data Dictionary Table 28).
+  Future<void> deleteTrip(String tripId) async => (await db)
+      .delete('trips', where: 'trip_id = ?', whereArgs: [tripId]);
+
   Future<void> insertSuggestion(RouteSuggestion s) async {
     final d = await db;
     await d.insert('route_suggestions', s.toMap());

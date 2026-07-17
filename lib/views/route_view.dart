@@ -28,17 +28,44 @@ class _RouteViewState extends State<RouteView> {
   Future<void> _toggleFavorite() async {
     final app = context.read<AppViewModel>();
     final home = context.read<HomeViewModel>();
+    final messenger = ScaffoldMessenger.of(context);
     final dest = home.destination;
     if (dest == null) return;
     final existing = app.favoriteAt(dest.lat, dest.lng);
     if (existing != null) {
+      // Removing is destructive — confirm before un-starring.
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Remove from Favorites?'),
+          content: Text('${dest.name} will be removed from your favorites.',
+              style: const TextStyle(fontSize: 13)),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Remove',
+                  style: TextStyle(
+                      color: NavAlertColors.danger,
+                      fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
       await app.removeFavorite(existing.favoriteId);
+      messenger.showSnackBar(
+          SnackBar(content: Text('${dest.name} removed from Favorites.')));
     } else {
       final f = await app.addFavorite(
           dest.name, dest.displayName, dest.lat, dest.lng);
       home.plannedTrip?.destinationFavoriteId = f.favoriteId;
+      messenger.showSnackBar(
+          SnackBar(content: Text('${dest.name} added to Favorites.')));
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   void _openModePriority() {
@@ -214,7 +241,13 @@ class _RouteViewState extends State<RouteView> {
                         size: 10, color: NavAlertColors.accent),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(trip.originLabel,
+                      // Google-Maps style: primary name only, one line.
+                      child: Text(
+                          trip.originLabel
+                              .split(',')
+                              .take(2)
+                              .map((p) => p.trim())
+                              .join(', '),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 13)),

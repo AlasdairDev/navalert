@@ -37,6 +37,14 @@ class HistoryViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Permanently removes a trip (and, via cascade, its alarm, overshoot
+  /// and SOS records). Only called after the user confirms the dialog.
+  Future<void> deleteTrip(Trip trip) async {
+    await _db.deleteTrip(trip.tripId);
+    _trips.removeWhere((t) => t.tripId == trip.tripId);
+    notifyListeners();
+  }
+
   List<Trip> get visibleTrips {
     var list = _trips.where((t) {
       final matchesText = filter.isEmpty ||

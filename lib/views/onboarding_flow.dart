@@ -440,6 +440,21 @@ class FakeCallSetupView extends StatefulWidget {
 }
 
 class _FakeCallSetupViewState extends State<FakeCallSetupView> {
+  late final TextEditingController _callerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _callerCtrl = TextEditingController(
+        text: context.read<AppViewModel>().fakeCallConfig.callerName);
+  }
+
+  @override
+  void dispose() {
+    _callerCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _recordNew() async {
     final em = context.read<EmergencyViewModel>();
     final app = context.read<AppViewModel>();
@@ -473,6 +488,10 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   Future<void> _save() async {
     final app = context.read<AppViewModel>();
     await SoundService.instance.stopVoice();
+    // Persist the caller name exactly as typed (Save must not require
+    // pressing Enter on the keyboard first).
+    final name = _callerCtrl.text.trim();
+    app.fakeCallConfig.callerName = name.isEmpty ? 'Mom' : name;
     await app.saveFakeCallConfig();
     if (!mounted) return;
     if (widget.inOnboarding) {
@@ -540,12 +559,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                 decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.badge),
                     hintText: 'Caller name (e.g. Mom)'),
-                controller:
-                    TextEditingController(text: app.fakeCallConfig.callerName),
-                onSubmitted: (v) {
-                  app.fakeCallConfig.callerName = v.isEmpty ? 'Mom' : v;
-                  app.saveFakeCallConfig();
-                },
+                controller: _callerCtrl,
               ),
               const SizedBox(height: 16),
               Row(

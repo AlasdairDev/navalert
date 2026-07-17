@@ -185,6 +185,34 @@ class SettingsView extends StatelessWidget {
       ),
     );
     if (chosen == null) return;
+    if (!context.mounted) return;
+    // Importing overwrites the current data — confirm before applying.
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import this backup?'),
+        content: Text(
+          '${backups[chosen].path.split(RegExp(r'[\\/]')).last}\n\n'
+          'Your current contacts, favorites, trip history and settings '
+          'will be replaced by the data in this backup. This cannot be '
+          'undone.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Import',
+                style: TextStyle(
+                    color: NavAlertColors.danger,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     final err = await app.importBackup(backups[chosen]);
     messenger.showSnackBar(
         SnackBar(content: Text(err ?? 'Backup imported successfully.')));

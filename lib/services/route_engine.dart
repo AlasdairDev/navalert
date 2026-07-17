@@ -106,26 +106,29 @@ class RouteEngine {
 
     if (options.isEmpty) return [];
 
-    // Tagging: Fastest / Cheapest / Longest / Costly (Figure 22).
+    // Keep the two fastest options, then tag ONLY the kept ones —
+    // otherwise the Cheapest/Costly tags could point at a dropped
+    // option and never appear on screen (Figure 22).
     options.sort((a, b) => a.totalDurationMinutes.compareTo(b.totalDurationMinutes));
-    final fastest = options.first.suggestionId;
-    final longest = options.last.suggestionId;
-    final byFare = [...options]
+    final kept = options.take(2).toList();
+    final fastest = kept.first.suggestionId;
+    final longest = kept.last.suggestionId;
+    final byFare = [...kept]
       ..sort((a, b) => a.totalFarePhp.compareTo(b.totalFarePhp));
     final cheapest = byFare.first.suggestionId;
     final costly = byFare.last.suggestionId;
 
     final tagged = <RouteSuggestion>[];
-    for (var i = 0; i < options.length && i < 2; i++) {
-      final o = options[i];
+    for (var i = 0; i < kept.length; i++) {
+      final o = kept[i];
       String? tag1;
       String? tag2;
       if (o.suggestionId == fastest) tag1 = 'Fastest';
       if (o.suggestionId == cheapest) { tag1 == null ? tag1 = 'Cheapest' : tag2 = 'Cheapest'; }
-      if (options.length > 1 && o.suggestionId == longest) {
+      if (kept.length > 1 && o.suggestionId == longest) {
         tag1 == null ? tag1 = 'Longest' : tag2 ??= 'Longest';
       }
-      if (options.length > 1 && o.suggestionId == costly) {
+      if (kept.length > 1 && o.suggestionId == costly) {
         tag1 == null ? tag1 = 'Costly' : tag2 ??= 'Costly';
       }
       tagged.add(RouteSuggestion(
