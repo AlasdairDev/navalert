@@ -57,3 +57,9 @@ flutter:
   assets:
     - assets/sounds/
     - assets/gtfs/routes.json.gz
+    # UI/UX images — one folder per area. Add a line here for each NEW
+    # subfolder you create under assets/images/ (Flutter doesn't auto-scan
+    # nested folders). 'reference/' is intentionally NOT listed: kept in the
+    # repo for design reference but excluded from the APK.
+    - assets/images/tutorial/
+    - assets/images/branding/
