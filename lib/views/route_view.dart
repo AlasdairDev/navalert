@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
-import '../services/database_service.dart';
 import '../models/models.dart';
 import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
@@ -199,11 +198,11 @@ class _RouteViewState extends State<RouteView> {
               ElevatedButton(
                 onPressed: () async {
                   final tripVm = context.read<TripViewModel>();
+                  // View sets the chosen config on the trip; TripViewModel
+                  // .startTrip() persists it (keeps the DB out of the View).
                   trip
                     ..alarmSound = sound
                     ..vibrationOnlyMode = vibrationOnly;
-                  await DatabaseService.instance.updateTrip(trip);
-                  if (!ctx.mounted) return;
                   Navigator.of(ctx).pop();
                   await tripVm.startTrip(trip);
                   if (!mounted) return;
