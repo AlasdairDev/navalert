@@ -204,6 +204,45 @@ tab, **SMS**). Tap **Allow** so GPS tracking and SOS work.
 - **General health check** → run `flutter doctor` and fix anything with an ✗.
 - **Clean rebuild** → `flutter clean` then `flutter pub get`, then run again.
 
+## Editing the UI/UX live (hot reload)
+
+You can see UI changes **in real time (~1 second)** while you edit — this is the
+normal Flutter workflow, no rebuild needed.
+
+1. **Run the app once** (F5) on the emulator or a phone, and leave it running.
+2. Edit any file under `lib/views/` or `lib/core/theme.dart` — change a colour,
+   text, padding, icon, etc.
+3. **Save** (`Ctrl+S`) → the app **redraws instantly** on the device and keeps
+   its current screen/state. Edit → save → glance → repeat.
+
+**Hot Reload ⚡ vs Hot Restart 🔄**
+
+- **Hot Reload** (automatic on save): applies changes to `build()` methods —
+  colours, text, layout, styling. This is ~99% of UI/UX work and it's instant.
+- **Hot Restart** (`Ctrl+Shift+F5`): needed after changing `main()`, providers,
+  `initState`, **or adding a new image to `pubspec.yaml`**. Resets app state.
+
+> **Tip:** almost all styling lives in `lib/core/theme.dart` (the colour tokens
+> and component styles, each tagged `[EDIT]`). Change a colour there + save and
+> **every screen restyles at once**, live.
+
+**Helpful extras**
+
+- **Widget Inspector** — click a widget in the running app to jump to the code
+  that draws it (`Ctrl+Shift+P → "Dart: Open DevTools"` → Inspector). Great for
+  "which file is this box in?".
+- The **⚡ / 🔄 / ⏹** buttons appear in VS Code while the app runs.
+
+**Notes**
+
+- There's no drag-and-drop visual designer — you edit code and see the result
+  live (hot reload *is* the preview).
+- Preview on the **emulator or a real phone** for accurate rendering; a real
+  Android phone is the smoothest and most accurate way to hot-reload the UI.
+- See the per-screen `UI/UX MAP` header comment in each `lib/views/*.dart` file
+  for what's safe to restyle (`[EDIT]`) vs. functional wiring to leave alone
+  (`[NEED]`). The legend is at the top of `lib/core/theme.dart`.
+
 ## Testing the alarm on the emulator
 
 The adaptive alarm needs movement:
