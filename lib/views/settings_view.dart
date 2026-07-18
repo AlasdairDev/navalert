@@ -8,6 +8,17 @@ import 'onboarding_flow.dart';
 
 /// Figure 33 — Settings: permissions, alarm sound, emergency contacts,
 /// fake-call recordings, and legal notices.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] each SwitchListTile onChanged → app.saveSettings · alarm
+///         DropdownButton onChanged (+ previewAlarm) · Update → ContactsSetup ·
+///         View → FakeCallSetup · T&C/Privacy View → _showLegal · Import/Export
+///         onPressed (confirm dialog + app.import/exportBackup).
+///  [EDIT] section header labels/casing, tile copy, "Allow/Deny" wording,
+///         Import/Export button icons, legal dialog text (_terms/_privacy),
+///         row spacing, whether sections use cards or dividers.
+///  [WANT] group sections with icons, add an "About/version" row, a theme
+///         switch, per-setting helper subtitles.
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
 

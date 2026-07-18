@@ -12,6 +12,15 @@ import 'search_view.dart';
 
 /// Figure 19 — Main Screen: greeting, destination search bar and an
 /// interactive OpenStreetMap view with a locate button.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] FlutterMap + TileLayer (OSM tiles, paper API) · locate FAB's
+///         onPressed refreshCurrentLocation() · search bar's onTap →
+///         SearchView · the incomplete-setup MaterialBanner logic.
+///  [EDIT] greeting text/logic (_greeting), "Where are you headed?" copy,
+///         search-bar pill shape/color, marker dot style/size, FAB icon,
+///         header card blur/rounding, all paddings.
+///  [WANT] animate the marker, add a compass/zoom control, richer greeting.
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
 

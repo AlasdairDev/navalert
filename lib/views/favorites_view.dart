@@ -10,6 +10,15 @@ import 'route_view.dart';
 
 /// Figure 31 — Favorites: saved destinations for one-tap trips, with the
 /// ⊕ button to add a new favorite from search.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] ⊕ AppBar action → AddFavoriteView · list tile onTap →
+///         _startFromFavorite (sets destination → RouteView) · star
+///         onPressed → _confirmRemove (dialog before delete).
+///  [EDIT] empty-state icon/copy, card/list-tile styling, star icon,
+///         remove-dialog wording, spacing.
+///  [WANT] reorder/drag favorites, custom labels/icons (Home/Work/School),
+///         swipe-to-delete, map thumbnail per favorite.
 class FavoritesView extends StatelessWidget {
   const FavoritesView({super.key});
 

@@ -15,6 +15,20 @@ import 'active_trip_view.dart';
 
 /// Figures 21–23 — Route Map & Mode Priority, Suggested Routes &
 /// Commute Guide, and Trip Configuration.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] FlutterMap + route polyline (home.routePath) + origin dot /
+///         destination pin · star _toggleFavorite · "Mode of Transport" →
+///         _openModePriority sheet (bus/UV/jeepney switches + Done) ·
+///         suggestion card onTap → home.selectSuggestion · "Show Commute
+///         Guide" gate on selectedSuggestion · "Enable Alarm" →
+///         _openTripSettings (sound + vibration-only + Start Trip →
+///         tripVm.startTrip → ActiveTripView).
+///  [EDIT] header card layout, tag chip colors/labels (_tag), suggestion
+///         card styling, "SUGGESTED ROUTES FOUND" copy, step list rows,
+///         polyline colors/width, pin styles, sheet cosmetics.
+///  [WANT] fit-bounds animation, per-mode colored polylines, fare breakdown UI,
+///         collapse/expand the suggestions sheet.
 class RouteView extends StatefulWidget {
   const RouteView({super.key});
 

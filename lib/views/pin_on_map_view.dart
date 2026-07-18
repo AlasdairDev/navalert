@@ -12,6 +12,16 @@ import '../viewmodels/home_viewmodel.dart';
 /// UC-4 (Search & Set Destination) — "pins the exact drop-off point on
 /// the map": lets the commuter drop a pin at the precise alighting spot
 /// instead of searching by name. Returns the picked [PlaceResult].
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] FlutterMap onTap → _onTap (drop pin + reverse-geocode) ·
+///         "Confirm Drop-off Point" → _confirm (returns PlaceResult) ·
+///         disabled state until a pin exists.
+///  [EDIT] "Pin Drop-off Point" title, the red pin + blue current-location
+///         dot styles, the bottom summary card, "Tap the map…" hint copy,
+///         "Locating address…" text, confirm button label.
+///  [WANT] center crosshair instead of tap-to-drop, draggable pin, snap to
+///         nearest GTFS stop.
 class PinOnMapView extends StatefulWidget {
   const PinOnMapView({super.key});
 

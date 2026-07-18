@@ -11,6 +11,14 @@ import '../viewmodels/app_viewmodel.dart';
 /// Figure 31 — Favorites ⊕: a dedicated page for saving a place as a
 /// favorite. Separate from the Home destination search (Figure 20) and
 /// with its own search state, so results never leak between the two.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] search TextField onChanged → _search (own Nominatim state) ·
+///         result onTap → _save (app.addFavorite + pop). Keep this state
+///         SEPARATE from HomeViewModel (that separation is the whole point).
+///  [EDIT] "Add Favorite" title, "Search a place to save…" hint, result row
+///         star icon/styling, snackbar copy.
+///  [WANT] label picker (Home/Work/School) on save, map preview of result.
 class AddFavoriteView extends StatefulWidget {
   const AddFavoriteView({super.key});
 

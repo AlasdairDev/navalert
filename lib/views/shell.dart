@@ -17,6 +17,15 @@ import 'settings_view.dart';
 /// History · Favorites · Home · Emergency · Settings.
 /// Also wires the volume-button emergency shortcuts:
 /// triple Volume-Up → SOS, triple Volume-Down → Fake Call.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] IndexedStack of the 5 tabs · BottomNavigationBar onTap (index +
+///         History-refresh + Emergency SMS-prewarm) · HardwareButtons SOS/
+///         fake-call stream subscriptions. Keep the 5 tabs and their order.
+///  [EDIT] tab icons & labels, bottom-bar colors/shape (mostly via theme's
+///         bottomNavigationBarTheme), selected-tab highlight.
+///  [WANT] center FAB for "start trip", badge on Emergency, animated tab
+///         transitions, a custom nav bar.
 class ShellView extends StatefulWidget {
   const ShellView({super.key});
 

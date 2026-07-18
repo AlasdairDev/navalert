@@ -9,6 +9,22 @@ import '../viewmodels/emergency_viewmodel.dart';
 import '../services/sound_service.dart';
 import 'shell.dart';
 
+// ═══════════════════════════════════════════════════════════════════════
+//  ONBOARDING FLOW (Figures 15–18) — four screens in order:
+//    TutorialView → PermissionsView → ContactsSetupView → FakeCallSetupView
+//  UI/UX MAP (see legend in core/theme.dart):
+//   [NEED] the ORDER and the _next()/pushReplacement chain · Permissions
+//          toggles calling _toggle/_toggleLocation (real OS requests) ·
+//          Contacts _save (validates phone, app.saveContact) · FakeCall
+//          _save → app.completeOnboarding() → ShellView (this is the ONLY
+//          place onboarding is marked complete) · "Skip for now" routing.
+//   [EDIT] every slide's icon/title/subtitle (_pages list), page-dot style,
+//          Skip/Next/Continue/Save button copy, permission tile icons/text,
+//          contact field hints, fake-call setup layout. All cosmetic.
+//   [WANT] replace tutorial icons with the real illustration assets in
+//          "Tutorial Pages assets/", add progress bar, animate transitions.
+// ═══════════════════════════════════════════════════════════════════════
+
 // =====================================================================
 // Figure 15 — Welcome / Tutorial Screen
 // =====================================================================

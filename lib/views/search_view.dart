@@ -12,6 +12,15 @@ import 'route_view.dart';
 
 /// Figure 20 — Destination Search Screen ("Where to?") using the
 /// Nominatim API over OpenStreetMap.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] search TextField's onChanged/_onChanged (debounced Nominatim) ·
+///         result ListTile onTap → _select · "Pin on the map" onTap →
+///         PinOnMapView · the currentAddressShort origin display.
+///  [EDIT] "Where to?" title, origin→destination dot/line indicator style,
+///         "Your location" caption, hint text, result row icons/spacing,
+///         the pin-on-map card look, progress/error styles.
+///  [WANT] recent-searches list, result category icons, map preview per result.
 class SearchView extends StatefulWidget {
   const SearchView({super.key});
 

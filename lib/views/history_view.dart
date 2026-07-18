@@ -7,6 +7,15 @@ import '../viewmodels/history_viewmodel.dart';
 
 /// Figure 30 — Trip History with search filter, calendar date filter and
 /// sort control, plus alarm-stage and awake-time (reaction) chips.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] search onChanged → vm.setFilter · calendar btn → _pickDate /
+///         long-press clear · sort btn → vm.toggleSortOrder · delete icon →
+///         _confirmDelete (dialog before vm.deleteTrip) · RefreshIndicator.
+///  [EDIT] "Trip History" title, empty-state copy, trip-card layout, the
+///         Alarm/Awake/status chip colors & labels (_chip), date format,
+///         filter-button icons.
+///  [WANT] group by day, monthly stats header, tap-card→detail view, export.
 class HistoryView extends StatefulWidget {
   const HistoryView({super.key});
 

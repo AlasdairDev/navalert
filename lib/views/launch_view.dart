@@ -8,6 +8,14 @@ import 'shell.dart';
 
 /// Figure 14 — Launch Screen. Shows the NavAlert brand, waits for the
 /// local database, then routes to onboarding or the main shell.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] _go(): wait for AppViewModel.loaded, then route to TutorialView
+///         (first run) or ShellView. Keep the "wait for load" gate.
+///  [EDIT] the whole splash look — logo/icon (currently Icons.alarm_on),
+///         "NavAlert" wordmark, tagline, gradient, the 1400 ms min-display.
+///         Prime spot to drop in your real logo image asset.
+///  [WANT] animated logo reveal, progress indicator, brand motion.
 class LaunchView extends StatefulWidget {
   const LaunchView({super.key});
 

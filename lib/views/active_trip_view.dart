@@ -8,6 +8,18 @@ import 'fake_call_view.dart';
 
 /// Figures 24–29 — Active Trip (Monitoring Mode), the three alarm
 /// stages, and Overshoot Detected.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] the phase switch (vm.phase → which sub-view shows) · _SlideToStop
+///         onCompleted (stop/dismiss — the anti-oversleep gesture) · Snooze/
+///         Dismiss onPressed · SOS & Fake Call onPressed · overshoot Yes/No
+///         + "Open in GMaps" (vm.openRerouteInGoogleMaps) · PopScope guard.
+///         Stage 3 MUST stay a hard-to-dismiss full-screen alarm (R1).
+///  [EDIT] all copy ("En Route", "Get some rest…", "WAKE UP", "Approaching
+///         Stop"), the Monitoring moon badge, colors per stage (Stage 1 calm →
+///         Stage 3 red), distance/speed/ETA text, checklist items, slider look.
+///  [WANT] pulsing/animated Stage-3 background, progress ring to destination,
+///         haptic-synced visuals, richer arrived celebration.
 class ActiveTripView extends StatelessWidget {
   const ActiveTripView({super.key});
 

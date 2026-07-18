@@ -8,6 +8,17 @@ import 'fake_call_view.dart';
 
 /// Figure 32 — Emergency screen: press-and-hold SOS (3 s) and the
 /// fake-call recording list.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] SOS GestureDetector onTapDown/Up beginSosHold/cancelSosHold
+///         (the 3-second hold = accidental-trigger guard, R8) · progress
+///         ring value (em.holdProgress) · "Call 911" onPressed · recording
+///         ListTile onTap → startFakeCall → FakeCallView · load-warning
+///         dismiss. Keep SOS red and obviously the biggest tap target.
+///  [EDIT] SOS button size/glow, "Press & Hold to Activate" copy, hold-hint
+///         text, "Activate Fake Call" heading, recording row styling,
+///         load-warning card look, Call 911 button style.
+///  [WANT] countdown animation during hold, haptic on hold, contact avatars.
 class EmergencyView extends StatelessWidget {
   const EmergencyView({super.key});
 

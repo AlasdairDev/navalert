@@ -6,6 +6,16 @@ import '../viewmodels/emergency_viewmodel.dart';
 
 /// Use Case UC-8 — Activate Fake Call: a realistic full-screen incoming
 /// call that plays the configured recording once "answered".
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] answer (green) → em.answerFakeCall(recording) + start timer ·
+///         decline/end (red) → em.endFakeCall + pop · caller name from
+///         app.fakeCallConfig.callerName. Must look like a REAL incoming call.
+///  [EDIT] this is the highest-value screen to make convincing: mimic the
+///         native dialer (background, avatar, name/number typography, button
+///         icons/positions, "Incoming call"/timer text). All cosmetic.
+///  [WANT] slide-to-answer like iOS, ringback vibration UI, blurred wallpaper,
+///         match the user's actual OS dialer style.
 class FakeCallView extends StatefulWidget {
   const FakeCallView({super.key});
 
