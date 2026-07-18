@@ -120,6 +120,90 @@ flutter run
 > If the emulator ever shows a black screen, **Cold Boot** it
 > (Device Manager → ⌄ → Cold Boot Now) — it's a stale-snapshot issue, not the app.
 
+---
+
+## Run it in VS Code (step-by-step — easiest)
+
+This is the recommended way to develop: you get **hot reload** (see code changes
+in ~1 second without restarting), breakpoints, and the device picker.
+
+### 1. One-time setup
+
+1. **Install the Flutter SDK** (if you haven't): <https://docs.flutter.dev/get-started/install>
+   — and make sure `flutter` works in a terminal: `flutter doctor`.
+2. **Install VS Code**: <https://code.visualstudio.com/>
+3. In VS Code, open the **Extensions** panel (`Ctrl+Shift+X`) and install:
+   - **Flutter** (by Dart Code) — this also installs the **Dart** extension.
+4. Make sure an Android device is available:
+   - **Emulator:** open **Android Studio → Device Manager → Create/▶ a device** (any phone, API 26+), **or**
+   - **Real phone:** enable **Developer options → USB debugging**, plug it in, tap **Allow**.
+
+### 2. Open the project
+
+- **File → Open Folder…** and pick the project's **root folder** (the one that
+  contains `pubspec.yaml` — that's this folder, *not* a subfolder).
+- VS Code will detect Flutter. If it pops up *"Get packages / Run pub get?"*,
+  click **Yes**. (Or run it yourself — see next step.)
+
+### 3. Get the dependencies
+
+- Open `pubspec.yaml` and hit **Save** (VS Code auto-runs `flutter pub get`), **or**
+- Open the terminal (`` Ctrl+` ``) and run:
+  ```powershell
+  flutter pub get
+  ```
+
+### 4. Pick a device
+
+- Look at the **bottom-right of the VS Code status bar** — it shows the current
+  device (e.g. *"No Device"* or *"Chrome"*).
+- **Click it** → a menu appears at the top → choose your **emulator** or
+  **connected phone**. (If your emulator isn't running yet, this menu can start
+  it for you.)
+
+### 5. Run it ▶
+
+- Press **F5** (**Run → Start Debugging**) — builds, installs, and launches the
+  app with the debugger attached. First build takes a couple of minutes; after
+  that it's fast.
+- Prefer no debugger? Press **Ctrl+F5** (**Run Without Debugging**).
+
+### 6. Make changes live (hot reload)
+
+- Edit any file under `lib/` and **Save** (`Ctrl+S`) → the app updates instantly
+  (**hot reload** ⚡). The little status area also has buttons for:
+  - **Hot Reload** (⚡) — keep app state, apply UI/logic changes.
+  - **Hot Restart** (🔄) — restart the app fresh (use after changing `main()`,
+    providers, or startup code).
+  - **Stop** (⏹).
+
+### 7. First-run permissions
+
+On first launch the app asks for **Location** (and, when you open the Emergency
+tab, **SMS**). Tap **Allow** so GPS tracking and SOS work.
+
+### VS Code quick reference
+
+| Action | Shortcut |
+|---|---|
+| Run with debugger | `F5` |
+| Run without debugging | `Ctrl+F5` |
+| Hot reload (save also does this) | `Ctrl+S` |
+| Hot restart | `Ctrl+Shift+F5` |
+| Stop | `Shift+F5` |
+| Command palette (search any command) | `Ctrl+Shift+P` → type "Flutter" |
+| Open terminal | `` Ctrl+` `` |
+
+### If something goes wrong
+
+- **"No devices"** → click the device name in the status bar and start/select
+  one; or run `flutter devices` in the terminal.
+- **Red squiggles / packages not found** → run `flutter pub get`, then
+  **Ctrl+Shift+P → "Dart: Restart Analysis Server"**.
+- **Emulator black screen** → cold-boot it (Device Manager → ⌄ → **Cold Boot Now**).
+- **General health check** → run `flutter doctor` and fix anything with an ✗.
+- **Clean rebuild** → `flutter clean` then `flutter pub get`, then run again.
+
 ## Testing the alarm on the emulator
 
 The adaptive alarm needs movement:
