@@ -17,6 +17,7 @@ class AdaptiveAlarmEngine {
     this.overshootThresholdM = 250,
     double? avgHistoricReactionSec,
   }) {
+    _avgReactionSec = avgHistoricReactionSec;
     // Behavioural adjustment: slower dismissers get a wider window.
     if (avgHistoricReactionSec != null) {
       final adj = (avgHistoricReactionSec - 20) * 4; // 4s of lead per extra s
@@ -27,10 +28,21 @@ class AdaptiveAlarmEngine {
     }
   }
 
+  /// Reaction time (seconds) at or above which the alarm escalates its
+  /// loudness and vibration to "High" for that rider (R4 behavioural
+  /// intensity — mirrors the paper's HighIntensityReactionSeconds rule).
+  static const double highIntensityReactionSec = 60;
+
   final int baseReactionWindowSec;
   final double arrivalRadiusM;
   final double overshootThresholdM;
   late double reactionWindowSec;
+  double? _avgReactionSec;
+
+  /// R4 — whether this rider's history warrants stronger vibration and
+  /// louder alerts (a slow dismisser). Drives UC-5 "Adjust Alarm Intensity".
+  bool get highIntensity =>
+      (_avgReactionSec ?? 0) >= highIntensityReactionSec;
 
   final List<double> _speeds = <double>[]; // m/s rolling window
   double _minDistanceM = double.infinity;

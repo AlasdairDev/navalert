@@ -214,7 +214,8 @@ class TripViewModel extends ChangeNotifier {
         break;
     }
     _sound.playAlarmStage(stage, t.alarmSound,
-        vibrationOnly: t.vibrationOnlyMode);
+        vibrationOnly: t.vibrationOnlyMode,
+        highIntensity: _engine?.highIntensity ?? false);
     _scheduleEscalation(stage);
   }
 

@@ -13,13 +13,18 @@ class TripNotificationService {
 
   static const int _tripNotificationId = 1001;
   final _plugin = FlutterLocalNotificationsPlugin();
-  bool _initialized = false;
+  Future<void>? _initFuture;
 
   /// Called when the rider taps "End trip" on the lock-screen widget.
   VoidCallback? onEndTrip;
 
-  Future<void> init() async {
-    if (_initialized) return;
+  /// Idempotent under concurrency: main() fires this without awaiting and
+  /// showTrip() awaits it again — caching the Future guarantees
+  /// FlutterLocalNotificationsPlugin.initialize() runs exactly once even
+  /// if both callers overlap during the startup window.
+  Future<void> init() => _initFuture ??= _doInit();
+
+  Future<void> _doInit() async {
     await _plugin.initialize(
       const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -28,7 +33,6 @@ class TripNotificationService {
         if (response.actionId == 'end_trip') onEndTrip?.call();
       },
     );
-    _initialized = true;
   }
 
   Future<void> showTrip({

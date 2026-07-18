@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
 import '../services/sos_service.dart';
@@ -26,6 +27,16 @@ class EmergencyViewModel extends ChangeNotifier {
 
   // ---- recorder ----
   bool recording = false;
+
+  /// Proactively secures the SEND_SMS permission BEFORE any emergency, so
+  /// the SOS button is always armed and the permission dialog never appears
+  /// mid-crisis on the safety-critical path (R8). Called when the rider
+  /// first opens the Emergency tab. No-op once granted.
+  Future<void> ensureSmsReady() async {
+    if (!await Permission.sms.isGranted) {
+      await Permission.sms.request();
+    }
+  }
 
   void beginSosHold({String? tripId, VoidCallback? onFired}) {
     holdingSos = true;

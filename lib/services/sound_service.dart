@@ -39,18 +39,34 @@ class SoundService {
     _configured = true;
   }
 
+  /// Plays the escalating stage alarm. When [highIntensity] is set — a slow
+  /// dismisser per behavioural learning (R4) — Stages 1–2 use a stronger
+  /// vibration pattern and a louder volume so the alert is harder to sleep
+  /// through, fulfilling UC-5 "Adjust Alarm Intensity".
   Future<void> playAlarmStage(int stage, String soundName,
-      {bool vibrationOnly = false}) async {
+      {bool vibrationOnly = false, bool highIntensity = false}) async {
     await _configure();
     switch (stage) {
       case 1:
-        await Vibration.vibrate(duration: 700);
+        if (highIntensity) {
+          Vibration.vibrate(pattern: [0, 500, 250, 500], repeat: 0);
+          if (!vibrationOnly) await _loopSound(soundName, volume: 0.55);
+        } else {
+          await Vibration.vibrate(duration: 700);
+        }
         break;
       case 2:
-        Vibration.vibrate(pattern: [0, 500, 250, 500, 250, 800], repeat: 0);
-        if (!vibrationOnly) await _loopSound(soundName, volume: 0.7);
+        Vibration.vibrate(
+            pattern: highIntensity
+                ? [0, 900, 150, 900, 150, 1200]
+                : [0, 500, 250, 500, 250, 800],
+            repeat: 0);
+        if (!vibrationOnly) {
+          await _loopSound(soundName, volume: highIntensity ? 0.9 : 0.7);
+        }
         break;
       case 3:
+        // Stage 3 is already maximum intensity for everyone.
         Vibration.vibrate(pattern: [0, 1000, 150, 1000, 150, 1500], repeat: 0);
         if (!vibrationOnly) await _loopSound(soundName, volume: 1.0);
         break;

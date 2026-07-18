@@ -80,6 +80,9 @@ class _ShellViewState extends State<ShellView> {
           // whenever its tab is opened — otherwise trips completed
           // after startup would never appear.
           if (i == 0) context.read<HistoryViewModel>().load();
+          // Secure the SMS permission the moment the rider opens the
+          // Emergency tab, so the SOS dialog never interrupts a real crisis.
+          if (i == 3) context.read<EmergencyViewModel>().ensureSmsReady();
         },
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'History'),
