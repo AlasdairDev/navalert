@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../services/database_service.dart';
 import '../models/models.dart';
 import '../services/geocoding_service.dart';
+import '../services/gtfs_service.dart';
 import '../services/route_engine.dart';
 import '../services/route_path_service.dart';
 
@@ -139,13 +140,7 @@ class HomeViewModel extends ChangeNotifier {
     );
     await _db.insertTrip(trip);
 
-    suggestions = _routeEngine.buildSuggestions(
-      tripId: trip.tripId,
-      originLabel: 'Current Location',
-      destinationLabel: place.displayName,
-      distanceKm: distanceKm,
-      prefs: prefs,
-    );
+    suggestions = await _composeSuggestions(trip, place, prefs);
     for (final s in suggestions) {
       await _db.insertSuggestion(s);
     }
@@ -156,6 +151,39 @@ class HomeViewModel extends ChangeNotifier {
     // Fetch the real road geometry in the background (Figure 21 —
     // route drawn along streets like Google Maps).
     _fetchRoadPath(trip);
+  }
+
+  /// Commute guide (R6): prefer REAL Metro Manila jeepney/bus routes matched
+  /// in the bundled GTFS feed (named routes + actual boarding/alighting stops),
+  /// falling back to the synthetic route engine when no direct GTFS route
+  /// serves the trip or the feed is unavailable.
+  Future<List<RouteSuggestion>> _composeSuggestions(
+      Trip trip, PlaceResult place, TransportPreferences prefs) async {
+    try {
+      final matches = await GtfsService.instance.directRoutes(
+        originLat: trip.originLat,
+        originLng: trip.originLng,
+        destLat: trip.destinationLat,
+        destLng: trip.destinationLng,
+        busEnabled: prefs.busEnabled,
+        jeepneyEnabled: prefs.jeepneyEnabled,
+        uvEnabled: prefs.uvExpressEnabled,
+      );
+      if (matches.isNotEmpty) {
+        return _routeEngine.buildFromGtfs(
+          tripId: trip.tripId,
+          destinationLabel: place.displayName,
+          matches: matches,
+        );
+      }
+    } catch (_) {/* fall through to synthetic */}
+    return _routeEngine.buildSuggestions(
+      tripId: trip.tripId,
+      originLabel: trip.originLabel,
+      destinationLabel: place.displayName,
+      distanceKm: trip.distanceKm,
+      prefs: prefs,
+    );
   }
 
   Future<void> _fetchRoadPath(Trip trip) async {
@@ -184,13 +212,7 @@ class HomeViewModel extends ChangeNotifier {
     final trip = plannedTrip;
     final place = destination;
     if (trip == null || place == null) return;
-    suggestions = _routeEngine.buildSuggestions(
-      tripId: trip.tripId,
-      originLabel: trip.originLabel,
-      destinationLabel: place.displayName,
-      distanceKm: trip.distanceKm,
-      prefs: prefs,
-    );
+    suggestions = await _composeSuggestions(trip, place, prefs);
     for (final s in suggestions) {
       await _db.insertSuggestion(s);
     }

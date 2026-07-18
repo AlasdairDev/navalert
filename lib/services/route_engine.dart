@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
+import 'gtfs_service.dart';
 
 /// Commute guide engine (Requirement R6, Specific Objective 3).
 ///
@@ -104,11 +105,14 @@ class RouteEngine {
       ));
     }
 
-    if (options.isEmpty) return [];
+    return _tagPair(options);
+  }
 
-    // Keep the two fastest options, then tag ONLY the kept ones —
-    // otherwise the Cheapest/Costly tags could point at a dropped
-    // option and never appear on screen (Figure 22).
+  /// Keeps the two fastest options and tags ONLY the kept ones with
+  /// Fastest / Cheapest / Longest / Costly (Figure 22) — otherwise a tag
+  /// could point at a dropped option and never appear on screen.
+  List<RouteSuggestion> _tagPair(List<RouteSuggestion> options) {
+    if (options.isEmpty) return [];
     options.sort((a, b) => a.totalDurationMinutes.compareTo(b.totalDurationMinutes));
     final kept = options.take(2).toList();
     final fastest = kept.first.suggestionId;
@@ -145,6 +149,75 @@ class RouteEngine {
       ));
     }
     return tagged;
+  }
+
+  /// Builds ranked suggestions from REAL Metro Manila routes matched in the
+  /// bundled GTFS feed (named routes + real boarding/alighting stops), with
+  /// LTFRB fares on the actual ride distance. Falls back to the synthetic
+  /// [buildSuggestions] when no GTFS route is matched.
+  List<RouteSuggestion> buildFromGtfs({
+    required String tripId,
+    required String destinationLabel,
+    required List<GtfsRouteMatch> matches,
+  }) {
+    final options = <RouteSuggestion>[];
+    for (final m in matches) {
+      final suggestionId = _uuid.v4();
+      final walkToMin = math.max(1.0, m.walkToBoardM / (walkKph * 1000 / 60));
+      final walkFromMin = math.max(1.0, m.walkFromAlightM / (walkKph * 1000 / 60));
+      final kph = m.route.mode == 'bus' ? busKph : jeepKph;
+      final rideMin = m.rideKm / kph * 60 + boardingWaitMin;
+      final fare = m.route.mode == 'bus'
+          ? busFare(m.rideKm)
+          : jeepFare(m.rideKm);
+      final noun = m.route.mode == 'bus' ? 'Bus' : 'Jeep';
+
+      final steps = <RouteStep>[
+        RouteStep(
+          stepId: _uuid.v4(),
+          suggestionId: suggestionId,
+          stepNumber: 1,
+          transportMode: 'walk',
+          instruction: 'Walk to ${_short(m.boardStop.name)}',
+          toStop: _short(m.boardStop.name),
+          durationMinutes: walkToMin.roundToDouble(),
+        ),
+        RouteStep(
+          stepId: _uuid.v4(),
+          suggestionId: suggestionId,
+          stepNumber: 2,
+          transportMode: m.route.mode,
+          instruction: 'Ride $noun "${m.route.name}" and alight at '
+              '${_short(m.alightStop.name)} (~${m.rideKm.toStringAsFixed(1)} km)',
+          fromStop: _short(m.boardStop.name),
+          toStop: _short(m.alightStop.name),
+          farePhp: _round(fare),
+          durationMinutes: rideMin.roundToDouble(),
+        ),
+        RouteStep(
+          stepId: _uuid.v4(),
+          suggestionId: suggestionId,
+          stepNumber: 3,
+          transportMode: 'walk',
+          instruction: 'Walk to ${_short(destinationLabel)}',
+          toStop: _short(destinationLabel),
+          durationMinutes: walkFromMin.roundToDouble(),
+        ),
+      ];
+
+      options.add(RouteSuggestion(
+        suggestionId: suggestionId,
+        tripId: tripId,
+        rank: 0,
+        routeLabel: '$noun: ${m.route.name}',
+        totalFarePhp: _round(fare),
+        totalDurationMinutes:
+            (walkToMin + rideMin + walkFromMin).roundToDouble(),
+        transportSummary: 'Walk + $noun',
+        steps: steps,
+      ));
+    }
+    return _tagPair(options);
   }
 
   RouteSuggestion _compose({
