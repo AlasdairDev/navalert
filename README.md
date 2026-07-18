@@ -87,6 +87,96 @@ ViewModel, which exposes state the UI observes and reacts to.
 
 ---
 
+## Project structure — where to find things
+
+```
+navalert/
+├── lib/                              # ALL Dart code lives here
+│   ├── main.dart                     # app entry point + provider wiring
+│   │
+│   ├── core/
+│   │   └── theme.dart                # 🎨 colours + styling (edit here to restyle everything)
+│   │
+│   ├── models/
+│   │   └── models.dart               # domain entities (Data Dictionary tables)
+│   │
+│   ├── views/                        # 🖼️ SCREENS (UI only) — edit these for UI/UX
+│   │   ├── launch_view.dart          #   Fig 14  splash / logo
+│   │   ├── onboarding_flow.dart      #   Fig 15–18  tutorial · permissions · contacts · fake-call setup
+│   │   ├── shell.dart                #   Fig 19  bottom-nav shell (5 tabs) + volume-key wiring
+│   │   ├── home_view.dart            #   Fig 19  main map + search bar
+│   │   ├── search_view.dart          #   Fig 20  destination search (Nominatim)
+│   │   ├── pin_on_map_view.dart      #   UC-4    drop a pin to pick drop-off
+│   │   ├── route_view.dart           #   Fig 21–23  route map · mode priority · trip config
+│   │   ├── active_trip_view.dart     #   Fig 24–29  monitoring · alarm Stages 1–3 · overshoot
+│   │   ├── fake_call_view.dart       #   UC-8    fake incoming-call screen
+│   │   ├── emergency_view.dart       #   Fig 32  SOS hold · Call 911 · recordings
+│   │   ├── favorites_view.dart       #   Fig 31  saved places
+│   │   ├── add_favorite_view.dart    #   Fig 31  add-a-favorite search page
+│   │   ├── history_view.dart         #   Fig 30  trip history + filters
+│   │   └── settings_view.dart        #   Fig 33  settings · backup · legal
+│   │
+│   ├── viewmodels/                   # 🔗 STATE (ChangeNotifier) — the bridge views observe
+│   │   ├── app_viewmodel.dart        #   settings, contacts, favorites, recordings, backup
+│   │   ├── home_viewmodel.dart       #   search, destination, route suggestions
+│   │   ├── trip_viewmodel.dart       #   live trip: GPS, alarm stages, overshoot
+│   │   ├── emergency_viewmodel.dart  #   SOS hold, fake call, recording
+│   │   └── history_viewmodel.dart    #   trip history list + filters
+│   │
+│   └── services/                     # ⚙️ LOGIC + DATA + APIs (no UI)
+│       ├── database_service.dart     #   SQLite + SQLCipher (all 13 tables)
+│       ├── adaptive_alarm_engine.dart#   R1–R4 alarm math (speed → distance, intensity, overshoot)
+│       ├── route_engine.dart         #   LTFRB fares + synthetic route fallback
+│       ├── gtfs_service.dart         #   real jeepney/bus routes from the GTFS asset
+│       ├── geocoding_service.dart    #   Nominatim search + reverse geocoding
+│       ├── route_path_service.dart   #   OSRM road-following polyline
+│       ├── sos_service.dart          #   native SMS SOS + queue/retry + Call 911
+│       ├── sound_service.dart        #   alarm/ringtone audio + vibration
+│       ├── trip_notification_service.dart # lock-screen trip widget
+│       └── hardware_buttons.dart     #   volume-button triple-press channel
+│
+├── assets/                           # bundled files (registered in pubspec.yaml)
+│   ├── sounds/                       #   alarm + ringtone audio (generated)
+│   ├── gtfs/                         #   routes.json.gz (transit data) + NOTICE.md
+│   └── images/                       # 🖼️ UI images — one folder per area
+│       ├── tutorial/                 #   tutorial slide art
+│       ├── branding/                 #   background / logo (drop your logo here)
+│       └── reference/                #   design mockups (repo only, NOT shipped)
+│
+├── android/                          # Android project
+│   └── app/src/main/
+│       ├── AndroidManifest.xml       #   permissions (location, SMS, notifications…)
+│       └── kotlin/ph/edu/pup/navalert/MainActivity.kt  # native SMS + volume-key bridge
+│
+├── test/                             # unit tests
+│   ├── navalert_test.dart            #   alarm math, fares, overshoot, behaviour
+│   └── widget_test.dart
+│
+├── tool/                             # build-time scripts (not shipped)
+│   ├── gen_gtfs.py                   #   GTFS feed → assets/gtfs/routes.json.gz
+│   └── gen_sounds.dart               #   generates assets/sounds/*.wav
+│
+├── Docs/                             # capstone PDFs / design docs
+├── pubspec.yaml                      # dependencies + asset registration
+├── analysis_options.yaml             # linter rules
+└── README.md
+```
+
+**Quick "where is…?" guide**
+
+| I want to change… | Go to |
+|---|---|
+| Colours / fonts / button styles | `lib/core/theme.dart` |
+| A specific screen's look | `lib/views/<that_screen>_view.dart` |
+| What a button *does* | its ViewModel in `lib/viewmodels/` |
+| Alarm timing / distance / intensity | `lib/services/adaptive_alarm_engine.dart` |
+| Fares / route logic | `lib/services/route_engine.dart`, `gtfs_service.dart` |
+| Database tables | `lib/services/database_service.dart` |
+| App permissions | `android/app/src/main/AndroidManifest.xml` |
+| Add an image | drop in `assets/images/<area>/`, add the folder to `pubspec.yaml` |
+
+---
+
 ## Prerequisites
 
 - Flutter 3.x (`flutter doctor`)
