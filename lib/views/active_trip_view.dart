@@ -521,32 +521,40 @@ class _SlideToStopState extends State<_SlideToStop> {
       final width = constraints.maxWidth.clamp(0.0, 320.0);
       final maxDrag = width - height;
       return Center(
-        child: Container(
-          width: width,
-          height: height,
-          decoration: BoxDecoration(
-            color: widget.color.withValues(alpha: 0.35),
-            borderRadius: BorderRadius.circular(height / 2),
-            border: Border.all(color: widget.color),
-          ),
-          child: Stack(children: [
-            Center(
-                child: Text(widget.label,
-                    style: const TextStyle(fontWeight: FontWeight.w600))),
-            Positioned(
-              left: _drag,
-              top: 3,
-              child: GestureDetector(
-                onHorizontalDragUpdate: (d) => setState(() =>
-                    _drag = (_drag + d.delta.dx).clamp(0.0, maxDrag)),
-                onHorizontalDragEnd: (_) async {
-                  if (_drag >= maxDrag * 0.9 && !_done) {
-                    _done = true;
-                    await widget.onCompleted();
-                  } else {
-                    setState(() => _drag = 0);
-                  }
-                },
+        // The WHOLE pill accepts the drag, not just the knob. A 48 px knob is
+        // an unrealistic target for a rider on a moving jeepney, and claiming
+        // horizontal drags across the full pill also wins the gesture arena
+        // against the commute-guide sheet below, which competes for vertical
+        // drags — otherwise a slightly diagonal swipe does nothing at all and
+        // the rider is stuck on this screen (PopScope blocks Back by design).
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onHorizontalDragUpdate: (d) => setState(
+              () => _drag = (_drag + d.delta.dx).clamp(0.0, maxDrag)),
+          onHorizontalDragEnd: (_) async {
+            if (_drag >= maxDrag * 0.75 && !_done) {
+              _done = true;
+              setState(() => _drag = maxDrag);
+              await widget.onCompleted();
+            } else {
+              setState(() => _drag = 0);
+            }
+          },
+          child: Container(
+            width: width,
+            height: height,
+            decoration: BoxDecoration(
+              color: widget.color.withValues(alpha: 0.35),
+              borderRadius: BorderRadius.circular(height / 2),
+              border: Border.all(color: widget.color),
+            ),
+            child: Stack(children: [
+              Center(
+                  child: Text(widget.label,
+                      style: const TextStyle(fontWeight: FontWeight.w600))),
+              Positioned(
+                left: _drag,
+                top: 3,
                 child: Container(
                   width: height - 6,
                   height: height - 6,
@@ -556,8 +564,8 @@ class _SlideToStopState extends State<_SlideToStop> {
                       const Icon(Icons.chevron_right, color: Colors.white),
                 ),
               ),
-            ),
-          ]),
+            ]),
+          ),
         ),
       );
     });
