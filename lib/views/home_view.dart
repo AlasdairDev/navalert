@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -131,8 +132,34 @@ class _HomeViewState extends State<HomeView> {
                       ]),
                     ),
                   ),
-                  // Incomplete-setup prompt (app_state, Table 15):
-                  // onboarding was skipped without emergency contacts.
+                  // UC-4 Exception 2 — the map is showing a fallback position,
+                  // not the rider's own. This MUST be visible here: Home is
+                  // where the map is, and silently centring on PUP Sta. Mesa
+                  // looks exactly like a working GPS fix.
+                  if (vm.locationIsFallback && vm.locationError != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: MaterialBanner(
+                        padding: const EdgeInsets.all(10),
+                        backgroundColor: NavAlertColors.surface,
+                        content: Text(vm.locationError!,
+                            style: const TextStyle(fontSize: 12)),
+                        leading: const Icon(Icons.location_off,
+                            color: NavAlertColors.warning),
+                        actions: [
+                          TextButton(
+                            onPressed: () => vm.refreshCurrentLocation(),
+                            child: const Text('Retry'),
+                          ),
+                          TextButton(
+                            onPressed: () => Geolocator.openAppSettings(),
+                            child: const Text('Settings'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Incomplete-setup prompt (app_state, Table 15): onboarding
+                  // was skipped without emergency contacts.
                   if (context.watch<AppViewModel>().showIncompleteSetupPrompt)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
