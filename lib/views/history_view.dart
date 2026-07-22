@@ -131,6 +131,15 @@ class _HistoryViewState extends State<HistoryView> {
     );
   }
 
+  /// Google-Maps-style short place name: the first two comma components of a
+  /// full Nominatim address ("University Avenue (PUP), 508" instead of the
+  /// five-line province-and-postcode string). Same convention as the origin
+  /// row on the search screen; the stored label stays untouched in the DB.
+  static String _shortPlace(String label) {
+    final parts = label.split(',').map((p) => p.trim()).toList();
+    return parts.take(2).join(', ');
+  }
+
   Widget _tripCard(Trip t) {
     String time(DateTime? d) => d == null
         ? '—'
@@ -143,13 +152,15 @@ class _HistoryViewState extends State<HistoryView> {
             const Icon(Icons.home, size: 18, color: NavAlertColors.accent),
             const SizedBox(width: 6),
             Expanded(
-                child: Text('${t.originLabel}\n(Departure: ${time(t.startedAt)})',
+                child: Text(
+                    '${_shortPlace(t.originLabel)}\n(Departure: ${time(t.startedAt)})',
                     style: const TextStyle(fontSize: 12))),
             const Icon(Icons.location_on,
                 size: 18, color: NavAlertColors.warning),
             const SizedBox(width: 6),
             Expanded(
-                child: Text('${t.destinationLabel}\n(Arrival: ${time(t.endedAt)})',
+                child: Text(
+                    '${_shortPlace(t.destinationLabel)}\n(Arrival: ${time(t.endedAt)})',
                     style: const TextStyle(fontSize: 12))),
           ]),
           const SizedBox(height: 8),
