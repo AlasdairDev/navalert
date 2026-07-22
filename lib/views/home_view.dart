@@ -66,6 +66,14 @@ class _HomeViewState extends State<HomeView> {
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'ph.edu.pup.navalert',
+                // Without this, 256 px tiles are upscaled ~2.6x on a modern
+                // phone and the map looks blurry. tile.openstreetmap.org has
+                // no @2x endpoint, so flutter_map simulates retina: it pulls
+                // the next zoom level and downscales, which is what actually
+                // renders crisp on high-density screens.
+                retinaMode: RetinaMode.isHighDensity(context),
+                maxNativeZoom: 19, // highest zoom OSM actually serves
+                maxZoom: 20,
                 // Cancels obsolete tile requests while panning/zooming and
                 // prefetches a buffer of tiles around the viewport so
                 // dragging stays smooth.

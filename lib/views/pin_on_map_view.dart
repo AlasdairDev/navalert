@@ -90,6 +90,12 @@ class _PinOnMapViewState extends State<PinOnMapView> {
                   urlTemplate:
                       'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'ph.edu.pup.navalert',
+                  // Crisp tiles on high-density screens — the rider is
+                  // picking an exact drop-off point here, so blurry
+                  // street labels directly cause a wrong destination.
+                  retinaMode: RetinaMode.isHighDensity(context),
+                  maxNativeZoom: 19,
+                  maxZoom: 20,
                   tileProvider: CancellableNetworkTileProvider(),
                   panBuffer: 1,
                   keepBuffer: 4,
