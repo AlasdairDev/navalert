@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 
 import '../services/database_service.dart';
+import '../models/guide_leg.dart';
 import '../models/models.dart';
 import '../services/geocoding_service.dart';
 import '../services/gtfs_service.dart';
@@ -40,6 +41,9 @@ class HomeViewModel extends ChangeNotifier {
   /// segment when the routing service is unreachable.
   List<List<double>> routePath = [];
   bool loadingPath = false;
+
+  /// Guide legs per suggestion id, rebuilt on each search. Memory-only.
+  final Map<String, List<GuideLeg>> _legsBySuggestion = {};
 
   // Search state
   bool searching = false;
@@ -180,8 +184,10 @@ class HomeViewModel extends ChangeNotifier {
     for (final s in suggestions) {
       await _db.insertSuggestion(s);
     }
-    selectedSuggestion = suggestions.isEmpty ? null : suggestions.first;
     plannedTrip = trip;
+    // plannedTrip must be assigned first: _selectDefaultSuggestion writes the
+    // chosen id onto it.
+    _selectDefaultSuggestion();
     notifyListeners();
 
     // Fetch the real road geometry in the background (Figure 21 —
@@ -195,6 +201,7 @@ class HomeViewModel extends ChangeNotifier {
   /// serves the trip or the feed is unavailable.
   Future<List<RouteSuggestion>> _composeSuggestions(
       Trip trip, PlaceResult place, TransportPreferences prefs) async {
+    _legsBySuggestion.clear();
     try {
       final matches = await GtfsService.instance.directRoutes(
         originLat: trip.originLat,
@@ -210,6 +217,7 @@ class HomeViewModel extends ChangeNotifier {
           tripId: trip.tripId,
           destinationLabel: place.displayName,
           matches: matches,
+          legsOut: _legsBySuggestion,
         );
       }
     } catch (_) {/* fall through to synthetic */}
@@ -219,8 +227,15 @@ class HomeViewModel extends ChangeNotifier {
       destinationLabel: place.displayName,
       distanceKm: trip.distanceKm,
       prefs: prefs,
+      legsOut: _legsBySuggestion,
     );
   }
+
+  /// Live commute-guide legs for a suggestion, held in memory only (Table 24
+  /// has no coordinate columns and is not being changed). Returns an empty list
+  /// for an unknown id, so the trip screen simply shows no guide.
+  List<GuideLeg> legsFor(String? suggestionId) =>
+      suggestionId == null ? const [] : (_legsBySuggestion[suggestionId] ?? const []);
 
   Future<void> _fetchRoadPath(Trip trip) async {
     loadingPath = true;
@@ -252,8 +267,21 @@ class HomeViewModel extends ChangeNotifier {
     for (final s in suggestions) {
       await _db.insertSuggestion(s);
     }
-    selectedSuggestion = suggestions.isEmpty ? null : suggestions.first;
+    _selectDefaultSuggestion();
     notifyListeners();
+  }
+
+  /// The top-ranked route is pre-selected, so it must be recorded on the trip
+  /// exactly as an explicit tap would be. Without this, a rider who simply
+  /// accepts the default — the common case — leaves Table 22's
+  /// selected_route_suggestion_id (and its foreign key) null, losing which
+  /// route the trip actually followed.
+  void _selectDefaultSuggestion() {
+    if (suggestions.isEmpty) {
+      selectedSuggestion = null;
+      return;
+    }
+    selectSuggestion(suggestions.first);
   }
 
   void selectSuggestion(RouteSuggestion s) {

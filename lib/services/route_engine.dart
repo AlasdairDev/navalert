@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:uuid/uuid.dart';
 
+import '../models/guide_leg.dart';
 import '../models/models.dart';
 import 'gtfs_service.dart';
 
@@ -50,12 +51,19 @@ class RouteEngine {
   double uvFare(double km) => km <= 4 ? uvBase : uvBase + (km - 4) * uvPerKm;
 
   /// Builds up to two ranked suggestions honouring the mode priority.
+  ///
+  /// [legsOut] receives commute-guide legs with NO coordinates: these routes are
+  /// synthetic, their legs are fractions of a straight line and their stops
+  /// ("… Terminal", "Transfer point") are fictional. Such legs can only ever be
+  /// advanced by the rider tapping — auto-advancing one would claim they passed
+  /// a place that does not exist.
   List<RouteSuggestion> buildSuggestions({
     required String tripId,
     required String originLabel,
     required String destinationLabel,
     required double distanceKm,
     required TransportPreferences prefs,
+    Map<String, List<GuideLeg>>? legsOut,
   }) {
     // Road distance ≈ 1.3 × straight-line distance in Metro Manila.
     final roadKm = math.max(0.5, distanceKm * 1.3);
@@ -105,6 +113,12 @@ class RouteEngine {
       ));
     }
 
+    if (legsOut != null) {
+      for (final o in options) {
+        legsOut[o.suggestionId] =
+            o.steps.map((s) => GuideLeg(step: s)).toList();
+      }
+    }
     return _tagPair(options);
   }
 
@@ -155,10 +169,15 @@ class RouteEngine {
   /// bundled GTFS feed (named routes + real boarding/alighting stops), with
   /// LTFRB fares on the actual ride distance. Falls back to the synthetic
   /// [buildSuggestions] when no GTFS route is matched.
+  /// [legsOut], when supplied, receives the live commute-guide legs keyed by
+  /// suggestion id. GTFS legs carry the real stop coordinates that would
+  /// otherwise be discarded here, which is what lets the guide advance itself
+  /// during the trip without adding coordinates to Table 24.
   List<RouteSuggestion> buildFromGtfs({
     required String tripId,
     required String destinationLabel,
     required List<GtfsRouteMatch> matches,
+    Map<String, List<GuideLeg>>? legsOut,
   }) {
     final options = <RouteSuggestion>[];
     for (final m in matches) {
@@ -203,6 +222,22 @@ class RouteEngine {
           toStop: _short(destinationLabel),
           durationMinutes: walkFromMin.roundToDouble(),
         ),
+      ];
+
+      // The walk-to-board leg ends at the boarding stop and the ride ends at
+      // the alighting stop, both known precisely from the feed. The final walk
+      // ends at the destination, whose coordinates are not passed in here, so
+      // it stays manual — the destination alarm covers arrival anyway.
+      legsOut?[suggestionId] = [
+        GuideLeg(
+            step: steps[0],
+            endLat: m.boardStop.lat,
+            endLng: m.boardStop.lng),
+        GuideLeg(
+            step: steps[1],
+            endLat: m.alightStop.lat,
+            endLng: m.alightStop.lng),
+        GuideLeg(step: steps[2]),
       ];
 
       options.add(RouteSuggestion(
