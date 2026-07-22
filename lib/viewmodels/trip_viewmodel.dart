@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/adaptive_alarm_engine.dart';
 import '../services/database_service.dart';
+import '../services/gtfs_service.dart';
 import '../services/sound_service.dart';
 import '../services/trip_notification_service.dart';
 
@@ -144,13 +145,17 @@ class TripViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onFix(Position pos) {
+  Future<void> _onFix(Position pos) async {
     final t = trip;
     final engine = _engine;
     if (t == null || engine == null) return;
 
     _lastFixAt = DateTime.now();
-    if (signalLostAlarm) dismissSignalLostAlarm();
+    // Await the fallback-alarm teardown: its stopAll() must finish before a
+    // destination stage can start playing below, or the late stop lands on
+    // top of the new alarm and silences the alert meant to wake the rider.
+    if (signalLostAlarm) await dismissSignalLostAlarm();
+    if (!isActive || trip == null) return;
 
     _lastLat = pos.latitude;
     _lastLng = pos.longitude;
@@ -193,7 +198,10 @@ class TripViewModel extends ChangeNotifier {
   }
 
   void _fireStage(int stage) {
-    final t = trip!;
+    // Reached from timers as well as GPS fixes, so the trip may already be
+    // over by the time this runs — never force-unwrap here.
+    final t = trip;
+    if (t == null || !isActive) return;
     _firedStages.add(stage);
     highestStage = stage;
     t.highestAlarmStage = stage;
@@ -238,10 +246,16 @@ class TripViewModel extends ChangeNotifier {
     _snoozeTimer = null;
   }
 
+  /// Preparation reminders shown alongside the gentle alert (Figure 26).
+  /// Kept here (not in the View) so the same list is displayed and logged.
+  static const alarmChecklist = ['Gather belongings', 'Stay alert'];
+
   Future<void> _logAlarm(int stage, String label, String message) async {
     final t = trip;
     if (t == null) return;
     _activeAlarmId = _uuid.v4();
+    final lat = _lastLat ?? t.originLat;
+    final lng = _lastLng ?? t.originLng;
     await _db.insertAlarmEvent(AlarmEvent(
       alarmId: _activeAlarmId!,
       tripId: t.tripId,
@@ -249,8 +263,10 @@ class TripViewModel extends ChangeNotifier {
       stageLabel: label,
       stageMessage: message,
       kmFromDestination: distanceM / 1000,
-      triggeredLat: _lastLat ?? t.originLat,
-      triggeredLng: _lastLng ?? t.originLng,
+      nearestStopName: GtfsService.instance.nearestStopName(lat, lng),
+      checklistItems: stage == 1 ? alarmChecklist : const [],
+      triggeredLat: lat,
+      triggeredLng: lng,
       triggeredAt: DateTime.now(),
     ));
   }
@@ -290,8 +306,11 @@ class TripViewModel extends ChangeNotifier {
   /// Dismiss — records the rider's reaction time for behavioural learning.
   Future<void> dismissAlarm() async {
     _cancelEscalation();
-    await _recordReaction();
+    // Silence BEFORE persisting. UC-5 Exception 2: a failed behaviour-profile
+    // write must never disrupt the rider — if the DB write came first and
+    // threw, the alarm below would keep blaring with no way to stop it.
     await _sound.stopAll();
+    await _recordReaction();
     if (phase == TripPhase.alarmStage3) {
       await _endTrip('arrived');
       phase = TripPhase.arrived;
@@ -301,16 +320,23 @@ class TripViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Records the rider's reaction time (R4 behavioural learning). Storage
+  /// failures are logged and swallowed, never surfaced: UC-5 Exception 2 says
+  /// the alarm is still dismissed and the error logged "without disrupting the
+  /// immediate user experience".
   Future<void> _recordReaction() async {
     final shownAt = _alarmShownAt;
     final t = trip;
-    if (shownAt != null && t != null) {
-      final secs = DateTime.now().difference(shownAt).inSeconds;
-      t.awakeSeconds = secs;
-      await _db.updateTrip(t);
+    try {
+      if (shownAt != null && t != null) {
+        t.awakeSeconds = DateTime.now().difference(shownAt).inSeconds;
+        await _db.updateTrip(t);
+      }
+      final id = _activeAlarmId;
+      if (id != null) await _db.markAlarmDismissed(id);
+    } catch (e) {
+      debugPrint('NavAlert: behaviour profile update failed — $e');
     }
-    final id = _activeAlarmId;
-    if (id != null) await _db.markAlarmDismissed(id);
     _activeAlarmId = null;
   }
 
@@ -320,20 +346,24 @@ class TripViewModel extends ChangeNotifier {
     if (t == null) return;
     await _sound.stopAll();
     if (!missed) {
-      // False overshoot — vehicle detouring; resume monitoring.
-      _engine?.reset();
+      // False overshoot — vehicle detouring; resume monitoring. Keep the
+      // learned speed window so the lead radius stays correct.
+      _engine?.resetOvershootTracking();
       phase = TripPhase.monitoring;
       notifyListeners();
       return;
     }
     phase = TripPhase.overshootConfirmed;
+    final lat = _lastLat ?? t.destinationLat;
+    final lng = _lastLng ?? t.destinationLng;
     await _db.insertOvershootEvent({
       'overshoot_id': _uuid.v4(),
       'trip_id': t.tripId,
       'destination_name': t.destinationLabel,
+      'nearest_stop_name': GtfsService.instance.nearestStopName(lat, lng),
       'overshot_km': overshotM / 1000,
-      'triggered_lat': _lastLat ?? t.destinationLat,
-      'triggered_lng': _lastLng ?? t.destinationLng,
+      'triggered_lat': lat,
+      'triggered_lng': lng,
       'acknowledged': 1,
       'triggered_at': DateTime.now().toIso8601String(),
       'acknowledged_at': DateTime.now().toIso8601String(),
@@ -372,8 +402,10 @@ class TripViewModel extends ChangeNotifier {
 
   Future<void> stopTrip() async {
     _cancelEscalation();
-    await _recordReaction();
+    // Same rule as dismissAlarm: silence first so a storage error can never
+    // leave the rider stuck with an alarm they cannot stop.
     await _sound.stopAll();
+    await _recordReaction();
     await _endTrip(highestStage > 0 ? 'arrived' : 'cancelled');
     phase = TripPhase.ended;
     notifyListeners();
@@ -397,7 +429,13 @@ class TripViewModel extends ChangeNotifier {
         ..status = status
         ..etaMinutes = etaMinutes
         ..endedAt = DateTime.now();
-      await _db.updateTrip(t);
+      // A failed write loses one history row; letting it throw would leave the
+      // trip permanently "active" with the UI stuck on the monitoring screen.
+      try {
+        await _db.updateTrip(t);
+      } catch (e) {
+        debugPrint('NavAlert: could not persist trip end — $e');
+      }
     }
   }
 
@@ -405,7 +443,9 @@ class TripViewModel extends ChangeNotifier {
   void dispose() {
     _sub?.cancel();
     _signalWatchdog?.cancel();
-    _escalationTimer?.cancel();
+    // _cancelEscalation clears the snooze timer too — a pending snooze that
+    // outlived disposal would call notifyListeners() on a dead notifier.
+    _cancelEscalation();
     super.dispose();
   }
 }

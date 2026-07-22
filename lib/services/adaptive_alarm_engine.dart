@@ -110,11 +110,20 @@ class AdaptiveAlarmEngine {
     return null;
   }
 
-  void reset() {
-    _speeds.clear();
+  /// Clears only the overshoot detector. Used for UC-6 Alternative Flow A
+  /// ("False Overshoot" — the vehicle is detouring to the same stop): the
+  /// rolling speed window must survive, otherwise avgSpeedMs drops back to
+  /// the 4 m/s default and the Stage-1 lead radius collapses, giving the
+  /// rider far less warning on the approach that actually matters.
+  void resetOvershootTracking() {
     _minDistanceM = double.infinity;
     _lastDistanceM = null;
     _increasingFixes = 0;
     overshootLatched = false;
+  }
+
+  void reset() {
+    _speeds.clear();
+    resetOvershootTracking();
   }
 }

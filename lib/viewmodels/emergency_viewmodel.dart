@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import '../services/fake_call_screen_service.dart';
 import '../services/sos_service.dart';
 import '../services/sound_service.dart';
 
@@ -84,10 +85,15 @@ class EmergencyViewModel extends ChangeNotifier {
   Future<void> call911() => _sos.call911();
 
   // ---------- fake call (R7) ----------
-  Future<void> startFakeCall() async {
+  /// [callerName] is shown on the lock-screen call UI, so it must match the
+  /// name the in-app screen displays (Table 21, default 'Mom').
+  Future<void> startFakeCall({String callerName = 'Mom'}) async {
     fakeCallActive = true;
     fakeCallAnswered = false;
     notifyListeners();
+    // UC-8 Exception 2 — raise the call over the keyguard so the shortcut
+    // works with the phone locked, not only with NavAlert already open.
+    await FakeCallScreenService.instance.present(callerName);
     await SoundService.instance.playRingtone();
   }
 
@@ -105,6 +111,8 @@ class EmergencyViewModel extends ChangeNotifier {
     fakeCallActive = false;
     fakeCallAnswered = false;
     await SoundService.instance.stopVoice();
+    // Drop the notification and stop NavAlert rendering over the lock screen.
+    await FakeCallScreenService.instance.dismiss();
     notifyListeners();
   }
 

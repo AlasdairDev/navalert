@@ -80,6 +80,32 @@ class GtfsService {
     return routes;
   }
 
+  /// Name of the nearest known transit stop to a point, or null if none is
+  /// within [maxM]. Fills `nearest_stop_name` on alarm_events (Table 25) and
+  /// overshoot_events (Table 26) so a rider reading their history sees
+  /// "Cubao" instead of raw coordinates.
+  ///
+  /// Deliberately reads only the **already-cached** feed and never triggers a
+  /// load: this runs while an alarm is firing, and decompressing the asset on
+  /// that path could delay the very alert meant to wake the rider. The commute
+  /// guide warms the cache during route planning, so it is normally ready.
+  String? nearestStopName(double lat, double lng, {double maxM = 1500}) {
+    final routes = _routes;
+    if (routes == null) return null;
+    String? best;
+    var bestM = maxM;
+    for (final r in routes) {
+      for (final s in r.stops) {
+        final d = _haversineM(lat, lng, s.lat, s.lng);
+        if (d < bestM) {
+          bestM = d;
+          best = s.name;
+        }
+      }
+    }
+    return best;
+  }
+
   /// Direct routes (no transfer) serving both points, cheapest walk first.
   /// Returns [] if the asset can't load, so callers can fall back gracefully.
   Future<List<GtfsRouteMatch>> directRoutes({

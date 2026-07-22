@@ -89,33 +89,61 @@ class SoundService {
   }
 
   /// Fake-call ringtone + voice playback (Requirement R7).
+  /// UC-8 Exception 1 — audio must never block the fake call. If the media
+  /// player fails, the caller still shows the incoming-call interface and the
+  /// rider keeps their visual excuse to leave; only the sound is lost. These
+  /// methods therefore swallow playback errors instead of throwing, and still
+  /// attempt the vibration that mimics an incoming call.
   Future<void> playRingtone() async {
-    await _voicePlayer.stop();
-    await _voicePlayer.setReleaseMode(ReleaseMode.loop);
-    await _voicePlayer.play(AssetSource('sounds/ringtone.wav'), volume: 1.0);
-    Vibration.vibrate(pattern: [0, 900, 600, 900, 600, 900], repeat: 0);
+    try {
+      await _voicePlayer.stop();
+      await _voicePlayer.setReleaseMode(ReleaseMode.loop);
+      await _voicePlayer.play(AssetSource('sounds/ringtone.wav'), volume: 1.0);
+    } catch (_) {
+      // Silent "poor connection" state — the visual illusion carries it.
+    }
+    try {
+      Vibration.vibrate(pattern: [0, 900, 600, 900, 600, 900], repeat: 0);
+    } catch (_) {}
   }
 
   Future<void> playVoice(String filePath) async {
-    await _voicePlayer.stop();
-    await Vibration.cancel();
-    await _voicePlayer.setReleaseMode(ReleaseMode.loop);
-    if (filePath.startsWith('assets/')) {
-      await _voicePlayer
-          .play(AssetSource(filePath.replaceFirst('assets/', '')), volume: 1.0);
-    } else if (File(filePath).existsSync()) {
-      await _voicePlayer.play(DeviceFileSource(filePath), volume: 1.0);
+    try {
+      await _voicePlayer.stop();
+      await Vibration.cancel();
+      await _voicePlayer.setReleaseMode(ReleaseMode.loop);
+      if (filePath.startsWith('assets/')) {
+        await _voicePlayer.play(
+            AssetSource(filePath.replaceFirst('assets/', '')), volume: 1.0);
+      } else if (File(filePath).existsSync()) {
+        await _voicePlayer.play(DeviceFileSource(filePath), volume: 1.0);
+      }
+    } catch (_) {
+      // Corrupt or undecodable recording — stay on the call screen muted.
     }
   }
 
   Future<void> stopVoice() async {
-    await _voicePlayer.stop();
-    await Vibration.cancel();
+    try {
+      await _voicePlayer.stop();
+    } catch (_) {}
+    try {
+      await Vibration.cancel();
+    } catch (_) {}
   }
 
+  /// Runs on the dismiss/stop-trip path, so each teardown step is isolated:
+  /// a failing player must not leave the alarm ringing or block the trip
+  /// from ending.
   Future<void> stopAll() async {
-    await _alarmPlayer.stop();
-    await _voicePlayer.stop();
-    await Vibration.cancel();
+    try {
+      await _alarmPlayer.stop();
+    } catch (_) {}
+    try {
+      await _voicePlayer.stop();
+    } catch (_) {}
+    try {
+      await Vibration.cancel();
+    } catch (_) {}
   }
 }

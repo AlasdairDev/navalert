@@ -70,10 +70,16 @@ class _FakeCallViewState extends State<FakeCallView> {
                 }),
               ])
             else
-              _roundButton(Icons.call_end, Colors.red, () async {
-                await em.endFakeCall();
-                if (mounted) Navigator.of(this.context).pop();
-              }),
+              // Wrapped in a full-width Row like the incoming-call branch:
+              // without it the Column shrinks to its widest child and the
+              // whole screen jumps left the instant the call is answered,
+              // which instantly breaks the "real dialer" illusion.
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                _roundButton(Icons.call_end, Colors.red, () async {
+                  await em.endFakeCall();
+                  if (mounted) Navigator.of(this.context).pop();
+                }),
+              ]),
             const SizedBox(height: 40),
           ]),
         ),

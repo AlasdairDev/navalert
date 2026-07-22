@@ -429,6 +429,10 @@ class AlarmEvent {
   final String stageMessage;
   final double? kmFromDestination;
   final String? nearestStopName;
+
+  /// Preparation checklist shown with the alert (Figure 26), stored so the
+  /// trip record reflects what the rider was actually told to do.
+  final List<String> checklistItems;
   final double triggeredLat;
   final double triggeredLng;
   bool dismissed;
@@ -443,6 +447,7 @@ class AlarmEvent {
     required this.stageMessage,
     this.kmFromDestination,
     this.nearestStopName,
+    this.checklistItems = const [],
     required this.triggeredLat,
     required this.triggeredLng,
     this.dismissed = false,
@@ -458,6 +463,7 @@ class AlarmEvent {
         'stage_message': stageMessage,
         'km_from_destination': kmFromDestination,
         'nearest_stop_name': nearestStopName,
+        'checklist_items': checklistItems.isEmpty ? null : checklistItems.join('\n'),
         'triggered_lat': triggeredLat,
         'triggered_lng': triggeredLng,
         'dismissed': dismissed ? 1 : 0,

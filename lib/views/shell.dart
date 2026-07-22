@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../services/hardware_buttons.dart';
+import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../viewmodels/history_viewmodel.dart';
 import 'emergency_view.dart';
@@ -57,7 +58,8 @@ class _ShellViewState extends State<ShellView> {
 
   Future<void> _launchFakeCall() async {
     final em = context.read<EmergencyViewModel>();
-    await em.startFakeCall();
+    await em.startFakeCall(
+        callerName: context.read<AppViewModel>().fakeCallConfig.callerName);
     if (!mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(
         fullscreenDialog: true, builder: (_) => const FakeCallView()));

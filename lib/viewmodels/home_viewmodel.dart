@@ -46,6 +46,16 @@ class HomeViewModel extends ChangeNotifier {
   String? searchError;
   List<PlaceResult> results = [];
 
+  /// Set when the origin could not actually be measured (GPS switched off or
+  /// permission denied) and the map is showing a fallback position. The View
+  /// must surface this: a silently wrong origin produces a commute guide for
+  /// a journey the rider is not making.
+  String? locationError;
+
+  /// True while [currentLat]/[currentLng] hold a placeholder rather than a
+  /// real fix, so callers can block trip confirmation (UC-4 Exception 2).
+  bool locationIsFallback = false;
+
   // Selected destination + planned trip
   PlaceResult? destination;
   Trip? plannedTrip;
@@ -53,9 +63,20 @@ class HomeViewModel extends ChangeNotifier {
   RouteSuggestion? selectedSuggestion;
 
   Future<void> refreshCurrentLocation() async {
+    locationError = null;
+    locationIsFallback = false;
     try {
-      // UC-4 Exception 2 — prompt for location services/permission
-      // instead of failing when they are off or denied.
+      // UC-4 Exception 2 — "Location Services Disabled". The GPS hardware
+      // toggle is separate from the app permission: a rider can grant the
+      // permission and still have location switched off system-wide, so both
+      // must be checked. openLocationSettings() is the system prompt the use
+      // case calls for.
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        await Geolocator.openLocationSettings();
+        if (!await Geolocator.isLocationServiceEnabled()) {
+          throw const LocationServiceDisabledException();
+        }
+      }
       var perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
@@ -72,14 +93,29 @@ class HomeViewModel extends ChangeNotifier {
       );
       currentLat = pos.latitude;
       currentLng = pos.longitude;
-    } catch (_) {
+    } catch (e) {
       Position? last;
       try {
         last = await Geolocator.getLastKnownPosition();
       } catch (_) {}
-      // Default to PUP Sta. Mesa if no fix is available yet.
-      currentLat = last?.latitude ?? 14.5979;
-      currentLng = last?.longitude ?? 121.0108;
+      if (last != null) {
+        // A stale fix is still the rider's own location — usable, but say so.
+        currentLat = last.latitude;
+        currentLng = last.longitude;
+        locationIsFallback = true;
+        locationError = 'Using your last known location — turn on GPS for an '
+            'accurate starting point.';
+      } else {
+        // No fix at all. Keep the map centred somewhere sensible, but never
+        // let this pass as the rider's real position: routes and fares would
+        // be computed for a trip they are not taking.
+        currentLat = 14.5979;
+        currentLng = 121.0108;
+        locationIsFallback = true;
+        locationError = e is LocationServiceDisabledException
+            ? 'Location is turned off. Enable GPS to set your starting point.'
+            : 'Could not get your location. Check GPS and location permission.';
+      }
     }
     notifyListeners();
     _reverseLookup();

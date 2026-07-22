@@ -108,10 +108,15 @@ class _SearchViewState extends State<SearchView> {
                               style: const TextStyle(
                                   fontSize: 15,
                                   fontWeight: FontWeight.w600)),
-                          const Text('Your location',
+                          // UC-4 Exception 2 — never let a fallback position
+                          // masquerade as the rider's real starting point.
+                          Text(
+                              vm.locationError ?? 'Your location',
                               style: TextStyle(
                                   fontSize: 11,
-                                  color: NavAlertColors.textSecondary)),
+                                  color: vm.locationIsFallback
+                                      ? NavAlertColors.warning
+                                      : NavAlertColors.textSecondary)),
                           const SizedBox(height: 10),
                           TextField(
                             controller: _controller,

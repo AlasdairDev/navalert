@@ -48,6 +48,23 @@ void main() {
       expect(engine.overshootLatched, isTrue);
     });
 
+    test('false overshoot keeps the learned speed window (UC-6 flow A)', () {
+      final engine = AdaptiveAlarmEngine();
+      for (var i = 0; i < 6; i++) {
+        engine.addSpeedSample(14.0); // fast bus
+      }
+      final radiusOnApproach = engine.stage1RadiusM;
+      expect(radiusOnApproach, greaterThan(1000));
+
+      // Rider answers "No" to the overshoot prompt — detour, same stop.
+      engine.resetOvershootTracking();
+
+      expect(engine.overshootLatched, isFalse);
+      // The lead radius must survive: clearing speeds here would collapse it
+      // to the 4 m/s default and rob the rider of warning distance.
+      expect(engine.stage1RadiusM, radiusOnApproach);
+    });
+
     test('behavioural learning widens window for slow dismissers (R4)', () {
       final quick = AdaptiveAlarmEngine(avgHistoricReactionSec: 10);
       final sleepy = AdaptiveAlarmEngine(avgHistoricReactionSec: 90);

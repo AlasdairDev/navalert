@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
+import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import 'fake_call_view.dart';
@@ -177,7 +178,9 @@ class _Monitoring extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () async {
                   final em = context.read<EmergencyViewModel>();
-                  await em.startFakeCall();
+                  await em.startFakeCall(
+                      callerName:
+                          context.read<AppViewModel>().fakeCallConfig.callerName);
                   if (context.mounted) {
                     Navigator.of(context).push(MaterialPageRoute(
                         fullscreenDialog: true,
@@ -307,10 +310,10 @@ class _AlarmStage extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            if (stage == 1) ...[
-              _check('Gather belongings'),
-              _check('Stay alert'),
-            ],
+            // Same list the ViewModel logs to alarm_events.checklist_items,
+            // so the screen and the trip record can never drift apart.
+            if (stage == 1)
+              ...TripViewModel.alarmChecklist.map(_check),
             const Spacer(),
           ]),
         ),

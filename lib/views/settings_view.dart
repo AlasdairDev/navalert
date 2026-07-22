@@ -158,7 +158,8 @@ class SettingsView extends StatelessWidget {
                     final path = await app.exportBackup();
                     messenger.showSnackBar(SnackBar(
                         content: Text(path == null
-                            ? 'Export cancelled.'
+                            ? 'Export failed — could not write the backup '
+                                'file. Check your storage space.'
                             : 'Backup exported to $path')));
                   },
                 ),

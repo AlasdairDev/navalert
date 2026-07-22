@@ -158,7 +158,11 @@ class AppViewModel extends ChangeNotifier {
 
   // ---------- Data Backup (Figure 33 — Import / Export) ----------
   /// Exports settings, preferences, contacts, favorites and the fake-call
-  /// caller name as a JSON backup file. Returns the saved path.
+  /// caller name as a JSON backup file. Returns the saved path, or null if
+  /// the backup could not be written — the caller must report that failure,
+  /// never let it pass as success: a rider who believes their emergency
+  /// contacts are backed up when nothing was saved is worse off than one
+  /// who knows the export failed.
   Future<String?> exportBackup() async {
     final payload = jsonEncode({
       'navalert_backup': 1,
@@ -184,10 +188,15 @@ class AppViewModel extends ChangeNotifier {
     });
     final name =
         'navalert_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json';
-    final dir = await _backupDirectory();
-    final file = File('${dir.path}/$name');
-    await file.writeAsString(payload);
-    return file.path;
+    try {
+      final dir = await _backupDirectory();
+      final file = File('${dir.path}/$name');
+      await file.writeAsString(payload);
+      return file.path;
+    } catch (e) {
+      debugPrint('NavAlert: backup export failed — $e');
+      return null;
+    }
   }
 
   /// Backups live in the app's external files folder so a file manager

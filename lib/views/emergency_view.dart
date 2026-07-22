@@ -145,7 +145,8 @@ class EmergencyView extends StatelessWidget {
                       await app.saveFakeCallConfig();
                       if (!context.mounted) return;
                       final vm = context.read<EmergencyViewModel>();
-                      await vm.startFakeCall();
+                      await vm.startFakeCall(
+                          callerName: app.fakeCallConfig.callerName);
                       if (context.mounted) {
                         Navigator.of(context).push(MaterialPageRoute(
                             fullscreenDialog: true,
