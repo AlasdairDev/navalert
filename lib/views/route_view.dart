@@ -320,6 +320,9 @@ class _RouteViewState extends State<RouteView> {
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'ph.edu.pup.navalert',
+                    retinaMode: RetinaMode.isHighDensity(context),
+                    maxNativeZoom: 19,
+                    maxZoom: 20,
                     tileProvider: CancellableNetworkTileProvider(),
                     panBuffer: 1,
                     keepBuffer: 4,
