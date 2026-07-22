@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
@@ -93,12 +95,14 @@ class HomeViewModel extends ChangeNotifier {
           perm == LocationPermission.deniedForever) {
         throw const PermissionDeniedException('location');
       }
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.bestForNavigation,
-          timeLimit: Duration(seconds: 15),
-        ),
-      );
+      // Two-stage acquisition. bestForNavigation wants a real GNSS fix, which
+      // frequently never arrives indoors or under a jeepney roof — on a real
+      // phone that meant a timeout and a silent drop to the PUP fallback. Fall
+      // back to a coarser network/fused fix first: an approximate real position
+      // is far more useful than a hardcoded one.
+      var pos = await _tryFix(LocationAccuracy.bestForNavigation, 12);
+      pos ??= await _tryFix(LocationAccuracy.medium, 10);
+      if (pos == null) throw TimeoutException('no position fix');
       currentLat = pos.latitude;
       currentLng = pos.longitude;
     } catch (e) {
@@ -127,6 +131,21 @@ class HomeViewModel extends ChangeNotifier {
     }
     notifyListeners();
     _reverseLookup();
+  }
+
+  /// One positioning attempt. Returns null instead of throwing so the caller
+  /// can try a coarser accuracy before giving up on a real fix entirely.
+  Future<Position?> _tryFix(LocationAccuracy accuracy, int seconds) async {
+    try {
+      return await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: accuracy,
+          timeLimit: Duration(seconds: seconds),
+        ),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Resolves the precise street address of the current fix in the
