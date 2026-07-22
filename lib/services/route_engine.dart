@@ -31,6 +31,22 @@ class RouteEngine {
   static const double walkKph = 4.5;
   static const double boardingWaitMin = 7.0; // headway/queueing buffer
 
+  // Metro Manila (NCR) bounding box. The commute guide is only meaningful
+  // inside it: the LTFRB fare matrix above is the Metro Manila rate structure
+  // and the bundled GTFS feed covers NCR routes only. Producing a guide for a
+  // trip to Baguio would invent both the route and the fare.
+  static const double ncrMinLat = 14.30;
+  static const double ncrMaxLat = 14.82;
+  static const double ncrMinLng = 120.88;
+  static const double ncrMaxLng = 121.18;
+
+  /// Whether a point lies inside the serviceable Metro Manila area.
+  static bool isWithinNcr(double lat, double lng) =>
+      lat >= ncrMinLat &&
+      lat <= ncrMaxLat &&
+      lng >= ncrMinLng &&
+      lng <= ncrMaxLng;
+
   double haversineKm(double lat1, double lon1, double lat2, double lon2) {
     const r = 6371.0;
     final dLat = _rad(lat2 - lat1);
