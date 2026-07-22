@@ -50,8 +50,28 @@ class DatabaseService {
       version: 1,
       onConfigure: (d) => d.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
+      onOpen: _closeInterruptedTrips,
     );
     return _db!;
+  }
+
+  /// Closes trips left mid-flight by a crash, a force-stop, or the OS killing
+  /// the app (UC-1 Exception 1). _endTrip only runs while the app is alive, so
+  /// without this an interrupted trip keeps status 'active' forever and Trip
+  /// History shows a phantom trip that never finishes.
+  ///
+  /// Runs once when the database is opened, before anything reads trips. A
+  /// genuinely running trip is unaffected: the database is opened at startup,
+  /// long before startTrip() marks anything active in this process.
+  ///
+  /// 'cancelled' is used because Table 22 already defines it — the trip never
+  /// reached its destination, and no new status value is introduced.
+  Future<void> _closeInterruptedTrips(Database d) async {
+    await d.update(
+      'trips',
+      {'status': 'cancelled', 'ended_at': DateTime.now().toIso8601String()},
+      where: "status = 'active' AND ended_at IS NULL",
+    );
   }
 
   Future<void> _createSchema(Database d, int version) async {
