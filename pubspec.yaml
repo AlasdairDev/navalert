@@ -1,4 +1,4 @@
-          name: navalert
+name: navalert
 description: "NavAlert: adaptive destination alarm, route/fare commute guide, and emergency safety system for Metro Manila PUV commuters."
 publish_to: 'none'
 version: 1.0.0+1

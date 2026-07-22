@@ -43,41 +43,65 @@ class SoundService {
   /// dismisser per behavioural learning (R4) — Stages 1–2 use a stronger
   /// vibration pattern and a louder volume so the alert is harder to sleep
   /// through, fulfilling UC-5 "Adjust Alarm Intensity".
+  /// Haptics and audio are dispatched INDEPENDENTLY: each is wrapped so a
+  /// failure in one can never suppress the other. This is the wake-up path —
+  /// if the vibrator is missing or the plugin throws, the rider must still get
+  /// sound, and if the OS blocks alarm audio the rider must still get the
+  /// continuous maximum-intensity vibration (UC-6 Exception 2 "Audio Override
+  /// Blocked"). Chaining them would let one silent failure kill both.
   Future<void> playAlarmStage(int stage, String soundName,
       {bool vibrationOnly = false, bool highIntensity = false}) async {
     await _configure();
     switch (stage) {
       case 1:
         if (highIntensity) {
-          Vibration.vibrate(pattern: [0, 500, 250, 500], repeat: 0);
+          _buzz(pattern: [0, 500, 250, 500]);
           if (!vibrationOnly) await _loopSound(soundName, volume: 0.55);
         } else {
-          await Vibration.vibrate(duration: 700);
+          _buzz(duration: 700);
         }
         break;
       case 2:
-        Vibration.vibrate(
+        _buzz(
             pattern: highIntensity
                 ? [0, 900, 150, 900, 150, 1200]
-                : [0, 500, 250, 500, 250, 800],
-            repeat: 0);
+                : [0, 500, 250, 500, 250, 800]);
         if (!vibrationOnly) {
           await _loopSound(soundName, volume: highIntensity ? 0.9 : 0.7);
         }
         break;
       case 3:
         // Stage 3 is already maximum intensity for everyone.
-        Vibration.vibrate(pattern: [0, 1000, 150, 1000, 150, 1500], repeat: 0);
+        _buzz(pattern: [0, 1000, 150, 1000, 150, 1500]);
         if (!vibrationOnly) await _loopSound(soundName, volume: 1.0);
         break;
     }
   }
 
+  /// Fire-and-forget haptics. `repeat: 0` loops the pattern continuously until
+  /// stopAll(), which is the "continuous maximum-intensity vibration" fallback.
+  void _buzz({List<int>? pattern, int? duration}) {
+    try {
+      if (pattern != null) {
+        Vibration.vibrate(pattern: pattern, repeat: 0);
+      } else {
+        Vibration.vibrate(duration: duration ?? 700);
+      }
+    } catch (_) {
+      // No vibrator or plugin failure — the audio below still runs.
+    }
+  }
+
   Future<void> _loopSound(String soundName, {required double volume}) async {
     final asset = alarmCatalog[soundName] ?? alarmCatalog.values.first;
-    await _alarmPlayer.stop();
-    await _alarmPlayer.setReleaseMode(ReleaseMode.loop);
-    await _alarmPlayer.play(AssetSource(asset), volume: volume);
+    try {
+      await _alarmPlayer.stop();
+      await _alarmPlayer.setReleaseMode(ReleaseMode.loop);
+      await _alarmPlayer.play(AssetSource(asset), volume: volume);
+    } catch (_) {
+      // Audio blocked/unavailable — the vibration already started above is
+      // the specified fallback, so fail quietly rather than killing the alarm.
+    }
   }
 
   Future<void> previewAlarm(String soundName) async {
