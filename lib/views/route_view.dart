@@ -398,6 +398,28 @@ class _RouteViewState extends State<RouteView> {
   }
 
   Widget _buildSuggestions(HomeViewModel home) {
+    // Outside Metro Manila there is no honest guide to give: the fares are the
+    // LTFRB NCR rates and the GTFS feed is NCR-only. Say so instead of showing
+    // "0 SUGGESTED ROUTES FOUND", which reads like a failure rather than a
+    // scope limit — and make clear the alarm still works.
+    final reason = home.guideUnavailableReason;
+    if (reason != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.map_outlined,
+              color: NavAlertColors.warning, size: 30),
+          const SizedBox(height: 10),
+          const Text('Outside the service area',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          Text(reason,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  fontSize: 12, color: NavAlertColors.textSecondary)),
+        ]),
+      );
+    }
     return Column(mainAxisSize: MainAxisSize.min, children: [
       const Text('Suggested Routes',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),

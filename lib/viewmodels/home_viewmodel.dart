@@ -56,6 +56,10 @@ class HomeViewModel extends ChangeNotifier {
   /// a journey the rider is not making.
   String? locationError;
 
+  /// Set when the trip falls outside Metro Manila, so the View can explain
+  /// why no routes are listed (the alarm itself still works anywhere).
+  String? guideUnavailableReason;
+
   /// True while [currentLat]/[currentLng] hold a placeholder rather than a
   /// real fix, so callers can block trip confirmation (UC-4 Exception 2).
   bool locationIsFallback = false;
@@ -202,6 +206,19 @@ class HomeViewModel extends ChangeNotifier {
   Future<List<RouteSuggestion>> _composeSuggestions(
       Trip trip, PlaceResult place, TransportPreferences prefs) async {
     _legsBySuggestion.clear();
+    guideUnavailableReason = null;
+
+    // Scope limit: the fare matrix is the LTFRB Metro Manila rate structure and
+    // the GTFS feed covers NCR only. Outside it, say so plainly rather than
+    // inventing a route and a fare the rider would actually try to pay.
+    if (!RouteEngine.isWithinNcr(trip.destinationLat, trip.destinationLng) ||
+        !RouteEngine.isWithinNcr(trip.originLat, trip.originLng)) {
+      guideUnavailableReason =
+          'No commute guide available — NavAlert covers Metro Manila (NCR) '
+          'only. Your destination alarm will still work.';
+      return [];
+    }
+
     try {
       final matches = await GtfsService.instance.directRoutes(
         originLat: trip.originLat,

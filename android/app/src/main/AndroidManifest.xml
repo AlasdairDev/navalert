@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Figure 16 permission toggles. Both MUST be declared here: Android
+         returns "permanently denied" immediately for an undeclared runtime
+         permission, so the toggle silently snaps back with no system dialog. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
     <!-- UC-8 Exception 2: lets the fake call surface as a full-screen
          incoming-call UI over the lock screen, the same mechanism dialer
          and alarm apps use. Preferred over SYSTEM_ALERT_WINDOW, which

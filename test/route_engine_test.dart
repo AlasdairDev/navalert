@@ -48,6 +48,43 @@ void main() {
     });
   });
 
+  group('NCR service area', () {
+    test('accepts real Metro Manila locations', () {
+      expect(RouteEngine.isWithinNcr(14.5979, 121.0108), isTrue,
+          reason: 'PUP Sta. Mesa');
+      expect(RouteEngine.isWithinNcr(14.5547, 121.0244), isTrue,
+          reason: 'Makati CBD');
+      expect(RouteEngine.isWithinNcr(14.6760, 121.0437), isTrue,
+          reason: 'Quezon City');
+      expect(RouteEngine.isWithinNcr(14.4081, 121.0415), isTrue,
+          reason: 'Muntinlupa');
+      expect(RouteEngine.isWithinNcr(14.6507, 120.9676), isTrue,
+          reason: 'Caloocan');
+    });
+
+    test('rejects destinations outside Metro Manila', () {
+      // The LTFRB matrix and the GTFS feed are NCR-only, so a guide for these
+      // would be an invented route at an invented fare.
+      expect(RouteEngine.isWithinNcr(16.4023, 120.5960), isFalse,
+          reason: 'Baguio');
+      expect(RouteEngine.isWithinNcr(10.3157, 123.8854), isFalse,
+          reason: 'Cebu');
+      expect(RouteEngine.isWithinNcr(14.0860, 121.1490), isFalse,
+          reason: 'Batangas — close, but still outside NCR');
+      expect(RouteEngine.isWithinNcr(15.4828, 120.5960), isFalse,
+          reason: 'Tarlac');
+    });
+
+    test('boundaries are inclusive', () {
+      expect(RouteEngine.isWithinNcr(RouteEngine.ncrMinLat, 121.0), isTrue);
+      expect(RouteEngine.isWithinNcr(RouteEngine.ncrMaxLat, 121.0), isTrue);
+      expect(RouteEngine.isWithinNcr(14.6, RouteEngine.ncrMinLng), isTrue);
+      expect(RouteEngine.isWithinNcr(14.6, RouteEngine.ncrMaxLng), isTrue);
+      expect(RouteEngine.isWithinNcr(RouteEngine.ncrMaxLat + 0.01, 121.0),
+          isFalse);
+    });
+  });
+
   group('haversine distance', () {
     test('identical points are zero apart', () {
       expect(engine.haversineKm(14.5979, 121.0108, 14.5979, 121.0108),
