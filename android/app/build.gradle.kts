@@ -5,6 +5,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Name the built artifacts "navalert-*.apk" instead of the generic
+// "app-release.apk", so the file is identifiable once it has been copied
+// onto a phone or shared with the team.
+base.archivesName.set("navalert")
+
 android {
     namespace = "ph.edu.pup.navalert"
     compileSdk = flutter.compileSdkVersion

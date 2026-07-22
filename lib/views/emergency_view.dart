@@ -133,8 +133,13 @@ class EmergencyView extends StatelessWidget {
             ...app.recordings.map((r) => Card(
                   child: ListTile(
                     title: Text(r.title),
+                    // Figure 32: presets read "Built-in recording"; a rider's
+                    // own clips are dated so several "Standard recording N"
+                    // entries can be told apart at a glance.
                     subtitle: Text(
-                        r.isPreset ? 'Built-in recording' : 'Custom recording',
+                        r.isPreset
+                            ? 'Built-in recording'
+                            : _shortDate(r.recordedAt),
                         style: const TextStyle(
                             fontSize: 11,
                             color: NavAlertColors.textSecondary)),
@@ -166,5 +171,11 @@ class EmergencyView extends StatelessWidget {
     if (msg != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
+  }
+
+  /// dd/MM/yy — the compact form shown under custom recordings in Figure 32.
+  static String _shortDate(DateTime d) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
   }
 }

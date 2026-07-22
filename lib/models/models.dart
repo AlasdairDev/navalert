@@ -140,13 +140,19 @@ class Recording {
   final double durationSeconds;
   final bool isPreset;
 
+  /// When the clip was recorded. Figure 32 shows this date under each custom
+  /// recording, so it must survive a read/write round trip — writing "now"
+  /// on every save would silently reset the rider's recording history.
+  final DateTime recordedAt;
+
   Recording({
     required this.recordingId,
     required this.title,
     required this.filePath,
     this.durationSeconds = 0,
     this.isPreset = false,
-  });
+    DateTime? recordedAt,
+  }) : recordedAt = recordedAt ?? DateTime.now();
 
   factory Recording.fromMap(Map<String, Object?> m) => Recording(
         recordingId: m['recording_id'] as String,
@@ -154,6 +160,7 @@ class Recording {
         filePath: m['file_path'] as String,
         durationSeconds: (m['duration_seconds'] as num? ?? 0).toDouble(),
         isPreset: (m['is_preset'] as int? ?? 0) == 1,
+        recordedAt: DateTime.tryParse(m['recorded_at'] as String? ?? ''),
       );
 
   Map<String, Object?> toMap() => {
@@ -162,7 +169,7 @@ class Recording {
         'file_path': filePath,
         'duration_seconds': durationSeconds,
         'is_preset': isPreset ? 1 : 0,
-        'recorded_at': _nowIso(),
+        'recorded_at': recordedAt.toIso8601String(),
       };
 }
 

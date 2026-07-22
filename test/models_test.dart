@@ -120,6 +120,26 @@ void main() {
       expect(restored.durationSeconds, 12.5);
       expect(restored.isPreset, isTrue);
     });
+
+    test('recorded_at survives a round trip instead of resetting to now', () {
+      // Figure 32 dates each custom recording. Writing the current time on
+      // every save would quietly rewrite the rider's recording history.
+      final recordedOn = DateTime(2026, 3, 2, 19, 45);
+      final restored = Recording.fromMap(Recording(
+        recordingId: 'r-3',
+        title: 'Standard recording 1',
+        filePath: '/audio/std1.m4a',
+        recordedAt: recordedOn,
+      ).toMap());
+      expect(restored.recordedAt, recordedOn);
+    });
+
+    test('a brand-new recording is stamped with the current time', () {
+      final before = DateTime.now().subtract(const Duration(seconds: 1));
+      final r = Recording(
+          recordingId: 'r-4', title: 'New', filePath: '/audio/new.m4a');
+      expect(r.recordedAt.isAfter(before), isTrue);
+    });
   });
 
   group('Table 20 — favorites', () {
