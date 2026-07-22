@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../models/guide_leg.dart';
 import '../models/models.dart';
 import 'gtfs_service.dart';
+import 'transit_router.dart';
 
 /// Commute guide engine (Requirement R6, Specific Objective 3).
 ///
@@ -265,6 +266,80 @@ class RouteEngine {
         totalDurationMinutes:
             (walkToMin + rideMin + walkFromMin).roundToDouble(),
         transportSummary: 'Walk + $noun',
+        steps: steps,
+      ));
+    }
+    return _tagPair(options);
+  }
+
+  /// Converts Dijkstra journeys into suggestions, applying the **exact** LTFRB
+  /// matrix to each contiguous same-route leg.
+  ///
+  /// The router searches on an approximate fare proxy because real fare is
+  /// state-dependent (₱13 covers the first 4 km of each boarding). The price
+  /// shown to the rider is computed here, from the finalised path, and is
+  /// always exact — two boardings are charged two base fares.
+  List<RouteSuggestion> buildFromJourneys({
+    required String tripId,
+    required String destinationLabel,
+    required List<PlannedJourney> journeys,
+    Map<String, List<GuideLeg>>? legsOut,
+  }) {
+    final options = <RouteSuggestion>[];
+    for (final j in journeys) {
+      if (j.legs.isEmpty) continue;
+      final suggestionId = _uuid.v4();
+      final steps = <RouteStep>[];
+      final guide = <GuideLeg>[];
+      var fare = 0.0;
+      var stepNo = 1;
+
+      for (final leg in j.legs) {
+        final legFare = leg.isWalk
+            ? 0.0
+            : (leg.mode == 'bus' ? busFare(leg.km) : jeepFare(leg.km));
+        fare += legFare;
+
+        final step = RouteStep(
+          stepId: _uuid.v4(),
+          suggestionId: suggestionId,
+          stepNumber: stepNo++,
+          transportMode: leg.mode,
+          instruction: leg.isWalk
+              ? 'Walk to ${_short(leg.toStop)}'
+              : 'Ride ${_modeNoun(leg.mode)} "${leg.routeName}" from '
+                  '${_short(leg.fromStop)} and alight at ${_short(leg.toStop)} '
+                  '(~${leg.km.toStringAsFixed(1)} km)',
+          fromStop: _short(leg.fromStop),
+          toStop: _short(leg.toStop),
+          farePhp: _round(legFare),
+          durationMinutes: leg.minutes.roundToDouble(),
+        );
+        steps.add(step);
+        // Every leg end is a real surveyed coordinate, so the live commute
+        // guide can advance itself geographically on all of them.
+        guide.add(GuideLeg(step: step, endLat: leg.toLat, endLng: leg.toLng));
+      }
+
+      final ridden = j.legs.where((l) => !l.isWalk).toList();
+      final summary = ridden.isEmpty
+          ? 'Walk'
+          : (['Walk', ...ridden.map((l) => _modeNoun(l.mode))]).join(' + ');
+      final label = ridden.isEmpty
+          ? 'Walk to ${_short(destinationLabel)}'
+          : '${_modeNoun(ridden.first.mode)}: ${ridden.first.routeName}'
+              '${ridden.length > 1 ? ' +${ridden.length - 1} transfer'
+                  '${ridden.length > 2 ? 's' : ''}' : ''}';
+
+      legsOut?[suggestionId] = guide;
+      options.add(RouteSuggestion(
+        suggestionId: suggestionId,
+        tripId: tripId,
+        rank: 0,
+        routeLabel: label,
+        totalFarePhp: _round(fare),
+        totalDurationMinutes: j.totalMinutes.roundToDouble(),
+        transportSummary: summary,
         steps: steps,
       ));
     }

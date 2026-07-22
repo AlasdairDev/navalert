@@ -8,8 +8,8 @@ import '../services/database_service.dart';
 import '../models/guide_leg.dart';
 import '../models/models.dart';
 import '../services/geocoding_service.dart';
-import '../services/gtfs_service.dart';
 import '../services/route_engine.dart';
+import '../services/routing_isolate.dart';
 import '../services/route_path_service.dart';
 
 /// Home / destination-search / commute-guide ViewModel
@@ -239,22 +239,27 @@ class HomeViewModel extends ChangeNotifier {
     }
 
     try {
-      final matches = await GtfsService.instance.directRoutes(
+      // R6 — Dijkstra over the real GTFS network, in a worker isolate. Handles
+      // transfers, which the paper's own source (Narboneta & Teknomo, 2016)
+      // found commuters need: three modes per trip on average.
+      final anyMode =
+          prefs.busEnabled || prefs.jeepneyEnabled || prefs.uvExpressEnabled;
+      final journeys = await RoutingIsolate.instance.plan(RouteRequest(
         originLat: trip.originLat,
         originLng: trip.originLng,
         destLat: trip.destinationLat,
         destLng: trip.destinationLng,
-        busEnabled: prefs.busEnabled,
-        jeepneyEnabled: prefs.jeepneyEnabled,
-        uvEnabled: prefs.uvExpressEnabled,
-      );
-      if (matches.isNotEmpty) {
-        return _routeEngine.buildFromGtfs(
+        allowJeepney: prefs.jeepneyEnabled || !anyMode,
+        allowBus: prefs.busEnabled || !anyMode,
+      ));
+      if (journeys.isNotEmpty) {
+        final built = _routeEngine.buildFromJourneys(
           tripId: trip.tripId,
           destinationLabel: place.displayName,
-          matches: matches,
+          journeys: journeys,
           legsOut: _legsBySuggestion,
         );
+        if (built.isNotEmpty) return built;
       }
     } catch (_) {/* fall through to synthetic */}
     return _routeEngine.buildSuggestions(
