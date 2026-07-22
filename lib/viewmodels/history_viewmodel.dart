@@ -14,12 +14,25 @@ class HistoryViewModel extends ChangeNotifier {
   DateTime? dateFilter;
   bool newestFirst = true;
 
+  /// Set when the history could not be read, so the View can say so instead
+  /// of showing an empty list that looks like "you have taken no trips".
+  String? error;
+
   Future<void> load() async {
     loading = true;
+    error = null;
     notifyListeners();
-    _trips = await _db.getTripHistory();
-    loading = false;
-    notifyListeners();
+    try {
+      _trips = await _db.getTripHistory();
+    } catch (e) {
+      // A read failure must not leave the tab spinning forever, and an empty
+      // list would wrongly read as "no trips yet".
+      error = 'Could not load your trip history.';
+      debugPrint('NavAlert: trip history load failed — $e');
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
   }
 
   void setFilter(String value) {

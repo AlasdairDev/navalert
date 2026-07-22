@@ -91,7 +91,28 @@ class _HistoryViewState extends State<HistoryView> {
           Expanded(
             child: vm.loading
                 ? const Center(child: CircularProgressIndicator())
-                : trips.isEmpty
+                // A read failure must not masquerade as "no trips yet" —
+                // that would tell a rider their history is gone when it is
+                // simply unreadable right now.
+                : vm.error != null
+                    ? ListView(children: [
+                        const SizedBox(height: 100),
+                        const Center(
+                            child: Icon(Icons.error_outline,
+                                color: NavAlertColors.warning, size: 30)),
+                        const SizedBox(height: 10),
+                        Center(
+                            child: Text(vm.error!,
+                                style: const TextStyle(
+                                    color: NavAlertColors.textSecondary))),
+                        const SizedBox(height: 10),
+                        Center(
+                          child: TextButton(
+                              onPressed: vm.load,
+                              child: const Text('Retry')),
+                        ),
+                      ])
+                    : trips.isEmpty
                     ? ListView(children: const [
                         SizedBox(height: 120),
                         Center(

@@ -15,6 +15,20 @@ class EmergencyViewModel extends ChangeNotifier {
   final _sos = SosService();
   final _recorder = AudioRecorder();
 
+  EmergencyViewModel() {
+    // A queued SOS resolves minutes later, long after fireSos() returned.
+    // Report the outcome either way — especially the failure, so the rider
+    // stops waiting on an SMS that was never delivered and can Call 911.
+    _sos.onQueuedSosResolved = (delivered, count) {
+      statusMessage = delivered
+          ? 'Signal restored — SOS sent to $count '
+              'contact${count == 1 ? '' : 's'}.'
+          : 'SOS could NOT be sent — still no cellular signal after several '
+              'attempts. Use Call 911 if you are in danger.';
+      notifyListeners();
+    };
+  }
+
   // ---- SOS press-and-hold (3 s) ----
   bool holdingSos = false;
   double holdProgress = 0;

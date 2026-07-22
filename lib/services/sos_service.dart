@@ -27,6 +27,12 @@ class SosService {
   String _queuedMessage = '';
   String? _queuedSosId;
 
+  /// Fired when a queued SOS finally gives up, and when a retry succeeds.
+  /// The rider MUST learn which happened: after the retries are exhausted
+  /// nothing was ever delivered, and silently leaving them believing help is
+  /// on the way is the worst possible failure for this feature.
+  void Function(bool delivered, int contactCount)? onQueuedSosResolved;
+
   /// Returns the number of contacts the SOS was dispatched to.
   Future<int> triggerSos({String? tripId}) async {
     final contacts = await DatabaseService.instance.getContacts();
@@ -105,6 +111,10 @@ class SosService {
     _retryTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
       if (_retriesLeft-- <= 0) {
         t.cancel();
+        // Out of attempts: record the failure and tell the rider, so they can
+        // fall back to Call 911 instead of waiting on help that never left.
+        await _markQueuedSos('failed', 0);
+        onQueuedSosResolved?.call(false, 0);
         return;
       }
       var sent = 0;
@@ -113,14 +123,29 @@ class SosService {
       }
       if (sent > 0) {
         t.cancel();
-        await (await DatabaseService.instance.db).update(
-          'sos_events',
-          {'contacts_notified_count': sent, 'status': 'active'},
-          where: 'sos_id = ?',
-          whereArgs: [_queuedSosId],
-        );
+        await _markQueuedSos('active', sent);
+        onQueuedSosResolved?.call(true, sent);
       }
     });
+  }
+
+  /// Storage failures are swallowed: losing the audit row must never stop the
+  /// rider being told what happened to their SOS.
+  Future<void> _markQueuedSos(String status, int sent) async {
+    final id = _queuedSosId;
+    if (id == null) return;
+    try {
+      await (await DatabaseService.instance.db).update(
+        'sos_events',
+        {
+          'contacts_notified_count': sent,
+          'status': status,
+          if (status == 'failed') 'resolved_at': DateTime.now().toIso8601String(),
+        },
+        where: 'sos_id = ?',
+        whereArgs: [id],
+      );
+    } catch (_) {}
   }
 
   Future<bool> _sendNativeSms(String phone, String message) async {
