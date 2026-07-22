@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navalert/models/guide_leg.dart';
 import 'package:navalert/models/models.dart';
 import 'package:navalert/services/gtfs_service.dart';
 import 'package:navalert/services/route_engine.dart';
@@ -161,6 +162,29 @@ void main() {
       expect(out, isNotEmpty);
       expect(out.first.totalFarePhp, greaterThan(0));
     });
+
+    test('synthetic guide legs never carry coordinates', () {
+      // These routes are fractions of a straight line and their stops
+      // ("… Terminal", "Transfer point") are fictional. Attaching coordinates
+      // would let the guide claim the rider passed a place that does not exist.
+      final legs = <String, List<GuideLeg>>{};
+      final out = engine.buildSuggestions(
+        tripId: 'trip-7',
+        originLabel: 'PUP Sta. Mesa',
+        destinationLabel: 'SM Megamall',
+        distanceKm: 10,
+        prefs: TransportPreferences(),
+        legsOut: legs,
+      );
+      expect(legs, isNotEmpty);
+      for (final s in out) {
+        for (final leg in legs[s.suggestionId]!) {
+          expect(leg.canAutoAdvance, isFalse);
+          expect(leg.endLat, isNull);
+          expect(leg.endLng, isNull);
+        }
+      }
+    });
   });
 
   group('R6 — suggestions from real GTFS matches', () {
@@ -212,6 +236,40 @@ void main() {
             tripId: 't', destinationLabel: 'X', matches: const []),
         isEmpty,
       );
+    });
+
+    test('emits guide legs carrying the real board/alight coordinates', () {
+      final legs = <String, List<GuideLeg>>{};
+      final out = engine.buildFromGtfs(
+        tripId: 'trip-5',
+        destinationLabel: 'PUP Sta. Mesa',
+        matches: [match('jeepney', 8)],
+        legsOut: legs,
+      );
+      final mine = legs[out.single.suggestionId]!;
+      expect(mine, hasLength(3));
+
+      // Walk-to-board ends at the boarding stop; the ride ends at the alight
+      // stop. Both come from the feed and drive automatic advancement.
+      expect(mine[0].canAutoAdvance, isTrue);
+      expect(mine[0].endLat, 14.6200);
+      expect(mine[0].endLng, 121.0530);
+      expect(mine[1].canAutoAdvance, isTrue);
+      expect(mine[1].endLat, 14.5979);
+      expect(mine[1].endLng, 121.0108);
+
+      // The final walk ends at the destination, whose coordinates are not
+      // passed in here, so it stays manual.
+      expect(mine[2].canAutoAdvance, isFalse);
+    });
+
+    test('legs are optional — omitting legsOut changes nothing', () {
+      final out = engine.buildFromGtfs(
+        tripId: 'trip-6',
+        destinationLabel: 'PUP Sta. Mesa',
+        matches: [match('jeepney', 8)],
+      );
+      expect(out, hasLength(1));
     });
 
     test('keeps at most two matches and ranks them', () {
