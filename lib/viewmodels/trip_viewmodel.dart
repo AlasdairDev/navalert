@@ -6,10 +6,12 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/guide_leg.dart';
 import '../models/models.dart';
 import '../services/adaptive_alarm_engine.dart';
 import '../services/database_service.dart';
 import '../services/gtfs_service.dart';
+import '../services/guide_progress.dart';
 import '../services/sound_service.dart';
 import '../services/trip_notification_service.dart';
 
@@ -63,7 +65,12 @@ class TripViewModel extends ChangeNotifier {
 
   bool get isActive => phase != TripPhase.ended;
 
-  Future<void> startTrip(Trip t) async {
+  /// Live commute guide for this trip (empty when none was supplied, e.g. a
+  /// favourites shortcut). Memory-only — see [GuideLeg].
+  GuideProgress guide = GuideProgress(const []);
+
+  Future<void> startTrip(Trip t, {List<GuideLeg> guideLegs = const []}) async {
+    guide = GuideProgress(guideLegs);
     final avgReaction = await _db.averageAwakeSeconds();
     _engine = AdaptiveAlarmEngine(avgHistoricReactionSec: avgReaction);
     _firedStages.clear();
@@ -194,7 +201,22 @@ class TripViewModel extends ChangeNotifier {
     if (stage > 0 && !_firedStages.contains(stage) && stage > highestStage) {
       _fireStage(stage);
     }
+
+    // Commute guide LAST, and isolated. The guide is a convenience; the alarm
+    // is the product. A fault in step-advancement must never be able to stop a
+    // stage from firing, so it runs after the alarm logic and swallows errors.
+    try {
+      guide.update(pos.latitude, pos.longitude);
+    } catch (e) {
+      debugPrint('NavAlert: guide advance failed — $e');
+    }
+
     notifyListeners();
+  }
+
+  /// Rider tapped "Done" on the current commute-guide leg.
+  void markGuideLegDone() {
+    if (guide.markDone()) notifyListeners();
   }
 
   void _fireStage(int stage) {

@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
+import 'commute_guide_sheet.dart';
 import 'fake_call_view.dart';
 
 /// Figures 24–29 — Active Trip (Monitoring Mode), the three alarm
@@ -49,7 +50,24 @@ class ActiveTripView extends StatelessWidget {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('Slide to stop the trip before leaving.')));
       },
-      child: Scaffold(body: body),
+      // The commute-guide sheet rides ONLY on the monitoring screen. During an
+      // alarm stage or the overshoot prompt the screen must be the alert and
+      // nothing else — a draggable panel over a Stage 3 wake-up would be both
+      // a distraction and a mis-tap risk.
+      child: Scaffold(
+        body: vm.phase == TripPhase.monitoring && !vm.guide.isEmpty
+            ? Stack(children: [
+                // Reserve the collapsed sheet's height so it can never sit on
+                // top of the SOS / Fake Call buttons.
+                Padding(
+                  padding: EdgeInsets.only(
+                      bottom: CommuteGuideSheet.collapsedHeight(context)),
+                  child: body,
+                ),
+                const CommuteGuideSheet(),
+              ])
+            : body,
+      ),
     );
   }
 }

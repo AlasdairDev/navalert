@@ -198,13 +198,19 @@ class _RouteViewState extends State<RouteView> {
               ElevatedButton(
                 onPressed: () async {
                   final tripVm = context.read<TripViewModel>();
+                  // Hand the chosen suggestion's guide legs to the trip. They
+                  // are memory-only (Table 24 has no coordinates), so this is
+                  // the one moment they can be transferred.
+                  final legs = context
+                      .read<HomeViewModel>()
+                      .legsFor(trip.selectedRouteSuggestionId);
                   // View sets the chosen config on the trip; TripViewModel
                   // .startTrip() persists it (keeps the DB out of the View).
                   trip
                     ..alarmSound = sound
                     ..vibrationOnlyMode = vibrationOnly;
                   Navigator.of(ctx).pop();
-                  await tripVm.startTrip(trip);
+                  await tripVm.startTrip(trip, guideLegs: legs);
                   if (!mounted) return;
                   // ignore: use_build_context_synchronously
                   Navigator.of(context).pushReplacement(MaterialPageRoute(
