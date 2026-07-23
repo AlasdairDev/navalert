@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../core/map_support.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../services/geocoding_service.dart';
@@ -37,6 +37,18 @@ class _PinOnMapViewState extends State<PinOnMapView> {
   bool _resolving = false;
 
   Future<void> _onTap(TapPosition tapPosition, LatLng point) async {
+    // Reject drop-offs outside NCR: the app has no route or fare data there,
+    // so a pin in a province would produce no guide (Scope and Limitations).
+    // The camera constraint keeps most taps in-bounds, but the very edge of
+    // the fenced view can still fall just outside.
+    if (!NavAlertMap.isWithinNcr(point)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'NavAlert routing covers Metro Manila (NCR) only — pick a drop-off '
+            'inside the region.'),
+      ));
+      return;
+    }
     setState(() {
       _picked = point;
       _pickedAddress = null;
@@ -84,22 +96,12 @@ class _PinOnMapViewState extends State<PinOnMapView> {
                 initialCenter: center,
                 initialZoom: 16,
                 onTap: _onTap,
+                cameraConstraint: NavAlertMap.ncrConstraint,
+                minZoom: 10,
+                maxZoom: 20,
               ),
               children: [
-                TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  userAgentPackageName: 'ph.edu.pup.navalert',
-                  // Crisp tiles on high-density screens — the rider is
-                  // picking an exact drop-off point here, so blurry
-                  // street labels directly cause a wrong destination.
-                  retinaMode: RetinaMode.isHighDensity(context),
-                  maxNativeZoom: 19,
-                  maxZoom: 20,
-                  tileProvider: CancellableNetworkTileProvider(),
-                  panBuffer: 1,
-                  keepBuffer: 4,
-                ),
+                NavAlertMap.tiles(context),
                 MarkerLayer(markers: [
                   if (home.currentLat != null)
                     Marker(

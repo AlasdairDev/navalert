@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../core/map_support.dart';
 import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
@@ -29,8 +29,10 @@ class HomeView extends StatefulWidget {
   State<HomeView> createState() => _HomeViewState();
 }
 
-class _HomeViewState extends State<HomeView> {
+class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   final _mapController = MapController();
+  late final AnimatedMapMover _mover =
+      AnimatedMapMover(_mapController, this);
 
   @override
   void initState() {
@@ -39,9 +41,15 @@ class _HomeViewState extends State<HomeView> {
       final vm = context.read<HomeViewModel>();
       await vm.refreshCurrentLocation();
       if (mounted && vm.currentLat != null) {
-        _mapController.move(LatLng(vm.currentLat!, vm.currentLng!), 15);
+        _mover.animateTo(LatLng(vm.currentLat!, vm.currentLng!), 16);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _mover.dispose();
+    super.dispose();
   }
 
   String get _greeting {
@@ -61,26 +69,17 @@ class _HomeViewState extends State<HomeView> {
         children: [
           FlutterMap(
             mapController: _mapController,
-            options: MapOptions(initialCenter: center, initialZoom: 14),
+            options: MapOptions(
+              initialCenter: center,
+              initialZoom: 14,
+              // Panning is fenced to NCR — the app has no route or fare data
+              // for anywhere else, so scrolling into a province is a dead end.
+              cameraConstraint: NavAlertMap.ncrConstraint,
+              minZoom: 10,
+              maxZoom: 20,
+            ),
             children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'ph.edu.pup.navalert',
-                // Without this, 256 px tiles are upscaled ~2.6x on a modern
-                // phone and the map looks blurry. tile.openstreetmap.org has
-                // no @2x endpoint, so flutter_map simulates retina: it pulls
-                // the next zoom level and downscales, which is what actually
-                // renders crisp on high-density screens.
-                retinaMode: RetinaMode.isHighDensity(context),
-                maxNativeZoom: 19, // highest zoom OSM actually serves
-                maxZoom: 20,
-                // Cancels obsolete tile requests while panning/zooming and
-                // prefetches a buffer of tiles around the viewport so
-                // dragging stays smooth.
-                tileProvider: CancellableNetworkTileProvider(),
-                panBuffer: 1,
-                keepBuffer: 4,
-              ),
+              NavAlertMap.tiles(context),
               MarkerLayer(markers: [
                 // Google-Maps-style blue current-location dot.
                 Marker(
@@ -215,7 +214,7 @@ class _HomeViewState extends State<HomeView> {
                     duration: Duration(seconds: 2)));
                 await vm.refreshCurrentLocation();
                 if (vm.currentLat != null) {
-                  _mapController.move(
+                  _mover.animateTo(
                       LatLng(vm.currentLat!, vm.currentLng!), 16.5);
                   messenger.hideCurrentSnackBar();
                 }

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
+
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../core/map_support.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../services/sound_service.dart';
@@ -316,17 +317,7 @@ class _RouteViewState extends State<RouteView> {
                   ),
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'ph.edu.pup.navalert',
-                    retinaMode: RetinaMode.isHighDensity(context),
-                    maxNativeZoom: 19,
-                    maxZoom: 20,
-                    tileProvider: CancellableNetworkTileProvider(),
-                    panBuffer: 1,
-                    keepBuffer: 4,
-                  ),
+                  NavAlertMap.tiles(context),
                   PolylineLayer(polylines: [
                     // White casing under the route line for contrast.
                     Polyline(
