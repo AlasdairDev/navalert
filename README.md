@@ -44,7 +44,7 @@ Package id: `ph.edu.pup.navalert`.
 | R3 Speed-based adaptive trigger distance | `services/adaptive_alarm_engine.dart` (rolling avg speed × reaction window, 5 km cap) |
 | R4 Behavioural learning | reaction time (`awake_seconds`) per trip **widens the trigger distance *and* raises alarm loudness/vibration** for slow dismissers |
 | R5 Offline-first | SQLite (`services/database_service.dart`), offline GPS alarms, native SMS |
-| R6 Commute guide + fares | **real GTFS jeepney/bus routes** (`services/gtfs_service.dart`) with LTFRB fares; synthetic `services/route_engine.dart` as fallback |
+| R6 Commute guide + fares | **Dijkstra multimodal router** over the real GTFS network (`services/transit_graph.dart`, `services/transit_router.dart`) in a worker isolate (`services/routing_isolate.dart`); exact LTFRB fares via `services/route_engine.dart`; synthetic estimate as fallback |
 | R7 Fake call | `views/fake_call_view.dart`, custom recordings via `record`, triple Volume-Down shortcut |
 | R8 SOS via Native Android SMS | `services/sos_service.dart` + `MainActivity.kt` SmsManager channel, triple Volume-Up shortcut |
 | UC-4 Pin drop-off on map | `views/pin_on_map_view.dart` (tap the map, reverse-geocode, confirm) |
@@ -87,6 +87,48 @@ ViewModel, which exposes state the UI observes and reacts to.
 
 ---
 
+## Commute guide: Dijkstra multimodal router (R6)
+
+The guide plans real jeepney/bus journeys — including transfers — over the
+bundled Metro Manila GTFS feed, because the paper's own source (Narboneta &
+Teknomo, 2016) found commuters average three modes per trip.
+
+**Graph model.** The feed's 74,018 stop-points collapse to **4,781 unique
+coordinates**. Nodes are `(stop, route)` pairs — "aboard route R at stop S" —
+so boarding-based fares are modelled correctly, plus one **hub node** per
+coordinate. Transfers route *through* the hub (`alight → hub → board`), which
+keeps them O(k) per stop instead of O(k²) pairwise; the graph lands at
+**~230K edges**. Adjacency is stored as flat **CSR typed arrays** (`Int32List`
+targets, `Float32List` weights) — never boxed objects, which would balloon the
+heap on a 4 GB budget phone.
+
+**Search.** Two Dijkstra passes: one minimises time, one an approximate fare
+proxy, so Figure 22 gets genuinely different *Fastest* and *Cheapest* options.
+The boarding count lives in the search state, capped at **4 boardings = 3
+transfers**, so the cap stays provably optimal rather than a heuristic prune.
+Each transfer costs a **5-minute penalty** on top of the boarding wait (Jeon et
+al., 2018 — routers that skip this return paths passengers reject). Journeys on
+the same set of routes are deduplicated so the two UI cards stay distinct.
+
+**Fare — approximate to search, exact to display.** Real fare is
+state-dependent (₱13 covers the *first 4 km of each boarding*), so it can't be
+an exact edge weight. The proxy keeps Dijkstra valid; the price shown is then
+computed exactly from the LTFRB matrix per contiguous leg, so two boardings are
+charged two base fares and the displayed price is never wrong.
+
+**Isolate.** All of this runs in a **long-lived worker isolate** that builds
+the graph once and keeps it — never rebuilt per search, never on the UI heap.
+It's spawned lazily on the first search and disposed after 5 minutes idle. On
+the real 1,711-route feed: graph builds in **~150 ms**, a full two-pass NCR
+search in **~140 ms**. Any failure falls back to the synthetic estimate, then
+to the NCR out-of-area message — routing never blocks the guide, and never
+blocks the alarm.
+
+> UV Express stays a synthetic estimate: the feed contains no UV Express data,
+> and the paper notes that gap in its Scope and Limitations.
+
+---
+
 ## Project structure — where to find things
 
 ```
@@ -126,8 +168,11 @@ navalert/
 │   └── services/                     # ⚙️ LOGIC + DATA + APIs (no UI)
 │       ├── database_service.dart     #   SQLite + SQLCipher (all 13 tables)
 │       ├── adaptive_alarm_engine.dart#   R1–R4 alarm math (speed → distance, intensity, overshoot)
-│       ├── route_engine.dart         #   LTFRB fares + synthetic route fallback
-│       ├── gtfs_service.dart         #   real jeepney/bus routes from the GTFS asset
+│       ├── transit_graph.dart        #   builds the CSR routing graph from GTFS
+│       ├── transit_router.dart       #   Dijkstra multimodal search (2 passes)
+│       ├── routing_isolate.dart      #   long-lived worker isolate that owns the graph
+│       ├── route_engine.dart         #   exact LTFRB fares on routed paths + synthetic fallback
+│       ├── gtfs_service.dart         #   GTFS types + legacy direct-match helper
 │       ├── geocoding_service.dart    #   Nominatim search + reverse geocoding
 │       ├── route_path_service.dart   #   OSRM road-following polyline
 │       ├── sos_service.dart          #   native SMS SOS + queue/retry + Call 911
@@ -170,7 +215,8 @@ navalert/
 | A specific screen's look | `lib/views/<that_screen>_view.dart` |
 | What a button *does* | its ViewModel in `lib/viewmodels/` |
 | Alarm timing / distance / intensity | `lib/services/adaptive_alarm_engine.dart` |
-| Fares / route logic | `lib/services/route_engine.dart`, `gtfs_service.dart` |
+| Route planning (Dijkstra) | `lib/services/transit_router.dart`, `transit_graph.dart` |
+| Fares / suggestion building | `lib/services/route_engine.dart` |
 | Database tables | `lib/services/database_service.dart` |
 | App permissions | `android/app/src/main/AndroidManifest.xml` |
 | Add an image | drop in `assets/images/<area>/`, add the folder to `pubspec.yaml` |
