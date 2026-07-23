@@ -100,8 +100,12 @@ class HomeViewModel extends ChangeNotifier {
       // phone that meant a timeout and a silent drop to the PUP fallback. Fall
       // back to a coarser network/fused fix first: an approximate real position
       // is far more useful than a hardcoded one.
+      // bestForNavigation is geolocator's highest accuracy; the reverse-geocoded
+      // street address is only as precise as this fix. The fallback stays at
+      // *high* (not medium) so even a slow-GNSS retry stays building-accurate —
+      // a coarse fix would resolve to the wrong street entirely.
       var pos = await _tryFix(LocationAccuracy.bestForNavigation, 12);
-      pos ??= await _tryFix(LocationAccuracy.medium, 10);
+      pos ??= await _tryFix(LocationAccuracy.high, 10);
       if (pos == null) throw TimeoutException('no position fix');
       currentLat = pos.latitude;
       currentLng = pos.longitude;
