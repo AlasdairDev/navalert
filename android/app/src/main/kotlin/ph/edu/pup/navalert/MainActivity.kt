@@ -1,7 +1,9 @@
 package ph.edu.pup.navalert
 
+import android.content.Intent
 import android.os.Build
 import android.telephony.SmsManager
+import android.util.Log
 import android.view.KeyEvent
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
@@ -25,6 +27,15 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // SPIKE ONLY — start the media-button test harness. Remove with
+        // MediaButtonSpikeService once volume-key delivery is answered.
+        val spike = Intent(this, MediaButtonSpikeService::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(spike)
+        } else {
+            startService(spike)
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/sms")
             .setMethodCallHandler { call, result ->
@@ -96,6 +107,13 @@ class MainActivity : FlutterActivity() {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
+            // SPIKE ONLY — foreground baseline: this path fires only while the
+            // Activity has window focus (screen on, app foreground). Compare
+            // against NAVSPIKE VolumeProvider logs, which are the screen-off test.
+            if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+                event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                Log.i("NAVSPIKE", "dispatchKeyEvent (Activity) key=${event.keyCode}")
+            }
             when (event.keyCode) {
                 KeyEvent.KEYCODE_VOLUME_UP ->
                     keysChannel?.invokeMethod("volume", "up")
