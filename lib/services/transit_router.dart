@@ -45,9 +45,13 @@ class PlannedJourney {
   int get boardings => legs.where((l) => !l.isWalk).length;
   int get transfers => boardings > 0 ? boardings - 1 : 0;
 
-  /// Identity used to drop duplicate paths returned by the two passes.
-  String get signature =>
-      legs.map((l) => '${l.mode}:${l.routeIndex ?? ''}:${l.toStop}').join('>');
+  /// Coarse identity: the ordered sequence of ridden routes, ignoring walks
+  /// and exact board/alight stops. Two journeys on the same vehicles are the
+  /// "same option" to a commuter even if one boards a stop earlier — showing
+  /// both wastes a card. Deduped on this so the two UI suggestions stay
+  /// genuinely distinct (a different route, mode mix, or transfer count).
+  String get routeSignature =>
+      legs.where((l) => !l.isWalk).map((l) => l.routeIndex).join('>');
 }
 
 /// Dijkstra over [TransitGraph], as specified for R6.
@@ -123,7 +127,10 @@ class TransitRouter {
         allowJeepney: allowJeepney,
         allowBus: allowBus,
       );
-      if (j != null && seen.add(j.signature)) out.add(j);
+      // Passes run fastest-first, so the first journey on a given set of
+      // routes is the one worth keeping; a later pass landing on the same
+      // vehicles is a redundant card.
+      if (j != null && seen.add(j.routeSignature)) out.add(j);
     }
     return out;
   }
