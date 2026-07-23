@@ -21,9 +21,13 @@ class GeocodingService {
       'format': 'jsonv2',
       'limit': '6',
       'countrycodes': 'ph',
-      // Metro Manila viewbox (lon,lat top-left → lon,lat bottom-right)
-      'viewbox': '120.90,14.80,121.15,14.35',
-      'bounded': '0',
+      // NCR viewbox (lon,lat), aligned to RouteEngine's NCR bounds so search,
+      // map panning and pin validation all share one region definition.
+      // bounded:1 makes this a HARD limit, not a soft bias — the app routes
+      // NCR only (Scope and Limitations), so a Baguio result would be a dead
+      // end. Previously '0', which let out-of-region addresses through.
+      'viewbox': '120.88,14.82,121.18,14.30',
+      'bounded': '1',
       'addressdetails': '0',
     });
     final res = await http.get(uri, headers: _headers).timeout(
@@ -56,7 +60,7 @@ class GeocodingService {
       'lat': '$lat',
       'lon': '$lng',
       'format': 'jsonv2',
-      'zoom': '17',
+      'zoom': '18', // building level — the most precise reverse result
       'addressdetails': '0',
     });
     final res = await http.get(uri, headers: _headers).timeout(
