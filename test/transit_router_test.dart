@@ -108,6 +108,33 @@ void main() {
     });
   });
 
+  group('deduplication', () {
+    test('two passes on the same route collapse to one suggestion', () {
+      // A single jeepney is unambiguously both fastest and cheapest, so both
+      // passes return it. The rider should see one card, not two identical.
+      final r = build([
+        route('Only', 'jeepney', [
+          ['A', 14.60, lng],
+          ['B', 14.62, lng],
+          ['C', 14.64, lng],
+        ]),
+      ]);
+      final j = r.plan(
+          originLat: 14.60, originLng: lng, destLat: 14.64, destLng: lng);
+      expect(j, hasLength(1));
+    });
+
+    test('genuinely different route sets are both kept', () {
+      // Fastest bus vs cheaper jeepney over the same endpoints — two distinct
+      // options the rider actually chooses between.
+      final r = build(fixture());
+      final j = r.plan(
+          originLat: 14.60, originLng: lng, destLat: 14.64, destLng: lng);
+      expect(j, hasLength(2));
+      expect(j[0].routeSignature, isNot(j[1].routeSignature));
+    });
+  });
+
   group('transfer penalty', () {
     // Two routes that only connect by transferring at M.
     List<dynamic> transferFixture() => [
