@@ -70,6 +70,13 @@ class TripViewModel extends ChangeNotifier {
   GuideProgress guide = GuideProgress(const []);
 
   Future<void> startTrip(Trip t, {List<GuideLeg> guideLegs = const []}) async {
+    // Re-entrancy guard. A second startTrip (double-tapped "Start Trip", or a
+    // new trip begun before the old one ended) would otherwise overwrite _sub
+    // and leak the previous GPS listener — leaving TWO streams calling _onFix,
+    // which means duplicated stage evaluation and double alarms. Tear any live
+    // monitoring down first so exactly one listener and one watchdog exist.
+    await _teardownMonitoring();
+
     guide = GuideProgress(guideLegs);
     final avgReaction = await _db.averageAwakeSeconds();
     _engine = AdaptiveAlarmEngine(avgHistoricReactionSec: avgReaction);
@@ -438,12 +445,19 @@ class TripViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _endTrip(String status) async {
+  /// Cancels the GPS subscription, the signal watchdog, and every alarm timer.
+  /// The single teardown path shared by _endTrip, startTrip's re-entrancy
+  /// guard, and dispose, so no orphaned listener can survive any of them.
+  Future<void> _teardownMonitoring() async {
     await _sub?.cancel();
     _sub = null;
     _signalWatchdog?.cancel();
     _signalWatchdog = null;
     _cancelEscalation();
+  }
+
+  Future<void> _endTrip(String status) async {
+    await _teardownMonitoring();
     await _lockWidget.cancel();
     final t = trip;
     if (t != null && t.endedAt == null) {
