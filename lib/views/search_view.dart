@@ -175,10 +175,17 @@ class _SearchViewState extends State<SearchView> {
                     style: const TextStyle(color: NavAlertColors.warning)),
               ),
             Expanded(
+              // DO NOT MODIFY LOGIC: vm.results is the Nominatim geocoding
+              // output (NCR-bounded). Restyle each ListTile freely, but keep
+              // the builder over vm.results and the onTap → _select(r), which
+              // sets the destination and kicks off route planning.
               child: ListView.builder(
                 itemCount: vm.results.length,
                 itemBuilder: (_, i) {
                   final r = vm.results[i];
+                  // TODO (UI Team): result-row styling (icon, title/subtitle
+                  // typography, dividers). USE THEME: colors already come from
+                  // NavAlertColors — keep it that way.
                   return ListTile(
                     leading: const CircleAvatar(
                       backgroundColor: NavAlertColors.surface,

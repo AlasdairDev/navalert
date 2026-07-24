@@ -30,6 +30,11 @@ class _LaunchViewState extends State<LaunchView> {
     _go();
   }
 
+  // DO NOT MODIFY LOGIC: the splash gate — waits for AppViewModel to finish
+  // loading (DB/settings), then routes to onboarding on first run or straight
+  // to the app afterwards. Keep the load-wait + the onboardingCompleted branch.
+  // The 1400 ms minimum is just so the splash doesn't flash — that value and
+  // everything visual are [EDIT].
   Future<void> _go() async {
     final app = context.read<AppViewModel>();
     final start = DateTime.now();

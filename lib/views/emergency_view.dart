@@ -56,8 +56,14 @@ class EmergencyView extends StatelessWidget {
                 ),
               ),
             const SizedBox(height: 16),
-            // SOS press & hold
+            // SOS press & hold (UC-7). TODO (UI Team): the button's size,
+            // glow, ring, and typography are all restyleable — this is a
+            // high-value screen to make feel urgent and unmistakable.
             GestureDetector(
+              // DO NOT MODIFY LOGIC: the 3-second press-and-hold guard against
+              // accidental SOS. Keep beginSosHold/cancelSosHold on down/up/
+              // cancel and the onFired → _showResult callback. `holdProgress`
+              // (0→1) drives the ring below — keep reading it.
               onTapDown: (_) => context.read<EmergencyViewModel>().beginSosHold(
                   onFired: () => _showResult(context)),
               onTapUp: (_) =>
@@ -69,8 +75,13 @@ class EmergencyView extends StatelessWidget {
                   width: 190,
                   height: 190,
                   child: CircularProgressIndicator(
+                    // DO NOT MODIFY LOGIC: `value` shows hold progress. Restyle
+                    // stroke/colors, but keep it bound to em.holdProgress.
                     value: em.holdingSos ? em.holdProgress : 0,
                     strokeWidth: 8,
+                    // USE THEME: white ring on danger red is deliberate; if you
+                    // change it keep the SOS unmistakably red (NavAlertColors.
+                    // danger carries the "emergency" meaning — don't recolor it).
                     color: Colors.white,
                     backgroundColor:
                         NavAlertColors.danger.withValues(alpha: 0.3),

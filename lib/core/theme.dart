@@ -1,22 +1,34 @@
 import 'package:flutter/material.dart';
 
 // ═══════════════════════════════════════════════════════════════════════
-//  UI/UX POLISH LEGEND  —  used in comments across lib/views/*
+//  UI/UX POLISH LEGEND  —  READ THIS FIRST (used across lib/views/*)
 // ═══════════════════════════════════════════════════════════════════════
-//  [EDIT] Free to restyle NOW — colors, copy/text, spacing, icons, fonts,
-//         radii, sizes. Purely cosmetic; changing it can't break a feature.
-//  [WANT] Suggested polish / redesign candidate — presentational, safe to
-//         rework, but think about the flow (e.g. reorder, animate, re-lay-out).
-//  [NEED] Functional wiring — DO NOT remove/rename. onPressed handlers,
-//         controller/state, Navigator routes, view-model calls, and the
-//         paper-mandated element itself (Figure #). You may restyle how it
-//         LOOKS, but the behavior/route/handler must stay.
+//  For the UI team: every screen has a "UI/UX MAP" header comment listing
+//  what's safe to restyle. Inside the code you'll also see inline markers:
 //
-//  Rule of thumb:  onPressed / onTap / controller / context.read/watch /
-//  Navigator / setState  == [NEED].   Everything visual == [EDIT].
+//  // TODO (UI Team): ...   → apply your styling HERE (padding, typography,
+//                            colors, layout). This is your green light.
+//  // DO NOT MODIFY LOGIC:  → this line is wired to the backend (a
+//                            view-model call, a stream, the routing isolate,
+//                            the MediaSession, a Navigator route, setState).
+//                            You may restyle the WIDGET around it, but do not
+//                            change, remove, or reorder the marked call, or a
+//                            feature breaks. When unsure, keep the call and
+//                            only change how it LOOKS.
+//  // USE THEME: ...        → pull from NavAlertColors / the ThemeData below
+//                            instead of hardcoding a Color or TextStyle, so
+//                            one change restyles the whole app.
+//
+//  The older tags mean the same thing and still apply:
+//  [EDIT] cosmetic, restyle freely.  [WANT] polish/redesign candidate.
+//  [NEED] functional wiring — restyle the look, keep the behaviour.
+//
+//  Rule of thumb:  onPressed / onTap / controller / context.read|watch /
+//  Navigator / setState / .listen  == DO NOT MODIFY LOGIC / [NEED].
+//  Everything visual == [EDIT] / TODO (UI Team).
 //
 //  This whole file is the central style surface — almost all polish happens
-//  here. Change these and every screen updates at once.
+//  here. Change these tokens and every screen updates at once.
 // ═══════════════════════════════════════════════════════════════════════
 
 /// NavAlert visual identity — deep purple night-commute theme

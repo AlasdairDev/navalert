@@ -415,6 +415,7 @@ class _RouteViewState extends State<RouteView> {
       );
     }
     return Column(mainAxisSize: MainAxisSize.min, children: [
+      // TODO (UI Team): "Suggested Routes" header + count typography.
       const Text('Suggested Routes',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       Text('${home.suggestions.length} SUGGESTED ROUTES FOUND',
@@ -423,6 +424,10 @@ class _RouteViewState extends State<RouteView> {
               fontSize: 11,
               fontWeight: FontWeight.w600)),
       const SizedBox(height: 10),
+      // DO NOT MODIFY LOGIC: home.suggestions is the OUTPUT of the Dijkstra
+      // routing isolate (Fastest/Cheapest, real fares). Render the cards
+      // however you like, but keep the .map over home.suggestions and pass
+      // each `s` into the card unchanged — the card wires selection + fares.
       Flexible(
         child: SingleChildScrollView(
           child: Row(
@@ -445,8 +450,13 @@ class _RouteViewState extends State<RouteView> {
   Widget _suggestionCard(HomeViewModel home, RouteSuggestion s) {
     final selected = home.selectedSuggestion?.suggestionId == s.suggestionId;
     return GestureDetector(
+      // DO NOT MODIFY LOGIC: selecting a card sets the chosen route on the
+      // trip (its fare + guide legs feed the live commute guide). Keep the
+      // onTap → home.selectSuggestion(s). The card visuals below are [EDIT].
       onTap: () => home.selectSuggestion(s),
       child: Card(
+        // USE THEME: card / surface / accent already come from NavAlertColors —
+        // keep pulling from tokens rather than hardcoding new hex here.
         color: selected ? NavAlertColors.card : NavAlertColors.surface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),

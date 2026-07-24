@@ -22,6 +22,9 @@ import 'route_view.dart';
 class FavoritesView extends StatelessWidget {
   const FavoritesView({super.key});
 
+  // DO NOT MODIFY LOGIC: one-tap trip from a saved place — refreshes GPS, sets
+  // the destination, and triggers route planning. Keep the flow; the loading
+  // spinner and any result screen are [EDIT].
   Future<void> _startFromFavorite(BuildContext context, Favorite f) async {
     final home = context.read<HomeViewModel>();
     final app = context.read<AppViewModel>();

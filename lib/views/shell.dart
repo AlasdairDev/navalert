@@ -42,6 +42,11 @@ class _ShellViewState extends State<ShellView> {
   @override
   void initState() {
     super.initState();
+    // ─── DO NOT MODIFY LOGIC (entire block) ───────────────────────────────
+    // These streams are fed by the native MediaButtonService (screen-off
+    // triple-Volume shortcuts, R7/R8). Removing/reordering start() or either
+    // .listen breaks the emergency shortcuts. The ONLY [EDIT] parts here are
+    // the SnackBar copy and, in _launchFakeCall, how the call screen looks.
     HardwareButtons.instance.start();
     _sosSub = HardwareButtons.instance.onSosShortcut.listen((_) {
       if (!mounted) return;
@@ -54,6 +59,7 @@ class _ShellViewState extends State<ShellView> {
       if (!mounted) return;
       _launchFakeCall();
     });
+    // ──────────────────────────────────────────────────────────────────────
   }
 
   Future<void> _launchFakeCall() async {
@@ -82,19 +88,24 @@ class _ShellViewState extends State<ShellView> {
       SettingsView(),
     ];
     return Scaffold(
+      // DO NOT MODIFY LOGIC: IndexedStack keeps all 5 tabs alive (state is
+      // preserved across tab switches). Keep the 5 pages and their order.
       body: IndexedStack(index: _index, children: pages),
+      // TODO (UI Team): the bottom nav's look (colors, selected highlight,
+      // shape, label visibility) is mostly driven by the theme's
+      // bottomNavigationBarTheme — restyle there so it stays consistent.
+      // Tab icons/labels below are [EDIT]; the onTap side-effects are logic.
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) {
           setState(() => _index = i);
-          // IndexedStack keeps pages alive, so refresh Trip History
-          // whenever its tab is opened — otherwise trips completed
-          // after startup would never appear.
+          // DO NOT MODIFY LOGIC: History refreshes when its tab opens, and the
+          // SMS permission is pre-warmed when Emergency opens — keep both.
           if (i == 0) context.read<HistoryViewModel>().load();
-          // Secure the SMS permission the moment the rider opens the
-          // Emergency tab, so the SOS dialog never interrupts a real crisis.
           if (i == 3) context.read<EmergencyViewModel>().ensureSmsReady();
         },
+        // TODO (UI Team): tab icons + labels are free to restyle. Keep 5 tabs
+        // in this order (History · Favorites · Home · Emergency · Settings).
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'History'),
           BottomNavigationBarItem(icon: Icon(Icons.star_border), label: 'Favorites'),
