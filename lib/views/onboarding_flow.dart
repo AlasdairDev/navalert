@@ -173,6 +173,10 @@ class _PermissionsViewState extends State<PermissionsView> {
     setState(() {});
   }
 
+  // DO NOT MODIFY LOGIC: these fire the REAL OS permission dialogs
+  // (Figure 16). Each permission must also be declared in AndroidManifest.xml
+  // or the request is auto-denied. Restyle the permission tiles; keep the
+  // request calls and the granted-state wiring.
   Future<void> _toggle(Permission perm, void Function(bool) set, bool v) async {
     if (v) {
       final st = await perm.request();
@@ -284,6 +288,10 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
     }
   }
 
+  // DO NOT MODIFY LOGIC: saves up to 3 emergency contacts with phone-number
+  // validation (UC-2 Flow A — an invalid number must be rejected before save,
+  // or SOS SMS would fail). Keep the validation + saveContact; the error
+  // SnackBar copy is [EDIT].
   Future<void> _save() async {
     final app = context.read<AppViewModel>();
     var saved = 0;

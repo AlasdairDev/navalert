@@ -32,6 +32,12 @@ class _FakeCallViewState extends State<FakeCallView> {
     final app = context.watch<AppViewModel>();
     final caller = app.fakeCallConfig.callerName;
 
+    // TODO (UI Team): this whole screen is [EDIT]-heavy and the HIGHEST-value
+    // one to make convincing — it must look like the phone's REAL incoming-call
+    // UI (safety depends on the illusion). DELIBERATE EXCEPTION TO THE THEME:
+    // the dark background, white text, and red/green call buttons below are
+    // intentionally NOT NavAlert purple — they mimic the native dialer. Match
+    // the OS dialer styling here; do not pull app theme colors into it.
     return Scaffold(
       backgroundColor: const Color(0xFF101418),
       body: SafeArea(
@@ -59,6 +65,10 @@ class _FakeCallViewState extends State<FakeCallView> {
             const Spacer(),
             if (!em.fakeCallAnswered)
               Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                // DO NOT MODIFY LOGIC: decline → endFakeCall + pop (also tears
+                // down the lock-screen notification); answer → play the chosen
+                // recording + start the call timer. Restyle the buttons, keep
+                // the handlers. Red/green are the universal call colours — keep.
                 _roundButton(Icons.call_end, Colors.red, () async {
                   await em.endFakeCall();
                   if (mounted) Navigator.of(this.context).pop();

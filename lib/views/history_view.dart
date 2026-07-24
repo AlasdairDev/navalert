@@ -204,12 +204,16 @@ class _HistoryViewState extends State<HistoryView> {
 
   /// Click-to-confirm deletion: shows a dialog first; the trip (and its
   /// alarm/overshoot/SOS records) is only deleted when "Delete" is tapped.
+  // DO NOT MODIFY LOGIC: destructive delete — the confirm dialog is REQUIRED
+  // (deleting a trip cascades to its alarm/overshoot/SOS records). Keep the
+  // confirm-before-delete flow; the dialog's copy and look are [EDIT].
   Future<void> _confirmDelete(Trip t) async {
     final vm = context.read<HistoryViewModel>();
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        // TODO (UI Team): dialog styling (title/body typography, button colors).
         title: const Text('Delete this trip?'),
         content: Text(
           '${t.originLabel.split(',').first} → '

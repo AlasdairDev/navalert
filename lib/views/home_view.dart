@@ -37,6 +37,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    // DO NOT MODIFY LOGIC: first-frame GPS acquisition + animated recenter.
+    // This is the R2/UC-4 location bootstrap; the map has nothing to show
+    // until refreshCurrentLocation() returns. Restyle the map/markers freely,
+    // but leave this callback and the animateTo call intact.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final vm = context.read<HomeViewModel>();
       await vm.refreshCurrentLocation();
@@ -79,9 +83,15 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               maxZoom: 20,
             ),
             children: [
+              // DO NOT MODIFY LOGIC: NavAlertMap.tiles / ncrConstraint come
+              // from core/map_support.dart (retina tiles, NCR geofence, tile
+              // buffering). Restyle markers/overlays, but don't inline-replace
+              // these — they keep the map crisp and inside the service area.
               NavAlertMap.tiles(context),
               MarkerLayer(markers: [
-                // Google-Maps-style blue current-location dot.
+                // TODO (UI Team): the current-location dot style.
+                // Google-Maps-style blue is intentional and widely recognised;
+                // this 0xFF4285F4 is a deliberate keep, not theme purple.
                 Marker(
                   point: center,
                   width: 22,
@@ -114,6 +124,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // TODO (UI Team): greeting + heading typography. Consider a
+                  // theme text style instead of inline fontSize/weight.
                   Text(_greeting,
                       style: const TextStyle(
                           color: NavAlertColors.textSecondary, fontSize: 14)),
@@ -122,9 +134,15 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                           fontSize: 22, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 12),
                   GestureDetector(
+                    // DO NOT MODIFY LOGIC: opens the destination search (UC-4).
+                    // Restyle the pill below, but keep this onTap → SearchView.
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const SearchView())),
                     child: Container(
+                      // TODO (UI Team): the search pill's shape/padding/color.
+                      // USE THEME: this white-on-map pill is deliberate for
+                      // contrast over the map — if you restyle, keep it legible
+                      // against OSM tiles (a theme token is fine if you add one).
                       padding: const EdgeInsets.symmetric(
                           horizontal: 18, vertical: 13),
                       decoration: BoxDecoration(
@@ -202,11 +220,15 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
             ),
           ),
           // Locate me button
+          // TODO (UI Team): FAB position/size/icon/color are free to restyle.
           Positioned(
             right: 16,
             bottom: 24,
             child: FloatingActionButton(
               backgroundColor: Colors.white,
+              // DO NOT MODIFY LOGIC: re-fetches GPS and re-centres the map
+              // (UC-4). Keep refreshCurrentLocation() + animateTo; the snackbar
+              // copy is [EDIT].
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 messenger.showSnackBar(const SnackBar(
