@@ -3,8 +3,6 @@ package ph.edu.pup.navalert
 import android.content.Intent
 import android.os.Build
 import android.telephony.SmsManager
-import android.util.Log
-import android.view.KeyEvent
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -15,26 +13,42 @@ import io.flutter.plugin.common.MethodChannel
  *
  * 1. navalert/sms  — sends the SOS message through Native Android SMS
  *    (SmsManager), so the alert works with cellular signal only (R8).
- * 2. navalert/keys — forwards volume-key presses to Dart so triple
- *    Volume-Up triggers SOS and triple Volume-Down triggers the fake
- *    call (Specific Objective 4).
+ * 2. navalert/keys — carries the triple-Volume shortcuts (SOS / fake call).
+ *    Detection happens natively in [MediaButtonService] so it works with the
+ *    screen off; this channel only delivers the decoded high-level event, and
+ *    a cold-launched app pulls any pending one via "consumePendingShortcut".
  * 3. navalert/lockscreen — lets the fake call render on top of the
  *    keyguard (UC-8 Exception 2), the way a real dialer shows an
  *    incoming call.
  */
 class MainActivity : FlutterActivity() {
-    private var keysChannel: MethodChannel? = null
+
+    companion object {
+        /**
+         * Live handle the background [MediaButtonService] uses to deliver a
+         * shortcut straight to Dart when the engine is attached. Null while no
+         * engine exists, so the service falls back to launching the activity.
+         */
+        @JvmStatic
+        var keysChannel: MethodChannel? = null
+
+        @JvmStatic
+        var engineAlive: Boolean = false
+
+        /** A shortcut that arrived before Dart was ready to receive it. */
+        @JvmStatic
+        var pendingShortcut: String? = null
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // SPIKE ONLY — start the media-button test harness. Remove with
-        // MediaButtonSpikeService once volume-key delivery is answered.
-        val spike = Intent(this, MediaButtonSpikeService::class.java)
+        // Keep the always-on shortcut capture service running.
+        val svc = Intent(this, MediaButtonService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(spike)
+            startForegroundService(svc)
         } else {
-            startService(spike)
+            startService(svc)
         }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/sms")
@@ -64,7 +78,21 @@ class MainActivity : FlutterActivity() {
             }
 
         keysChannel =
-            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/keys")
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/keys").also {
+                it.setMethodCallHandler { call, result ->
+                    if (call.method == "consumePendingShortcut") {
+                        val pending = pendingShortcut
+                        pendingShortcut = null
+                        result.success(pending)
+                    } else {
+                        result.notImplemented()
+                    }
+                }
+            }
+        engineAlive = true
+        // The app may have been launched BY a shortcut while no engine existed
+        // (cold start from the background service). Stash it for Dart to pull.
+        consumeShortcutIntent(intent)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/lockscreen")
             .setMethodCallHandler { call, result ->
@@ -105,22 +133,33 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            // SPIKE ONLY — foreground baseline: this path fires only while the
-            // Activity has window focus (screen on, app foreground). Compare
-            // against NAVSPIKE VolumeProvider logs, which are the screen-off test.
-            if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
-                event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                Log.i("NAVSPIKE", "dispatchKeyEvent (Activity) key=${event.keyCode}")
-            }
-            when (event.keyCode) {
-                KeyEvent.KEYCODE_VOLUME_UP ->
-                    keysChannel?.invokeMethod("volume", "up")
-                KeyEvent.KEYCODE_VOLUME_DOWN ->
-                    keysChannel?.invokeMethod("volume", "down")
-            }
+    // The service now captures volume keys in every state (foreground included,
+    // via the MediaSession), so dispatchKeyEvent no longer handles them — doing
+    // so would double-count presses and break the triple-press window.
+
+    /** A shortcut arriving while the app is already running (singleTop). */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val type = intent.getStringExtra(MediaButtonService.EXTRA_SHORTCUT)
+        if (type != null) {
+            // Engine is alive here — deliver straight away.
+            keysChannel?.invokeMethod("shortcut", type)
         }
-        return super.dispatchKeyEvent(event)
+    }
+
+    /** Stash a shortcut carried by the launching intent for Dart to pull. */
+    private fun consumeShortcutIntent(intent: Intent?) {
+        intent?.getStringExtra(MediaButtonService.EXTRA_SHORTCUT)?.let {
+            pendingShortcut = it
+        }
+    }
+
+    override fun onDestroy() {
+        // The engine is going away; the service must stop pushing to a dead
+        // channel and fall back to launching the activity instead.
+        engineAlive = false
+        keysChannel = null
+        super.onDestroy()
     }
 }

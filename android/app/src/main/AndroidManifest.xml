@@ -22,8 +22,8 @@
          needs a manual per-app toggle in Settings and is increasingly
          restricted. -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
-    <!-- SPIKE ONLY — remove with MediaButtonSpikeService once the volume-key
-         delivery question is answered. -->
+    <!-- R7/R8 discreet triggering: MediaButtonService hosts an active media
+         session so the triple-Volume shortcuts fire with the screen off. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
 
     <application
@@ -63,9 +63,9 @@
         <receiver
             android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
             android:exported="false" />
-        <!-- SPIKE ONLY — media-button delivery test. Remove with the service. -->
+        <!-- Discreet volume-shortcut capture (R7/R8) — active even screen-off. -->
         <service
-            android:name=".MediaButtonSpikeService"
+            android:name=".MediaButtonService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
     </application>
