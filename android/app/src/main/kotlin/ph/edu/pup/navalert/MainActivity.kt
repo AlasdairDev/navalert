@@ -38,6 +38,24 @@ class MainActivity : FlutterActivity() {
         /** A shortcut that arrived before Dart was ready to receive it. */
         @JvmStatic
         var pendingShortcut: String? = null
+
+        /**
+         * True while the activity is in the foreground. Lets the service decide
+         * whether a fake call can be delivered directly (app visible) or needs a
+         * full-screen intent to surface it (app backgrounded / screen off).
+         */
+        @JvmStatic
+        var activityResumed: Boolean = false
+    }
+
+    override fun onResume() {
+        super.onResume()
+        activityResumed = true
+    }
+
+    override fun onPause() {
+        activityResumed = false
+        super.onPause()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
