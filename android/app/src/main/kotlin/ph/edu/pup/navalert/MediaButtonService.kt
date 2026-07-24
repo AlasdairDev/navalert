@@ -17,6 +17,7 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
 import android.os.Handler
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
@@ -61,6 +62,14 @@ class MediaButtonService : Service() {
     private lateinit var audio: AudioManager
     private val main = Handler(Looper.getMainLooper())
 
+    // MediaSession callbacks (including the VolumeProvider) run on the handler
+    // given to setCallback. Keeping them off the main thread is essential: the
+    // main thread also runs the Flutter engine, and a burst of volume events
+    // relaying to the audio stream on it can jank the UI or ANR. Only the final
+    // dispatch to Dart / notifications hops back to main.
+    private val bgThread = HandlerThread("navalert-mediabtn").apply { start() }
+    private val bg = Handler(bgThread.looper)
+
     private val upPresses = ArrayDeque<Long>()
     private val downPresses = ArrayDeque<Long>()
     private var lastDispatchAt = 0L
@@ -82,8 +91,9 @@ class MediaButtonService : Service() {
             setPlaybackToRemote(volumeProvider())
             // A callback is required for the framework to treat the session as
             // controllable and route media/volume keys to it. The transport
-            // callbacks are intentional no-ops — we only care about volume.
-            setCallback(object : MediaSession.Callback() {})
+            // callbacks are intentional no-ops — we only care about volume. The
+            // background handler moves onAdjustVolume off the main thread.
+            setCallback(object : MediaSession.Callback() {}, bg)
             isActive = true
         }
         assertPlaying()
@@ -286,6 +296,7 @@ class MediaButtonService : Service() {
 
     override fun onDestroy() {
         main.removeCallbacks(reassert)
+        bgThread.quitSafely()
         try {
             keepAlive?.stop()
             keepAlive?.release()
