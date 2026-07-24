@@ -33,6 +33,10 @@ class ActiveTripView extends StatelessWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // DO NOT MODIFY LOGIC: vm.phase is driven by the live GPS + adaptive alarm
+    // engine (R1–R4). This switch decides which sub-screen shows. You may
+    // restyle each sub-widget (_AlarmStage, _Monitoring, etc.), but keep the
+    // phase→widget mapping and all seven cases.
     final body = switch (vm.phase) {
       TripPhase.alarmStage1 => _AlarmStage(vm: vm, stage: 1),
       TripPhase.alarmStage2 => _AlarmStage(vm: vm, stage: 2),
@@ -44,6 +48,8 @@ class ActiveTripView extends StatelessWidget {
     };
 
     return PopScope(
+      // DO NOT MODIFY LOGIC: blocks the Back button mid-trip (anti-oversleep).
+      // The rider must Slide-to-Stop to leave. Keep canPop tied to phase.
       canPop: vm.phase == TripPhase.ended,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
@@ -177,6 +183,10 @@ class _Monitoring extends StatelessWidget {
                         color: NavAlertColors.warning, fontSize: 12)),
               ),
             const Spacer(),
+            // DO NOT MODIFY LOGIC: the anti-oversleep gesture — the only way to
+            // end monitoring. Keep onCompleted → stopTrip() + pop(). You may
+            // restyle the slider (see _SlideToStop below); do not lower its
+            // completion threshold (it guards against a stray-thumb dismiss).
             _SlideToStop(onCompleted: () async {
               await vm.stopTrip();
               if (context.mounted) Navigator.of(context).pop();
@@ -232,7 +242,12 @@ class _AlarmStage extends StatelessWidget {
         : '${vm.distanceM.toStringAsFixed(0)} m away';
 
     if (stage == 3) {
-      // Figure 28 — Emergency Full-Screen Alert
+      // Figure 28 — Emergency Full-Screen Alert.
+      // TODO (UI Team): Stage 3 is [EDIT]-heavy — make it alarming and
+      // impossible to sleep through (bold type, pulsing, high contrast).
+      // USE THEME: the dark-red background 0xFF3B0A0A is a deliberate "danger"
+      // wash; if you retheme, keep Stage 3 unmistakably red/urgent. Do NOT
+      // make it easier to dismiss (R1: it must stay a hard-to-dismiss alert).
       return Container(
         color: const Color(0xFF3B0A0A),
         child: SafeArea(

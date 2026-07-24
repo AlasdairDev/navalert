@@ -32,6 +32,10 @@ class CommuteGuideSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // DO NOT MODIFY LOGIC: `guide` (GuideProgress) tracks which leg the rider
+    // is on. GTFS legs auto-advance from GPS; synthetic legs advance on the
+    // "Done" tap → vm.markGuideLegDone. Restyle the sheet/cards, but keep the
+    // reads of guide.legs / guide.currentIndex and the markGuideLegDone call.
     final vm = context.watch<TripViewModel>();
     final guide = vm.guide;
     // No guide for this trip (e.g. started from Favorites) — show nothing at

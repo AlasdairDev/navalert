@@ -164,6 +164,10 @@ class _PinOnMapViewState extends State<PinOnMapView> {
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
+                  // DO NOT MODIFY LOGIC: returns the pinned PlaceResult to the
+                  // search flow (disabled until a valid in-NCR pin exists — see
+                  // _onTap's NCR check). Keep onPressed → _confirm and the
+                  // null-until-pinned guard; the button look/label are [EDIT].
                   child: ElevatedButton.icon(
                     onPressed: _picked == null ? null : _confirm,
                     icon: const Icon(Icons.check, size: 18),

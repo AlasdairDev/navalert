@@ -72,6 +72,9 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
     }
   }
 
+  // DO NOT MODIFY LOGIC: persists the favorite and returns to the list. Keep
+  // addFavorite + pop; the snackbar copy is [EDIT]. (This screen intentionally
+  // has its OWN search state, separate from Home search — don't merge them.)
   Future<void> _save(PlaceResult place) async {
     final app = context.read<AppViewModel>();
     final messenger = ScaffoldMessenger.of(context);

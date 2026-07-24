@@ -173,6 +173,9 @@ class SettingsView extends StatelessWidget {
   }
 
   /// Figure 33 — Data Backup: pick one of the exported backup files.
+  // DO NOT MODIFY LOGIC: Import OVERWRITES the user's current settings,
+  // contacts and favorites — the confirm dialog below is required. Keep the
+  // list → confirm → importBackup flow; dialog copy/look are [EDIT].
   Future<void> _importBackup(BuildContext context) async {
     final app = context.read<AppViewModel>();
     final messenger = ScaffoldMessenger.of(context);
