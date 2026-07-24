@@ -3,11 +3,15 @@ package ph.edu.pup.navalert
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
+import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioTrack
 import android.media.VolumeProvider
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
@@ -38,6 +42,18 @@ import android.os.SystemClock
  *
  * Because the remote VolumeProvider intercepts the keys, every press is relayed
  * back to the real audio stream so the phone's volume still works normally.
+ *
+ * **Keeping priority while other media plays (the Spotify problem).** Volume
+ * keys are routed to the highest-priority session that declares REMOTE volume
+ * control — Android's `MediaSessionStack.getDefaultVolumeSession()` only
+ * considers remote-volume sessions. Music apps (Spotify, YouTube) play LOCAL
+ * audio, so they are never candidates for that slot and cannot take the keys —
+ * *provided our session stays active and non-stale*. Two things guarantee that:
+ *  - a silent, zero-volume keep-alive track so the session is genuinely,
+ *    continuously "playing" (it requests no audio focus, so it never pauses or
+ *    ducks the user's music);
+ *  - a periodic re-assertion of the PLAYING state so the session never ages out
+ *    of the priority stack when another app becomes active.
  */
 class MediaButtonService : Service() {
 
@@ -49,25 +65,78 @@ class MediaButtonService : Service() {
     private val downPresses = ArrayDeque<Long>()
     private var lastDispatchAt = 0L
 
+    private var keepAlive: AudioTrack? = null
+    private val reassert = object : Runnable {
+        override fun run() {
+            assertPlaying()
+            main.postDelayed(this, REASSERT_MS)
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         startForegroundNotification()
 
         session = MediaSession(this, "NavAlertShortcuts").apply {
-            // A PLAYING state earns the session media-button/volume priority.
-            setPlaybackState(
-                PlaybackState.Builder()
-                    .setActions(PlaybackState.ACTION_PLAY_PAUSE)
-                    .setState(PlaybackState.STATE_PLAYING, 0L, 1.0f)
-                    .build()
-            )
             setPlaybackToRemote(volumeProvider())
             // A callback is required for the framework to treat the session as
             // controllable and route media/volume keys to it. The transport
             // callbacks are intentional no-ops — we only care about volume.
             setCallback(object : MediaSession.Callback() {})
             isActive = true
+        }
+        assertPlaying()
+        startKeepAlive()
+        main.postDelayed(reassert, REASSERT_MS)
+    }
+
+    /** (Re)declare the session as actively playing to hold volume priority. */
+    private fun assertPlaying() {
+        session.setPlaybackState(
+            PlaybackState.Builder()
+                .setActions(PlaybackState.ACTION_PLAY_PAUSE)
+                .setState(PlaybackState.STATE_PLAYING, 0L, 1.0f)
+                .build()
+        )
+        if (!session.isActive) session.isActive = true
+    }
+
+    /**
+     * A silent, looped track that keeps the session genuinely "playing" so it
+     * is never culled from the priority stack. USAGE_MEDIA at zero volume with
+     * NO audio-focus request — it mixes silently alongside the user's music and
+     * never interrupts it.
+     */
+    private fun startKeepAlive() {
+        try {
+            val rate = 8000
+            val frames = rate // one second of silence
+            val track = AudioTrack.Builder()
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(rate)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                        .build()
+                )
+                .setBufferSizeInBytes(frames * 2)
+                .setTransferMode(AudioTrack.MODE_STATIC)
+                .build()
+            track.write(ShortArray(frames), 0, frames) // zeros = silence
+            track.setLoopPoints(0, frames, -1)          // loop forever in hw
+            track.setVolume(0f)
+            track.play()
+            keepAlive = track
+        } catch (_: Exception) {
+            // No audio hardware / unsupported format — the periodic re-assert
+            // still keeps the session reasonably fresh on its own.
         }
     }
 
@@ -127,22 +196,58 @@ class MediaButtonService : Service() {
 
     private fun dispatchShortcut(type: String) = main.post {
         val channel = MainActivity.keysChannel
-        val engineAlive = MainActivity.engineAlive
+        val engineAlive = MainActivity.engineAlive && channel != null
 
-        // SOS with a live engine goes straight to Dart — silent, no screen wake.
-        if (type == "sos" && engineAlive && channel != null) {
-            channel.invokeMethod("shortcut", type)
-            return@post
+        when (type) {
+            // SOS: a live engine handles it silently in the background — no
+            // screen wake, the whole point of discretion. SMS/GPS run headless.
+            "sos" -> if (engineAlive) {
+                channel!!.invokeMethod("shortcut", "sos")
+                return@post
+            }
+            // Fake call: deliver directly only if the app is already visible;
+            // otherwise it must come to the foreground, which needs the
+            // full-screen intent below.
+            "fakecall" -> if (engineAlive && MainActivity.activityResumed) {
+                channel!!.invokeMethod("shortcut", "fakecall")
+                return@post
+            }
         }
 
-        // Otherwise launch the activity to guarantee execution. singleTop +
-        // showWhenLocked means a fake call surfaces over the keyguard.
-        startActivity(
-            Intent(this, MainActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                putExtra(EXTRA_SHORTCUT, type)
-            }
+        // Background/screen-off, or the engine is gone: a plain startActivity
+        // from a background service is blocked by Android's BAL policy, so use
+        // a full-screen-intent notification instead — the sanctioned path that
+        // launches the activity over the lockscreen (same as an incoming call).
+        launchViaFullScreenIntent(type)
+    }
+
+    private fun launchViaFullScreenIntent(type: String) {
+        val activity = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            putExtra(EXTRA_SHORTCUT, type)
+        }
+        val pi = PendingIntent.getActivity(
+            this, type.hashCode(), activity,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val notif = Notification.Builder(this, FS_CHANNEL)
+            .setContentTitle(if (type == "sos") "Sending SOS…" else "Incoming call")
+            .setContentText(
+                if (type == "sos") "Alerting your emergency contacts."
+                else "Tap to answer."
+            )
+            .setSmallIcon(android.R.drawable.ic_menu_call)
+            .setCategory(Notification.CATEGORY_CALL)
+            // Screen off/locked: the full-screen intent auto-launches over the
+            // keyguard. Screen on: it shows as a heads-up, and tapping fires
+            // the CONTENT intent — so both must point at the same activity.
+            .setContentIntent(pi)
+            .setFullScreenIntent(pi, true)
+            .setAutoCancel(true)
+            .setOngoing(false)
+            .build()
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(FS_NOTIF_ID, notif)
     }
 
     private fun startForegroundNotification() {
@@ -152,6 +257,13 @@ class MediaButtonService : Service() {
                 NotificationChannel(
                     CHANNEL, "Safety shortcuts", NotificationManager.IMPORTANCE_LOW
                 ).apply { description = "Keeps the volume-button SOS shortcut active." }
+            )
+            // High importance so the full-screen intent actually fires when a
+            // shortcut is triggered with the screen off.
+            mgr.createNotificationChannel(
+                NotificationChannel(
+                    FS_CHANNEL, "Emergency trigger", NotificationManager.IMPORTANCE_HIGH
+                ).apply { description = "Launches SOS / fake call from the volume shortcut." }
             )
         }
         val notif: Notification = Notification.Builder(this, CHANNEL)
@@ -173,6 +285,13 @@ class MediaButtonService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
 
     override fun onDestroy() {
+        main.removeCallbacks(reassert)
+        try {
+            keepAlive?.stop()
+            keepAlive?.release()
+        } catch (_: Exception) {
+        }
+        keepAlive = null
         session.isActive = false
         session.release()
         super.onDestroy()
@@ -183,8 +302,11 @@ class MediaButtonService : Service() {
     companion object {
         const val EXTRA_SHORTCUT = "navalert_shortcut"
         private const val CHANNEL = "navalert_shortcuts"
+        private const val FS_CHANNEL = "navalert_trigger"
         private const val NOTIF_ID = 4242
+        private const val FS_NOTIF_ID = 4243
         private const val WINDOW_MS = 1600L
         private const val COOLDOWN_MS = 3000L
+        private const val REASSERT_MS = 20_000L
     }
 }
