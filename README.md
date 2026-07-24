@@ -45,8 +45,8 @@ Package id: `ph.edu.pup.navalert`.
 | R4 Behavioural learning | reaction time (`awake_seconds`) per trip **widens the trigger distance *and* raises alarm loudness/vibration** for slow dismissers |
 | R5 Offline-first | SQLite (`services/database_service.dart`), offline GPS alarms, native SMS |
 | R6 Commute guide + fares | **Dijkstra multimodal router** over the real GTFS network (`services/transit_graph.dart`, `services/transit_router.dart`) in a worker isolate (`services/routing_isolate.dart`); exact LTFRB fares via `services/route_engine.dart`; synthetic estimate as fallback |
-| R7 Fake call | `views/fake_call_view.dart`, custom recordings via `record`, triple Volume-Down shortcut |
-| R8 SOS via Native Android SMS | `services/sos_service.dart` + `MainActivity.kt` SmsManager channel, triple Volume-Up shortcut |
+| R7 Fake call | `views/fake_call_view.dart`, custom recordings via `record`; triple Volume-Down via `MediaButtonService` (works screen-off, over the lockscreen) |
+| R8 SOS via Native Android SMS | `services/sos_service.dart` + `MainActivity.kt` SmsManager channel; triple Volume-Up via `MediaButtonService` (media-priority keep-alive, BAL-safe launch) |
 | UC-4 Pin drop-off on map | `views/pin_on_map_view.dart` (tap the map, reverse-geocode, confirm) |
 | Overshoot detection + rerouting | consecutive increasing-distance latch → Google Maps `google.navigation:` intent (clipboard fallback) |
 | Database schema (Tables 15–29) | `services/database_service.dart` — all 13 tables, 8 FKs, unique indexes |
@@ -96,11 +96,12 @@ Teknomo, 2016) found commuters average three modes per trip.
 **Graph model.** The feed's 74,018 stop-points collapse to **4,781 unique
 coordinates**. Nodes are `(stop, route)` pairs — "aboard route R at stop S" —
 so boarding-based fares are modelled correctly, plus one **hub node** per
-coordinate. Transfers route *through* the hub (`alight → hub → board`), which
-keeps them O(k) per stop instead of O(k²) pairwise; the graph lands at
-**~230K edges**. Adjacency is stored as flat **CSR typed arrays** (`Int32List`
-targets, `Float32List` weights) — never boxed objects, which would balloon the
-heap on a 4 GB budget phone.
+coordinate (**78,799 nodes** total). Transfers route *through* the hub
+(`alight → hub → board`), which keeps them O(k) per stop instead of O(k²)
+pairwise; the graph lands at **230,419 edges**. Adjacency is stored as flat
+**CSR typed arrays** (`Int32List` offsets/targets, `Float32List` weights,
+`Uint8List` edge kind) — never boxed objects, which would balloon the heap on a
+4 GB budget phone (~3–5 MB resident).
 
 **Search.** Two Dijkstra passes: one minimises time, one an approximate fare
 proxy, so Figure 22 gets genuinely different *Fastest* and *Cheapest* options.
@@ -119,13 +120,46 @@ charged two base fares and the displayed price is never wrong.
 **Isolate.** All of this runs in a **long-lived worker isolate** that builds
 the graph once and keeps it — never rebuilt per search, never on the UI heap.
 It's spawned lazily on the first search and disposed after 5 minutes idle. On
-the real 1,711-route feed: graph builds in **~150 ms**, a full two-pass NCR
-search in **~140 ms**. Any failure falls back to the synthetic estimate, then
+the real 1,711-route feed: graph builds in **≈151 ms**, a full two-pass NCR
+search in **≈141 ms**. Any failure falls back to the synthetic estimate, then
 to the NCR out-of-area message — routing never blocks the guide, and never
 blocks the alarm.
 
 > UV Express stays a synthetic estimate: the feed contains no UV Express data,
 > and the paper notes that gap in its Scope and Limitations.
+
+---
+
+## Discreet emergency shortcuts (R7 / R8)
+
+Triple **Volume-Up → SOS**, triple **Volume-Down → fake call** — and they must
+work with the screen off and the phone in a pocket. `Activity.dispatchKeyEvent`
+only sees keys while the app has window focus, so that path is dead when locked.
+`MediaButtonService` (a `mediaPlayback` foreground service) solves it:
+
+- **Capture.** An always-active `MediaSession` with a **remote `VolumeProvider`**
+  receives volume keys even while asleep, because Android handles them in
+  `interceptKeyBeforeQueueing` and routes them to the active remote-volume
+  session. (A `MediaSession.Callback` must be registered or the framework never
+  routes keys to it — found on device.) Each press is relayed to the real audio
+  stream, so device volume still works.
+- **Priority vs. other media (the "Spotify problem").** Volume keys route to the
+  highest-priority session declaring *remote* volume
+  (`getDefaultVolumeSession`), which considers **only** remote-volume sessions —
+  locally-playing apps like Spotify/YouTube are never candidates, so they can't
+  steal the keys *as long as our session stays active*. A **silent, zero-volume
+  keep-alive track** (requesting **no audio focus**, so it never pauses or ducks
+  the user's music) plus a 20 s playing-state re-assertion keep it from ageing
+  out. Verified on hardware with a live Spotify stream.
+- **Background Activity Launch resolution.** Android 10+ blocks `startActivity`
+  from a backgrounded service (`BAL_BLOCK`). The fake call / SOS surface via a
+  **full-screen-intent notification** instead — BAL-exempt, auto-launching over
+  the keyguard when the screen is off, and a tappable heads-up when it's on.
+- **Detection & safety.** Triple-press timing (1600 ms window) runs natively so
+  it's independent of the Flutter engine, with a **3 s cooldown** so a key burst
+  can't double-fire (a double SOS would send duplicate SMS). SOS reaches the live
+  engine silently (no screen wake); callbacks run on a background thread, off the
+  Flutter UI thread.
 
 ---
 
@@ -191,7 +225,9 @@ navalert/
 ├── android/                          # Android project
 │   └── app/src/main/
 │       ├── AndroidManifest.xml       #   permissions (location, SMS, notifications…)
-│       └── kotlin/ph/edu/pup/navalert/MainActivity.kt  # native SMS + volume-key bridge
+│       └── kotlin/ph/edu/pup/navalert/
+│           ├── MainActivity.kt        #   native SMS + lock-screen + shortcut bridge
+│           └── MediaButtonService.kt  #   screen-off volume shortcuts (R7/R8)
 │
 ├── test/                             # unit tests
 │   ├── navalert_test.dart            #   alarm math, fares, overshoot, behaviour
@@ -397,12 +433,16 @@ service over a real commute.
 ## Unit tests
 
 ```powershell
-flutter test
+flutter test    # 124 passing
 ```
 
-Covers the adaptive lead-radius math, stage escalation, the consecutive-fix
-overshoot latch, behavioural window learning, and the LTFRB fare matrix /
-mode-priority filters.
+Covers the adaptive lead-radius math and stage escalation, the consecutive-fix
+overshoot latch, behavioural window learning, the LTFRB fare matrix and
+mode-priority filters, **Dijkstra routing correctness** (transfer penalty,
+3-transfer cap, deduplication) including a pass over the full production GTFS
+feed, NCR boundary checks, live commute-guide step advancement, Data Dictionary
+round-trips, and bundled-asset integrity. A full breakdown is in
+[docs/CHANGELOG-functional-phase.md](docs/CHANGELOG-functional-phase.md).
 
 ---
 
