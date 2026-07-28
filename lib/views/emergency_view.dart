@@ -157,12 +157,18 @@ class EmergencyView extends StatelessWidget {
                     trailing: const Icon(Icons.phone_callback,
                         color: NavAlertColors.accent),
                     onTap: () async {
+                      // Bug fix: the caller name must follow the CHOSEN
+                      // recording, otherwise picking "Dad call recording" still
+                      // showed "Mom". Derive the display name from the recording
+                      // title ("Dad call recording" → "Dad") and persist it so
+                      // the call screen and lock-screen notification agree.
+                      final caller = r.title.split(' ').first;
                       app.fakeCallConfig.recordingId = r.recordingId;
+                      app.fakeCallConfig.callerName = caller;
                       await app.saveFakeCallConfig();
                       if (!context.mounted) return;
                       final vm = context.read<EmergencyViewModel>();
-                      await vm.startFakeCall(
-                          callerName: app.fakeCallConfig.callerName);
+                      await vm.startFakeCall(callerName: caller);
                       if (context.mounted) {
                         Navigator.of(context).push(MaterialPageRoute(
                             fullscreenDialog: true,

@@ -178,9 +178,21 @@ class MediaButtonService : Service() {
                         audio.getStreamVolume(AudioManager.STREAM_MUSIC) * 100 / musicMax
                 }
 
-                detectTriplePress(direction)
+                // Bug fix (ghost triggers): only treat volume presses as the
+                // emergency shortcut when the rider CAN'T just use the in-app
+                // buttons — i.e. the screen is off, OR NavAlert is not in the
+                // foreground. While the app is open with the screen on (e.g.
+                // previewing an alarm sound in Settings), normal volume
+                // adjustments must NOT be read as a triple-press shortcut.
+                if (isShortcutContext()) detectTriplePress(direction)
             }
         }
+    }
+
+    private fun isShortcutContext(): Boolean {
+        val pm = getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+        val screenOn = pm.isInteractive
+        return !screenOn || !MainActivity.activityResumed
     }
 
     /** Native triple-press within [WINDOW_MS], per direction. */
