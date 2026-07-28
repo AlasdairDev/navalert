@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
 import '../services/hardware_buttons.dart';
+import '../services/home_widget_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../viewmodels/history_viewmodel.dart';
@@ -41,10 +43,12 @@ class _ShellViewState extends State<ShellView> {
   int _index = 2; // Home
   StreamSubscription? _sosSub;
   StreamSubscription? _fakeSub;
+  StreamSubscription? _widgetSub;
 
   @override
   void initState() {
     super.initState();
+    _wireHomeWidgetShortcuts();
     // ─── DO NOT MODIFY LOGIC (entire block) ───────────────────────────────
     // These streams are fed by the native MediaButtonService (screen-off
     // triple-Volume shortcuts, R7/R8). Removing/reordering start() or either
@@ -65,6 +69,24 @@ class _ShellViewState extends State<ShellView> {
     // ──────────────────────────────────────────────────────────────────────
   }
 
+  /// Routes taps on the home-screen App Widget (Batch 3). The SOS button
+  /// launches the app with the `navalert://sos` URI; both the cold-launch case
+  /// (initiallyLaunchedFromHomeWidget) and the warm case (widgetClicked stream)
+  /// fire the same SOS flow as the volume shortcut. A plain body tap
+  /// (`navalert://open`) just brings the app forward — no action needed.
+  void _wireHomeWidgetShortcuts() {
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetUri);
+    _widgetSub = HomeWidget.widgetClicked.listen(_handleWidgetUri);
+  }
+
+  void _handleWidgetUri(Uri? uri) {
+    if (!mounted || !HomeWidgetService.isSosUri(uri)) return;
+    final em = context.read<EmergencyViewModel>();
+    em.fireSos();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Widget SOS — sending your location to your contacts…')));
+  }
+
   Future<void> _launchFakeCall() async {
     final em = context.read<EmergencyViewModel>();
     await em.startFakeCall(
@@ -78,6 +100,7 @@ class _ShellViewState extends State<ShellView> {
   void dispose() {
     _sosSub?.cancel();
     _fakeSub?.cancel();
+    _widgetSub?.cancel();
     super.dispose();
   }
 

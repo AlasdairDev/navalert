@@ -68,6 +68,17 @@
             android:name=".MediaButtonService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <!-- Home-screen App Widget (Batch 3): live trip status + one-tap SOS. -->
+        <receiver
+            android:name=".NavAlertWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/navalert_widget_info" />
+        </receiver>
     </application>
 
     <queries>
