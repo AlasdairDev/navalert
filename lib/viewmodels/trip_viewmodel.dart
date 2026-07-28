@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -30,11 +31,30 @@ enum TripPhase { monitoring, alarmStage1, alarmStage2, alarmStage3, overshootPro
 /// return-route assistance via Google Maps, and raises the "Signal Lost"
 /// fallback alarm when GPS drops out (UC-1 Exception 2).
 class TripViewModel extends ChangeNotifier {
-  final _db = DatabaseService.instance;
-  final _sound = SoundService.instance;
-  final _lockWidget = TripNotificationService.instance;
-  final _homeWidget = HomeWidgetService.instance;
+  final DatabaseService _db;
+  final SoundService _sound;
+  final TripNotificationService _lockWidget;
+  final HomeWidgetService _homeWidget;
+  final Stream<Position> Function(LocationSettings settings)?
+      _positionStreamFactory;
   static const _uuid = Uuid();
+
+  /// Every parameter is a test seam and defaults to the production singleton, so
+  /// the app always constructs `TripViewModel()` unchanged. Tests inject stub
+  /// collaborators plus a [positionStreamFactory] to drive the whole UC-5/UC-6
+  /// trip flow from a mock GPS stream, headless — no device, DB, or audio.
+  /// DO NOT MODIFY LOGIC: the defaults keep production behaviour identical.
+  TripViewModel({
+    DatabaseService? db,
+    SoundService? sound,
+    TripNotificationService? lockWidget,
+    HomeWidgetService? homeWidget,
+    Stream<Position> Function(LocationSettings settings)? positionStreamFactory,
+  })  : _db = db ?? DatabaseService.instance,
+        _sound = sound ?? SoundService.instance,
+        _lockWidget = lockWidget ?? TripNotificationService.instance,
+        _homeWidget = homeWidget ?? HomeWidgetService.instance,
+        _positionStreamFactory = positionStreamFactory;
 
   /// Figure 26/27 — unresponsive window before the next stage fires.
   static const stageEscalationDelay = Duration(seconds: 30);
@@ -115,10 +135,19 @@ class TripViewModel extends ChangeNotifier {
       accuracy: LocationAccuracy.bestForNavigation,
       distanceFilter: 0,
     );
-    _lastFixAt = DateTime.now();
-    _sub = Geolocator.getPositionStream(
-            locationSettings: _mobileSettings() ?? settings)
-        .listen(_onFix, onError: (e) {
+    // clock.now() is the real wall clock in production and the virtual clock
+    // under fakeAsync — the watchdog compares two clock.now() readings, so a
+    // test can fast-forward the "Signal Lost" gap without waiting 90 real
+    // seconds. Must pair with the clock.now() read in the watchdog below.
+    _lastFixAt = clock.now();
+    // The factory is null in production, so this is exactly the same stream as
+    // before; a test supplies a mock stream to drive the flow deterministically.
+    final factory = _positionStreamFactory;
+    final positionStream = factory != null
+        ? factory(settings)
+        : Geolocator.getPositionStream(
+            locationSettings: _mobileSettings() ?? settings);
+    _sub = positionStream.listen(_onFix, onError: (e) {
       error = 'GPS signal lost — keeping last known distance.';
       notifyListeners();
     });
@@ -146,7 +175,7 @@ class TripViewModel extends ChangeNotifier {
       final last = _lastFixAt;
       if (last == null || !isActive || signalLostAlarm) return;
       if (phase != TripPhase.monitoring) return;
-      if (DateTime.now().difference(last) > signalLostThreshold) {
+      if (clock.now().difference(last) > signalLostThreshold) {
         signalLostAlarm = true;
         error = 'Signal Lost — GPS unavailable for a prolonged period.';
         _sound.playAlarmStage(2, trip?.alarmSound ?? 'Digital Clock',
@@ -168,7 +197,7 @@ class TripViewModel extends ChangeNotifier {
     final engine = _engine;
     if (t == null || engine == null) return;
 
-    _lastFixAt = DateTime.now();
+    _lastFixAt = clock.now(); // see the watchdog note in startTrip
     // Await the fallback-alarm teardown: its stopAll() must finish before a
     // destination stage can start playing below, or the late stop lands on
     // top of the new alarm and silences the alert meant to wake the rider.
