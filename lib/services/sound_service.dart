@@ -18,10 +18,14 @@ class SoundService {
   final AudioPlayer _voicePlayer = AudioPlayer();
   bool _configured = false;
 
-  /// Tells the native MediaButtonService to pause its silent keep-alive
+  /// DO NOT MODIFY LOGIC: Batch 2 fix for "alarm triggers visually but makes no
+  /// sound". Tells the native MediaButtonService to pause its silent keep-alive
   /// AudioTrack while an alarm or ringtone is playing, then resume it after.
   /// The keep-alive (which holds the volume-shortcut session's priority) was
-  /// occupying the media audio path and suppressing the alarm sound.
+  /// occupying the media audio path and suppressing the alarm sound. Every
+  /// play* path must _yieldAudio(true) before playing and every stop* must
+  /// _yieldAudio(false) after — drop either half and the alarm goes silent
+  /// again or the volume shortcuts lose priority.
   static const _yieldChannel = MethodChannel('navalert/audioyield');
   Future<void> _yieldAudio(bool active) async {
     try {

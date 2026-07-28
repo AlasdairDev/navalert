@@ -1,14 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  NavAlert home-screen widget (Batch 3).
+  NavAlert home-screen widget (Batch 3) — THIS is the widget's visual surface.
+
+  TODO (UI Team): restyle freely — colours, textSize, textStyle, padding,
+  margins, the "SOS — send my location" copy, and the two background drawables
+  (@drawable/widget_bg, @drawable/widget_sos_bg). Match the in-app theme
+  (NavAlertColors) where you can; RemoteViews can't read Flutter's theme so the
+  hex values are duplicated here on purpose.
+
+  DO NOT MODIFY LOGIC: the android:id values below are referenced by name in
+  NavAlertWidgetProvider.kt (setTextViewText / setOnClickPendingIntent).
+  Renaming or removing an id — or the widget_root / widget_sos tap targets —
+  breaks the live updates and the one-tap SOS. Restyle the views, keep the ids.
+
   RemoteViews is limited (basic views + text/image only), so this is a clean
   functional layout, not a pixel-match of the in-app screens.
-    @+id/widget_root       tap → opens the app
-    @+id/widget_status     "Monitoring" / "No active trip"
+    @+id/widget_root         tap → opens the app (navalert://open)
+    @+id/widget_status       "Monitoring" / "No active trip"
     @+id/widget_destination  destination name
-    @+id/widget_distance   "1.2 km away"
-    @+id/widget_eta        "ETA 8 min"
-    @+id/widget_sos        tap → one-tap SOS (navalert://sos)
+    @+id/widget_distance     "1.2 km away"
+    @+id/widget_eta          "ETA 8 min"
+    @+id/widget_sos          tap → one-tap SOS (navalert://sos)
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
