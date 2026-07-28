@@ -12,6 +12,7 @@ import '../services/adaptive_alarm_engine.dart';
 import '../services/database_service.dart';
 import '../services/gtfs_service.dart';
 import '../services/guide_progress.dart';
+import '../services/home_widget_service.dart';
 import '../services/sound_service.dart';
 import '../services/trip_notification_service.dart';
 
@@ -32,6 +33,7 @@ class TripViewModel extends ChangeNotifier {
   final _db = DatabaseService.instance;
   final _sound = SoundService.instance;
   final _lockWidget = TripNotificationService.instance;
+  final _homeWidget = HomeWidgetService.instance;
   static const _uuid = Uuid();
 
   /// Figure 26/27 — unresponsive window before the next stage fires.
@@ -56,6 +58,7 @@ class TripViewModel extends ChangeNotifier {
   Timer? _snoozeTimer;
   Timer? _signalWatchdog;
   DateTime? _lastFixAt;
+  DateTime? _lastHomeWidgetPush;
   DateTime? _alarmShownAt;
   String? _activeAlarmId;
   double? _lastLat;
@@ -103,6 +106,7 @@ class TripViewModel extends ChangeNotifier {
         destination: t.destinationLabel,
         distanceM: distanceM,
         etaMinutes: etaMinutes);
+    _pushHomeWidget(force: true);
 
     // distanceFilter 0: fixes keep arriving even when the vehicle is
     // stopped in traffic — otherwise a long red light would trip the
@@ -183,6 +187,7 @@ class TripViewModel extends ChangeNotifier {
         destination: t.destinationLabel,
         distanceM: distanceM,
         etaMinutes: etaMinutes);
+    _pushHomeWidget();
 
     // Overshoot detection first — a bypassed stop outranks staging.
     final past = engine.checkOvershoot(distanceM, accuracyM: pos.accuracy);
@@ -226,6 +231,44 @@ class TripViewModel extends ChangeNotifier {
     if (guide.markDone()) notifyListeners();
   }
 
+  /// Human-readable trip state for the home-screen widget.
+  String get _homeWidgetStatus => switch (phase) {
+        TripPhase.monitoring => 'Monitoring',
+        TripPhase.alarmStage1 ||
+        TripPhase.alarmStage2 ||
+        TripPhase.alarmStage3 =>
+          'Approaching stop',
+        TripPhase.overshootPrompt ||
+        TripPhase.overshootConfirmed =>
+          'Overshoot',
+        TripPhase.arrived => 'Arrived',
+        TripPhase.ended => 'No active trip',
+      };
+
+  /// Pushes trip state to the home-screen App Widget. Throttled to ~15s during
+  /// steady monitoring (a RemoteViews rebuild is far heavier than a state
+  /// change), but [force] bypasses the throttle for lifecycle events — trip
+  /// start, each alarm stage, and trip end — so those land immediately.
+  void _pushHomeWidget({bool force = false}) {
+    final t = trip;
+    if (t == null) return;
+    final now = DateTime.now();
+    if (!force &&
+        _lastHomeWidgetPush != null &&
+        now.difference(_lastHomeWidgetPush!) < const Duration(seconds: 15)) {
+      return;
+    }
+    _lastHomeWidgetPush = now;
+    // Fire-and-forget: the widget is a convenience surface and must never
+    // block or fault the monitoring loop.
+    _homeWidget.showTrip(
+      destination: t.destinationLabel,
+      distanceM: distanceM,
+      etaMinutes: etaMinutes,
+      status: _homeWidgetStatus,
+    );
+  }
+
   void _fireStage(int stage) {
     // Reached from timers as well as GPS fixes, so the trip may already be
     // over by the time this runs — never force-unwrap here.
@@ -253,6 +296,7 @@ class TripViewModel extends ChangeNotifier {
     _sound.playAlarmStage(stage, t.alarmSound,
         vibrationOnly: t.vibrationOnlyMode,
         highIntensity: _engine?.highIntensity ?? false);
+    _pushHomeWidget(force: true);
     _scheduleEscalation(stage);
   }
 
@@ -459,6 +503,7 @@ class TripViewModel extends ChangeNotifier {
   Future<void> _endTrip(String status) async {
     await _teardownMonitoring();
     await _lockWidget.cancel();
+    _homeWidget.showIdle();
     final t = trip;
     if (t != null && t.endedAt == null) {
       t
