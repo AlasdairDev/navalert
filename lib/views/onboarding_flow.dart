@@ -314,6 +314,13 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
           order: i + 1);
       saved++;
     }
+    // Grant SEND_SMS now, while we're in the foreground with a dialog we can
+    // show. A background SOS (screen off, volume shortcut) cannot request a
+    // permission headlessly — so if it isn't granted here, the automatic SMS
+    // would silently fail later. Requesting at contact-setup is the right time.
+    if (saved > 0 && !await Permission.sms.isGranted) {
+      await Permission.sms.request();
+    }
     if (!mounted) return;
     if (saved == 0 && widget.inOnboarding) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
