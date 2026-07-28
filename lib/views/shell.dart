@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/theme.dart';
 import '../services/hardware_buttons.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../viewmodels/history_viewmodel.dart';
+import '../viewmodels/trip_viewmodel.dart';
+import 'active_trip_view.dart';
 import 'emergency_view.dart';
 import 'fake_call_view.dart';
 import 'favorites_view.dart';
@@ -87,10 +90,43 @@ class _ShellViewState extends State<ShellView> {
       EmergencyView(),
       SettingsView(),
     ];
+    // DO NOT MODIFY LOGIC: a trip stays active in the ViewModel even if the
+    // ActiveTripView route is lost when Android backgrounds/kills the activity.
+    // This bar lets the rider get back to the live trip instead of being
+    // stranded on the shell. Keep the isActive check + the re-push.
+    final tripActive = context.watch<TripViewModel>().isActive;
     return Scaffold(
       // DO NOT MODIFY LOGIC: IndexedStack keeps all 5 tabs alive (state is
       // preserved across tab switches). Keep the 5 pages and their order.
-      body: IndexedStack(index: _index, children: pages),
+      body: Column(children: [
+        if (tripActive)
+          // TODO (UI Team): restyle this "resume trip" bar (colors, height,
+          // icon, copy) — but keep the onTap that re-opens ActiveTripView.
+          Material(
+            color: NavAlertColors.primaryButton,
+            child: InkWell(
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => const ActiveTripView())),
+              child: const SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(children: [
+                    Icon(Icons.directions_walk, size: 18, color: Colors.white),
+                    SizedBox(width: 10),
+                    Expanded(
+                        child: Text('Trip in progress — tap to return',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600))),
+                    Icon(Icons.chevron_right, color: Colors.white),
+                  ]),
+                ),
+              ),
+            ),
+          ),
+        Expanded(child: IndexedStack(index: _index, children: pages)),
+      ]),
       // TODO (UI Team): the bottom nav's look (colors, selected highlight,
       // shape, label visibility) is mostly driven by the theme's
       // bottomNavigationBarTheme — restyle there so it stays consistent.

@@ -89,14 +89,14 @@ class SosService {
       'triggered_at': stamp.toIso8601String(),
     });
 
-    // Queue-and-retry when nothing went out (UC-7 Exception 1).
+    // Queue-and-retry when nothing went out (UC-7 Exception 1). We do NOT open
+    // the SMS composer intent here anymore: the SOS is meant to send silently
+    // in the background (screen off, from the volume shortcut), where launching
+    // a composer is blocked by Android's background-activity policy and would
+    // never send. Direct native SmsManager + the background retry is the whole
+    // point of R8 — no user interaction required.
     if (sent == 0) {
       _queueRetry(sosId, contacts.take(3).toList(), message);
-      // Also offer the SMS composer as an immediate manual fallback.
-      final to = contacts.map((c) => c.phoneNumber).join(';');
-      final uri = Uri(
-          scheme: 'smsto', path: to, queryParameters: {'body': message});
-      if (await canLaunchUrl(uri)) await launchUrl(uri);
     }
     return sent;
   }

@@ -69,9 +69,13 @@ class _FakeCallViewState extends State<FakeCallView> {
                 // down the lock-screen notification); answer → play the chosen
                 // recording + start the call timer. Restyle the buttons, keep
                 // the handlers. Red/green are the universal call colours — keep.
-                _roundButton(Icons.call_end, Colors.red, () async {
-                  await em.endFakeCall();
-                  if (mounted) Navigator.of(this.context).pop();
+                // Bug fix: pop FIRST so the screen closes on the first tap.
+                // endFakeCall's native teardown (stop audio, clear the
+                // lock-screen window) is slow; awaiting it before popping made
+                // the End button feel unresponsive. Fire-and-forget the cleanup.
+                _roundButton(Icons.call_end, Colors.red, () {
+                  Navigator.of(this.context).pop();
+                  em.endFakeCall();
                 }),
                 _roundButton(Icons.call, Colors.green, () async {
                   final rec = app.selectedRecording;
@@ -85,9 +89,10 @@ class _FakeCallViewState extends State<FakeCallView> {
               // whole screen jumps left the instant the call is answered,
               // which instantly breaks the "real dialer" illusion.
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                _roundButton(Icons.call_end, Colors.red, () async {
-                  await em.endFakeCall();
-                  if (mounted) Navigator.of(this.context).pop();
+                // Pop first, tear down after (see the incoming-call branch).
+                _roundButton(Icons.call_end, Colors.red, () {
+                  Navigator.of(this.context).pop();
+                  em.endFakeCall();
                 }),
               ]),
             const SizedBox(height: 40),
