@@ -24,6 +24,11 @@ import es.antonborri.home_widget.HomeWidgetProvider
  */
 class NavAlertWidgetProvider : HomeWidgetProvider() {
 
+    // DO NOT MODIFY LOGIC (whole method): reads the trip state pushed from Dart
+    // and binds it to the RemoteViews + wires the two tap targets. UI changes
+    // belong in res/layout/navalert_widget.xml and the widget drawables, NOT
+    // here — the setTextViewText/setOnClickPendingIntent ids and the SOS URI
+    // must stay exactly as they are or live updates / one-tap SOS break.
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,

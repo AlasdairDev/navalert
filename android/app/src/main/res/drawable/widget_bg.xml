@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- NavAlert widget background — deep purple night-commute theme (Fig 14-33). -->
+<!-- NavAlert widget background — deep purple night-commute theme (Fig 14-33).
+     TODO (UI Team): restyle the fill colour / corner radius. USE THEME: match
+     NavAlertColors.background — kept as a literal hex because RemoteViews
+     drawables can't read Flutter's theme. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#33224E" />
