@@ -62,6 +62,11 @@ class HomeViewModel extends ChangeNotifier {
   /// why no routes are listed (the alarm itself still works anywhere).
   String? guideUnavailableReason;
 
+  /// True when the current suggestions came from the SYNTHETIC fallback (no
+  /// direct GTFS route), so the UI can label them as estimates rather than
+  /// implying an exact named terminal. False for real GTFS-matched routes.
+  bool suggestionsAreEstimates = false;
+
   /// True while [currentLat]/[currentLng] hold a placeholder rather than a
   /// real fix, so callers can block trip confirmation (UC-4 Exception 2).
   bool locationIsFallback = false;
@@ -263,9 +268,17 @@ class HomeViewModel extends ChangeNotifier {
           journeys: journeys,
           legsOut: _legsBySuggestion,
         );
-        if (built.isNotEmpty) return built;
+        if (built.isNotEmpty) {
+          // Real GTFS routes: boarding/alighting stops are actual named
+          // terminals, so the UI can show them as exact locations.
+          suggestionsAreEstimates = false;
+          return built;
+        }
       }
     } catch (_) {/* fall through to synthetic */}
+    // No GTFS match — fall back to the synthetic engine. Its "terminals" are
+    // generic ("nearest boarding point"), so the UI must label these estimates.
+    suggestionsAreEstimates = true;
     return _routeEngine.buildSuggestions(
       tripId: trip.tripId,
       originLabel: trip.originLabel,
