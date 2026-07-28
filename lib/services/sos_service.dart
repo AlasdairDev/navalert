@@ -7,13 +7,17 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import 'database_service.dart';
+import 'geocoding_service.dart';
 import '../models/models.dart';
 
 /// Emergency SOS (Requirement R8, Specific Objective 4 — UC-7).
 ///
-/// Sends the commuter's exact GPS coordinates + timestamp to up to three
-/// pre-saved emergency contacts through **Native Android SMS** (SmsManager
-/// via a platform channel) — no mobile data or internet required.
+/// Sends the commuter's location — the reverse-geocoded street address (when a
+/// data signal is available) plus the exact GPS coordinates — and a timestamp
+/// to up to three pre-saved emergency contacts through **Native Android SMS**
+/// (SmsManager via a platform channel). The SMS itself needs no mobile data or
+/// internet; only the optional address lookup does, and it is skipped silently
+/// when offline so the coordinates always go out.
 ///
 /// UC-7 Exception 1: when no cellular signal is available the message is
 /// queued and retried in the background until it can be dispatched.
@@ -64,9 +68,7 @@ class SosService {
     final lat = pos?.latitude;
     final lng = pos?.longitude;
     final stamp = DateTime.now();
-    final locText = lat == null
-        ? 'Location unavailable (Real-time GPS lost)'
-        : 'Location: $lat, $lng\nhttps://maps.google.com/?q=$lat,$lng';
+    final locText = await _buildLocationText(lat, lng);
     final message = 'NAVALERT SOS — I need help!\n'
         '$locText\n'
         'Time: ${stamp.toLocal().toString().substring(0, 16)}';
@@ -99,6 +101,30 @@ class SosService {
       _queueRetry(sosId, contacts.take(3).toList(), message);
     }
     return sent;
+  }
+
+  /// Builds the location line(s) for the SOS message: the exact street address
+  /// (reverse-geocoded) plus the raw coordinates, so a contact reads a real
+  /// place — "Jesus Street, Pandacan, Manila" — not a link they have to open.
+  ///
+  /// The reverse lookup is best-effort and short-timed. SOS is offline-first
+  /// (R5) and time-critical: if there is no data signal, or the lookup is slow,
+  /// it is skipped silently and the coordinates still go out — they are the
+  /// reliable datum and must never be delayed or lost waiting on a name.
+  Future<String> _buildLocationText(double? lat, double? lng) async {
+    if (lat == null || lng == null) {
+      return 'Location unavailable (Real-time GPS lost)';
+    }
+    String? address;
+    try {
+      address = await GeocodingService()
+          .reverse(lat, lng)
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      address = null; // no signal / slow lookup — coordinates alone still help.
+    }
+    final coords = 'Coordinates: $lat, $lng';
+    return address == null ? coords : 'Location: $address\n$coords';
   }
 
   void _queueRetry(
