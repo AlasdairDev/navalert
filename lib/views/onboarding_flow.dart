@@ -173,9 +173,11 @@ class _PermissionsViewState extends State<PermissionsView>
     super.dispose();
   }
 
-  // When the user returns from a system settings page (e.g. battery
-  // optimization), re-read the real permission states so the toggles reflect
-  // what was actually granted instead of staying stuck off.
+  // DO NOT MODIFY LOGIC (observer + _syncStatuses): Batch 2 fix. When the user
+  // returns from a system settings page (e.g. battery optimization), re-read the
+  // real permission states so the toggles reflect what was actually granted
+  // instead of staying stuck off. Removing the observer or this resumed-hook
+  // re-introduces the "battery toggle snaps back to off" bug.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _syncStatuses();

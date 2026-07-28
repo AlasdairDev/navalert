@@ -74,6 +74,10 @@ class _ShellViewState extends State<ShellView> {
   /// (initiallyLaunchedFromHomeWidget) and the warm case (widgetClicked stream)
   /// fire the same SOS flow as the volume shortcut. A plain body tap
   /// (`navalert://open`) just brings the app forward — no action needed.
+  ///
+  /// DO NOT MODIFY LOGIC (both methods below): removing/reordering either
+  /// subscription, or the isSosUri gate, breaks the widget's one-tap SOS. The
+  /// only [EDIT] part is the SnackBar copy in _handleWidgetUri.
   void _wireHomeWidgetShortcuts() {
     HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetUri);
     _widgetSub = HomeWidget.widgetClicked.listen(_handleWidgetUri);

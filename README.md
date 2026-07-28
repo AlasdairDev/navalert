@@ -51,6 +51,7 @@ Package id: `ph.edu.pup.navalert`.
 | Overshoot detection + rerouting | consecutive increasing-distance latch → Google Maps `google.navigation:` intent (clipboard fallback) |
 | Database schema (Tables 15–29) | `services/database_service.dart` — all 13 tables, 8 FKs, unique indexes |
 | Lock Screen Widget (Figure 25) | `services/trip_notification_service.dart` — ongoing trip notification + "Open in App" / "End trip" |
+| Home Screen App Widget | `services/home_widget_service.dart` + native `NavAlertWidgetProvider.kt` — live ETA/distance on the launcher + one-tap SOS (see below) |
 | Stage time-escalation (Fig. 27–28) | Stage 2 after 30 s unresponsive; Stage 3 after Stage 2 unresponsive or third snooze; snoozed alarms re-fire |
 | "Signal Lost" fallback alarm (UC-1) | GPS watchdog fires a fallback alarm after 90 s without a fix |
 | app_state prompts (Table 15) | incomplete-setup banner (Home) + SOS insufficient-load warning (Emergency), dismissals persisted |
@@ -163,6 +164,33 @@ only sees keys while the app has window focus, so that path is dead when locked.
 
 ---
 
+## Home Screen App Widget
+
+A native Android home-screen widget puts the live commute on the launcher — no
+need to open the app to see where you are, and a **one-tap SOS** right on the
+widget for when opening the app first would cost precious seconds.
+
+- **Live trip readout.** While a trip runs it shows the destination, **distance
+  remaining, live ETA**, and status (Monitoring → Approaching stop → Overshoot →
+  Arrived). Idle, it reads "Tap to plan your commute."
+- **The bridge.** State is pushed from Dart through the
+  [`home_widget`](https://pub.dev/packages/home_widget) bridge
+  (`services/home_widget_service.dart`) into `NavAlertWidgetProvider.kt`, which
+  renders a lightweight `RemoteViews` layout. `TripViewModel` drives the updates:
+  **forced** on trip start, each alarm stage, and trip end, and **throttled to
+  ~15 s** during steady monitoring — a `RemoteViews` rebuild is far heavier than
+  a state change. Every push is fire-and-forget, so the widget can never fault or
+  stall the alarm-monitoring loop.
+- **One-tap SOS (safety enhancement).** The red **SOS** button launches the app
+  with a `navalert://sos` URI; the shell routes both the cold-launch
+  (`initiallyLaunchedFromHomeWidget`) and warm (`widgetClicked`) paths into the
+  **same `EmergencyViewModel.fireSos`** used by the triple-Volume shortcut — so
+  the rider can fire an SOS straight from the home screen without unlocking into
+  the app first. Distinct from the widget body tap (`navalert://open`), which
+  just opens the app.
+
+---
+
 ## Project structure — where to find things
 
 ```
@@ -212,6 +240,7 @@ navalert/
 │       ├── sos_service.dart          #   native SMS SOS + queue/retry + Call 911
 │       ├── sound_service.dart        #   alarm/ringtone audio + vibration
 │       ├── trip_notification_service.dart # lock-screen trip widget
+│       ├── home_widget_service.dart   #   home-screen App Widget bridge (live ETA + SOS)
 │       └── hardware_buttons.dart     #   volume-button triple-press channel
 │
 ├── assets/                           # bundled files (registered in pubspec.yaml)
@@ -225,9 +254,11 @@ navalert/
 ├── android/                          # Android project
 │   └── app/src/main/
 │       ├── AndroidManifest.xml       #   permissions (location, SMS, notifications…)
+│       ├── res/                       #   home-screen widget layout + drawables + info XML
 │       └── kotlin/ph/edu/pup/navalert/
 │           ├── MainActivity.kt        #   native SMS + lock-screen + shortcut bridge
-│           └── MediaButtonService.kt  #   screen-off volume shortcuts (R7/R8)
+│           ├── MediaButtonService.kt  #   screen-off volume shortcuts (R7/R8)
+│           └── NavAlertWidgetProvider.kt # home-screen App Widget (RemoteViews + SOS)
 │
 ├── test/                             # unit tests
 │   ├── navalert_test.dart            #   alarm math, fares, overshoot, behaviour
