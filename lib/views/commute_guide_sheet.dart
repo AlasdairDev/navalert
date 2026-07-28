@@ -109,9 +109,23 @@ class CommuteGuideSheet extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Ride leg: surface the boarding terminal prominently so the
+                  // rider knows exactly where to get on.
+                  if (step.transportMode != 'walk' &&
+                      (step.fromStop?.isNotEmpty ?? false))
+                    Text('Board at ${step.fromStop}',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            decoration:
+                                isDone ? TextDecoration.lineThrough : null)),
                   Text(step.instruction,
                       style: TextStyle(
                           fontSize: 13,
+                          color: (step.transportMode != 'walk' &&
+                                  (step.fromStop?.isNotEmpty ?? false))
+                              ? NavAlertColors.textSecondary
+                              : null,
                           decoration:
                               isDone ? TextDecoration.lineThrough : null)),
                   if (step.farePhp > 0 || step.durationMinutes > 0)
