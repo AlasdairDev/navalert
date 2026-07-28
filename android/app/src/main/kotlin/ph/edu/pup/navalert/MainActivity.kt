@@ -112,6 +112,19 @@ class MainActivity : FlutterActivity() {
         // (cold start from the background service). Stash it for Dart to pull.
         consumeShortcutIntent(intent)
 
+        // Lets SoundService tell the shortcut service to pause its silent
+        // keep-alive track while an alarm/ringtone plays (else it suppresses
+        // the sound), then resume it afterwards.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/audioyield")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "setAlarmActive") {
+                    MediaButtonService.instance?.setAudioYield(call.arguments as? Boolean ?: false)
+                    result.success(true)
+                } else {
+                    result.notImplemented()
+                }
+            }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/lockscreen")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
