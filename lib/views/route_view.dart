@@ -512,6 +512,7 @@ class _RouteViewState extends State<RouteView> {
 
   Widget _buildCommuteGuide(HomeViewModel home) {
     final s = home.selectedSuggestion!;
+    final estimate = home.suggestionsAreEstimates;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         IconButton(
@@ -520,6 +521,23 @@ class _RouteViewState extends State<RouteView> {
         const Text('Step-by-Step Commute Guide',
             style: TextStyle(fontWeight: FontWeight.w700)),
       ]),
+      // No direct GTFS route was matched — the boarding points below are
+      // approximate, so label the whole guide as an estimate to avoid sending
+      // the rider looking for a specific named terminal that isn't real data.
+      if (estimate)
+        Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: NavAlertColors.warning.withValues(alpha: 0.18),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Text('ESTIMATE — approximate boarding points',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: NavAlertColors.warning)),
+        ),
       Flexible(
         child: ListView.builder(
           shrinkWrap: true,
@@ -534,13 +552,43 @@ class _RouteViewState extends State<RouteView> {
               if (step.toStop != null && step.toStop!.isNotEmpty)
                 step.toStop!,
             ];
+            // For a RIDE leg, the boarding terminal is the thing the rider
+            // most needs — show it prominently, not buried in the instruction.
+            final isRide = step.transportMode != 'walk' &&
+                step.fromStop != null &&
+                step.fromStop!.isNotEmpty;
             return Card(
               child: ListTile(
                 dense: true,
                 leading: Icon(_modeIcon(step.transportMode),
                     color: NavAlertColors.accent),
-                title: Text(step.instruction,
-                    style: const TextStyle(fontSize: 13)),
+                title: isRide
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Prominent boarding terminal.
+                          Row(children: [
+                            const Icon(Icons.directions_bus_filled,
+                                size: 14, color: NavAlertColors.accent),
+                            const SizedBox(width: 5),
+                            Expanded(
+                              child: Text('Board at ${step.fromStop}',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700)),
+                            ),
+                          ]),
+                          const SizedBox(height: 2),
+                          Text(step.instruction,
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  color: NavAlertColors.textSecondary)),
+                        ],
+                      )
+                    : Text(step.instruction,
+                        style: const TextStyle(fontSize: 13)),
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
