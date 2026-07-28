@@ -4,6 +4,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:navalert/models/guide_leg.dart';
 import 'package:navalert/models/models.dart';
 import 'package:navalert/services/database_service.dart';
 import 'package:navalert/services/home_widget_service.dart';
@@ -51,6 +52,22 @@ void main() {
         destinationLat: destLat,
         destinationLng: destLng,
         alarmSound: 'Digital Clock',
+      );
+
+  RouteStep step(String mode, int n) => RouteStep(
+        stepId: 'step-$n',
+        suggestionId: 'sug',
+        stepNumber: n,
+        transportMode: mode,
+        instruction: '$mode leg $n',
+      );
+
+  /// A GTFS-matched guide leg that alights [metresNorth] of the destination
+  /// (auto-advances once the rider comes within 150 m of it).
+  GuideLeg gtfsLeg(String mode, double metresNorth, int n) => GuideLeg(
+        step: step(mode, n),
+        endLat: destLat + metresNorth / metresPerDegLat,
+        endLng: destLng,
       );
 
   late _FakeDb db;
@@ -328,6 +345,102 @@ void main() {
       expect(vm.isActive, isTrue);
       await vm.stopTrip();
       expect(vm.isActive, isFalse);
+      vm.dispose();
+    });
+  });
+
+  group('R6 — live commute guide with a transfer', () {
+    test('the guide advances leg-by-leg through a jeepney → bus transfer while '
+        'the alarm escalates in parallel', () async {
+      final vm = newVm();
+      // walk → ride jeepney (alight to transfer) → ride bus → walk to the stop.
+      // The bus leg following the jeepney leg IS the transfer.
+      final legs = [
+        gtfsLeg('walk', 1600, 1),
+        gtfsLeg('jeepney', 1000, 2), // alight here to transfer
+        gtfsLeg('bus', 200, 3), // boarded after the transfer
+        gtfsLeg('walk', 20, 4), // final walk to the destination
+      ];
+      await vm.startTrip(buildTrip(), guideLegs: legs);
+      expect(vm.guide.currentIndex, 0);
+      expect(vm.guide.currentLeg?.step.transportMode, 'walk');
+
+      // Still 200 m short of the first alight point — no advance yet.
+      gps.add(fixAt(1800));
+      await pumpEventQueue();
+      expect(vm.guide.currentIndex, 0);
+      expect(vm.phase, TripPhase.monitoring);
+
+      // Reach the first alight → board the jeepney.
+      gps.add(fixAt(1600));
+      await pumpEventQueue();
+      expect(vm.guide.currentIndex, 1);
+      expect(vm.guide.currentLeg?.step.transportMode, 'jeepney');
+
+      // Reach the transfer point → the guide switches jeepney → bus, and the
+      // proximity alarm's Stage 1 fires on the same fix.
+      gps.add(fixAt(1000));
+      await pumpEventQueue();
+      expect(vm.guide.currentIndex, 2);
+      expect(vm.guide.currentLeg?.step.transportMode, 'bus',
+          reason: 'the transfer leg is now active');
+      expect(vm.phase, TripPhase.alarmStage1);
+
+      // Alight the bus onto the final walk; Stage 2 fires.
+      gps.add(fixAt(200));
+      await pumpEventQueue();
+      expect(vm.guide.currentIndex, 3);
+      expect(vm.guide.currentLeg?.step.transportMode, 'walk');
+      expect(vm.phase, TripPhase.alarmStage2);
+
+      // Arrive: the guide completes and Stage 3 fires.
+      gps.add(fixAt(100));
+      await pumpEventQueue();
+      expect(vm.guide.isComplete, isTrue);
+      expect(vm.phase, TripPhase.alarmStage3);
+      // The full ride sequence was sounded once each, in order.
+      expect(sound.stagesPlayed, [1, 2, 3]);
+
+      await vm.stopTrip();
+      vm.dispose();
+    });
+
+    test('a synthetic transfer leg waits for a manual tap, then GPS resumes',
+        () async {
+      final vm = newVm();
+      // The middle leg has no coordinates (synthetic fallback) — a rider must
+      // confirm the transfer by tapping, because GPS can't know they boarded.
+      final legs = [
+        gtfsLeg('jeepney', 1000, 1),
+        GuideLeg(step: step('bus', 2)), // synthetic: no endLat/endLng
+        gtfsLeg('walk', 100, 3),
+      ];
+      await vm.startTrip(buildTrip(), guideLegs: legs);
+
+      // Alight the jeepney → advance onto the synthetic bus (transfer) leg.
+      gps.add(fixAt(1000));
+      await pumpEventQueue();
+      expect(vm.guide.currentIndex, 1);
+      expect(vm.guide.currentLeg?.canAutoAdvance, isFalse);
+
+      // GPS alone must never move past a synthetic leg, even standing on the
+      // final leg's coordinates.
+      gps.add(fixAt(100));
+      await pumpEventQueue();
+      expect(vm.guide.currentIndex, 1,
+          reason: 'a synthetic transfer leg never auto-advances');
+
+      // Rider taps "Done" to confirm the transfer → onto the final walk leg.
+      vm.markGuideLegDone();
+      expect(vm.guide.currentIndex, 2);
+      expect(vm.guide.currentLeg?.step.transportMode, 'walk');
+
+      // A fresh fix by the destination now completes the guide.
+      gps.add(fixAt(90));
+      await pumpEventQueue();
+      expect(vm.guide.isComplete, isTrue);
+
+      await vm.stopTrip();
       vm.dispose();
     });
   });
