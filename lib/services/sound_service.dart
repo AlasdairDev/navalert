@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.dart';
 import 'package:vibration/vibration.dart';
 
 /// Alarm-stage audio + haptics (Requirement R1).
@@ -16,6 +17,17 @@ class SoundService {
   final AudioPlayer _alarmPlayer = AudioPlayer();
   final AudioPlayer _voicePlayer = AudioPlayer();
   bool _configured = false;
+
+  /// Tells the native MediaButtonService to pause its silent keep-alive
+  /// AudioTrack while an alarm or ringtone is playing, then resume it after.
+  /// The keep-alive (which holds the volume-shortcut session's priority) was
+  /// occupying the media audio path and suppressing the alarm sound.
+  static const _yieldChannel = MethodChannel('navalert/audioyield');
+  Future<void> _yieldAudio(bool active) async {
+    try {
+      await _yieldChannel.invokeMethod('setAlarmActive', active);
+    } catch (_) {/* channel not ready / non-Android — ignore */}
+  }
 
   static const Map<String, String> alarmCatalog = {
     'Digital Clock': 'sounds/digital_clock.wav',
@@ -51,6 +63,8 @@ class SoundService {
   /// Blocked"). Chaining them would let one silent failure kill both.
   Future<void> playAlarmStage(int stage, String soundName,
       {bool vibrationOnly = false, bool highIntensity = false}) async {
+    // Free the audio path from the shortcut keep-alive so the alarm is audible.
+    await _yieldAudio(true);
     await _configure();
     switch (stage) {
       case 1:
@@ -105,6 +119,7 @@ class SoundService {
   }
 
   Future<void> previewAlarm(String soundName) async {
+    await _yieldAudio(true);
     await _configure();
     final asset = alarmCatalog[soundName] ?? alarmCatalog.values.first;
     await _alarmPlayer.stop();
@@ -119,6 +134,7 @@ class SoundService {
   /// methods therefore swallow playback errors instead of throwing, and still
   /// attempt the vibration that mimics an incoming call.
   Future<void> playRingtone() async {
+    await _yieldAudio(true);
     try {
       await _voicePlayer.stop();
       await _voicePlayer.setReleaseMode(ReleaseMode.loop);
@@ -154,6 +170,7 @@ class SoundService {
     try {
       await Vibration.cancel();
     } catch (_) {}
+    await _yieldAudio(false); // fake call ended — restore shortcut keep-alive
   }
 
   /// Runs on the dismiss/stop-trip path, so each teardown step is isolated:
@@ -169,5 +186,6 @@ class SoundService {
     try {
       await Vibration.cancel();
     } catch (_) {}
+    await _yieldAudio(false); // alarm ended — restore the shortcut keep-alive
   }
 }

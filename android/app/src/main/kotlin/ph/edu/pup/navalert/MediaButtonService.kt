@@ -84,6 +84,7 @@ class MediaButtonService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         audio = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         startForegroundNotification()
 
@@ -99,6 +100,20 @@ class MediaButtonService : Service() {
         assertPlaying()
         startKeepAlive()
         main.postDelayed(reassert, REASSERT_MS)
+    }
+
+    /**
+     * Yields (pauses) or restores the silent keep-alive track. The keep-alive
+     * holds the media audio path to keep the volume-shortcut session's
+     * priority; while an alarm or the fake-call ringtone plays, it must step
+     * aside or it suppresses that sound. Called from Dart (SoundService) at the
+     * start/end of every alarm and ringtone.
+     */
+    fun setAudioYield(yield: Boolean) = bg.post {
+        try {
+            if (yield) keepAlive?.pause() else keepAlive?.play()
+        } catch (_: Exception) {
+        }
     }
 
     /** (Re)declare the session as actively playing to hold volume priority. */
@@ -307,6 +322,7 @@ class MediaButtonService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
 
     override fun onDestroy() {
+        instance = null
         main.removeCallbacks(reassert)
         bgThread.quitSafely()
         try {
@@ -323,6 +339,11 @@ class MediaButtonService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        /** Live instance, so Dart (via MainActivity) can ask it to yield audio. */
+        @JvmStatic
+        @Volatile
+        var instance: MediaButtonService? = null
+
         const val EXTRA_SHORTCUT = "navalert_shortcut"
         private const val CHANNEL = "navalert_shortcuts"
         private const val FS_CHANNEL = "navalert_trigger"
