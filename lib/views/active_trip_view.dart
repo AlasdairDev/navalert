@@ -544,10 +544,16 @@ class _SlideToStopState extends State<_SlideToStop> {
         // the rider is stuck on this screen (PopScope blocks Back by design).
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onHorizontalDragUpdate: (d) => setState(
-              () => _drag = (_drag + d.delta.dx).clamp(0.0, maxDrag)),
+          // Track the finger's ABSOLUTE position within the pill, not an
+          // accumulated delta. Delta-accumulation desyncs when the horizontal
+          // drag recognizer wins the gesture arena a few frames late (the early
+          // deltas are lost), which made the knob feel stuck / not reach the
+          // end. localPosition is relative to this detector, so the knob
+          // follows the finger exactly. Threshold relaxed to 60%.
+          onHorizontalDragUpdate: (d) => setState(() =>
+              _drag = (d.localPosition.dx - height / 2).clamp(0.0, maxDrag)),
           onHorizontalDragEnd: (_) async {
-            if (_drag >= maxDrag * 0.75 && !_done) {
+            if (_drag >= maxDrag * 0.6 && !_done) {
               _done = true;
               setState(() => _drag = maxDrag);
               await widget.onCompleted();

@@ -153,11 +153,48 @@ class PermissionsView extends StatefulWidget {
   State<PermissionsView> createState() => _PermissionsViewState();
 }
 
-class _PermissionsViewState extends State<PermissionsView> {
+class _PermissionsViewState extends State<PermissionsView>
+    with WidgetsBindingObserver {
   bool _notifications = false;
   bool _location = false;
   bool _bluetooth = false;
   bool _battery = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _syncStatuses();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // When the user returns from a system settings page (e.g. battery
+  // optimization), re-read the real permission states so the toggles reflect
+  // what was actually granted instead of staying stuck off.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncStatuses();
+  }
+
+  Future<void> _syncStatuses() async {
+    final battery = await Permission.ignoreBatteryOptimizations.isGranted;
+    final bluetooth = await Permission.bluetoothConnect.isGranted;
+    final notif = await Permission.notification.isGranted;
+    final loc = await Geolocator.checkPermission();
+    if (!mounted) return;
+    setState(() {
+      _battery = battery;
+      _bluetooth = bluetooth;
+      _notifications = notif;
+      _location = loc == LocationPermission.always ||
+          loc == LocationPermission.whileInUse;
+    });
+  }
 
   Future<void> _toggleLocation(bool v) async {
     if (v) {
@@ -179,12 +216,16 @@ class _PermissionsViewState extends State<PermissionsView> {
   // request calls and the granted-state wiring.
   Future<void> _toggle(Permission perm, void Function(bool) set, bool v) async {
     if (v) {
-      final st = await perm.request();
-      set(st.isGranted);
+      await perm.request();
+      // Re-read the ACTUAL status rather than trusting request()'s return.
+      // ignoreBatteryOptimizations opens a system settings page and the
+      // immediate result is often stale — checking .isGranted after it settles
+      // reflects what the user actually chose, so the toggle stops snapping back.
+      set(await perm.isGranted);
     } else {
       set(false);
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   void _continue() => Navigator.of(context).pushReplacement(
