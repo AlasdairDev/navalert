@@ -350,19 +350,32 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
       }
       final existing =
           app.contacts.where((c) => c.contactOrder == i + 1).toList();
-      await app.saveContact(
-          contactId: existing.isEmpty ? null : existing.first.contactId,
-          name: name,
-          phone: phone,
-          order: i + 1);
-      saved++;
+      // Wrap the write: on a device where local storage is unavailable a
+      // failed save must surface an error, never silently swallow the tap so
+      // the rider is stuck unable to continue past this screen.
+      try {
+        await app.saveContact(
+            contactId: existing.isEmpty ? null : existing.first.contactId,
+            name: name,
+            phone: phone,
+            order: i + 1);
+        saved++;
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+            'Could not save contact ${i + 1} — please try again.')));
+        return;
+      }
     }
     // Grant SEND_SMS now, while we're in the foreground with a dialog we can
     // show. A background SOS (screen off, volume shortcut) cannot request a
     // permission headlessly — so if it isn't granted here, the automatic SMS
     // would silently fail later. Requesting at contact-setup is the right time.
+    // Time-boxed so a stuck permission dialog can never block Continue.
     if (saved > 0 && !await Permission.sms.isGranted) {
-      await Permission.sms.request();
+      try {
+        await Permission.sms.request().timeout(const Duration(seconds: 20));
+      } catch (_) {/* denied, or dialog stalled — proceed regardless */}
     }
     if (!mounted) return;
     if (saved == 0 && widget.inOnboarding) {
@@ -615,6 +628,9 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                       isExpanded: true,
                       value: app.selectedRecording?.recordingId,
                       hint: const Text('Select Recording'),
+                      // Shown only if the recordings list is somehow empty, so
+                      // the control never looks like a silently-dead button.
+                      disabledHint: const Text('No recordings available'),
                       dropdownColor: NavAlertColors.card,
                       items: app.recordings
                           .map((r) => DropdownMenuItem(

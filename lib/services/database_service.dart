@@ -50,7 +50,10 @@ class DatabaseService {
       version: 1,
       onConfigure: (d) => d.execute('PRAGMA foreign_keys = ON'),
       onCreate: _createSchema,
-      onOpen: _closeInterruptedTrips,
+      onOpen: (d) async {
+        await _ensureSeedData(d);
+        await _closeInterruptedTrips(d);
+      },
     );
     return _db!;
   }
@@ -244,28 +247,47 @@ class DatabaseService {
           REFERENCES alarm_events (alarm_id) ON DELETE SET NULL
       )''');
 
+  }
+
+  // DO NOT MODIFY LOGIC: seeds the singleton rows and the two built-in fake-call
+  // recordings (Figure 32). Runs on EVERY open — not just onCreate — with
+  // INSERT OR IGNORE, so a database created by an earlier build (an APK
+  // upgraded without uninstall) still gets the presets. Without them the
+  // "Select Recording" dropdown has no items and cannot be tapped. Idempotent:
+  // existing rows/recordings are never overwritten.
+  Future<void> _ensureSeedData(Database d) async {
     final now = DateTime.now().toIso8601String();
-    await d.insert('app_state', {'id': 1, 'updated_at': now});
-    await d.insert('user_settings', {'id': 1, 'updated_at': now});
-    await d.insert('transport_preferences', {'id': 1, 'updated_at': now});
-    await d.insert('fake_call_config', {'id': 1, 'updated_at': now});
-    // Built-in fake-call recordings (Figure 32 — Emergency screen).
-    await d.insert('recordings', {
-      'recording_id': 'preset-mom',
-      'title': 'Mom call recording',
-      'file_path': 'assets/sounds/fake_call_voice.wav',
-      'duration_seconds': 20,
-      'is_preset': 1,
-      'recorded_at': now,
-    });
-    await d.insert('recordings', {
-      'recording_id': 'preset-dad',
-      'title': 'Dad call recording',
-      'file_path': 'assets/sounds/fake_call_voice.wav',
-      'duration_seconds': 20,
-      'is_preset': 1,
-      'recorded_at': now,
-    });
+    const ignore = ConflictAlgorithm.ignore;
+    await d.insert('app_state', {'id': 1, 'updated_at': now},
+        conflictAlgorithm: ignore);
+    await d.insert('user_settings', {'id': 1, 'updated_at': now},
+        conflictAlgorithm: ignore);
+    await d.insert('transport_preferences', {'id': 1, 'updated_at': now},
+        conflictAlgorithm: ignore);
+    await d.insert('fake_call_config', {'id': 1, 'updated_at': now},
+        conflictAlgorithm: ignore);
+    await d.insert(
+        'recordings',
+        {
+          'recording_id': 'preset-mom',
+          'title': 'Mom call recording',
+          'file_path': 'assets/sounds/fake_call_voice.wav',
+          'duration_seconds': 20,
+          'is_preset': 1,
+          'recorded_at': now,
+        },
+        conflictAlgorithm: ignore);
+    await d.insert(
+        'recordings',
+        {
+          'recording_id': 'preset-dad',
+          'title': 'Dad call recording',
+          'file_path': 'assets/sounds/fake_call_voice.wav',
+          'duration_seconds': 20,
+          'is_preset': 1,
+          'recorded_at': now,
+        },
+        conflictAlgorithm: ignore);
   }
 
   // ---------- singletons ----------
