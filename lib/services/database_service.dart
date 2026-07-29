@@ -271,8 +271,8 @@ class DatabaseService {
         {
           'recording_id': 'preset-mom',
           'title': 'Mom call recording',
-          'file_path': 'assets/sounds/fake_call_voice.wav',
-          'duration_seconds': 20,
+          'file_path': _presetMomPath,
+          'duration_seconds': 36,
           'is_preset': 1,
           'recorded_at': now,
         },
@@ -282,13 +282,27 @@ class DatabaseService {
         {
           'recording_id': 'preset-dad',
           'title': 'Dad call recording',
-          'file_path': 'assets/sounds/fake_call_voice.wav',
-          'duration_seconds': 20,
+          'file_path': _presetDadPath,
+          'duration_seconds': 36,
           'is_preset': 1,
           'recorded_at': now,
         },
         conflictAlgorithm: ignore);
+
+    // DO NOT MODIFY LOGIC: self-heal the preset audio paths. Mom and Dad used
+    // to share ONE voice file, so both presets sounded identical. Databases
+    // created by an earlier build still hold that old path, and the INSERT
+    // above is IGNOREd for them — so the paths must be corrected explicitly
+    // here. Keeps a distinct female (Mom) and male (Dad) voice on every
+    // install, new or upgraded.
+    await d.update('recordings', {'file_path': _presetMomPath},
+        where: 'recording_id = ?', whereArgs: ['preset-mom']);
+    await d.update('recordings', {'file_path': _presetDadPath},
+        where: 'recording_id = ?', whereArgs: ['preset-dad']);
   }
+
+  static const _presetMomPath = 'assets/sounds/fake_call_mom.wav';
+  static const _presetDadPath = 'assets/sounds/fake_call_dad.wav';
 
   // ---------- singletons ----------
   Future<AppState> getAppState() async =>
