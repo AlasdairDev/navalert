@@ -307,6 +307,44 @@ class _PermissionsViewState extends State<PermissionsView>
 // =====================================================================
 // Figure 17 — Emergency Contacts Setup
 // =====================================================================
+/// One validated emergency-contact row, ready to persist.
+typedef ContactEntry = ({int order, String name, String phone});
+
+/// UC-2 Flow A — a bad number must be rejected before saving, or the SOS SMS
+/// would fail silently in an emergency. Allows the common Philippine formats
+/// (09171234567, +639171234567, and space/dash grouping).
+final _phonePattern = RegExp(r'^\+?[0-9\- ]{7,15}$');
+
+/// Pure validation of the three Emergency Contacts rows (Figure 17), split out
+/// of the View so it is directly unit-testable (see contact_form_test.dart).
+///
+/// DO NOT MODIFY LOGIC: a row with only ONE of name/phone filled is an
+/// explicit, named ERROR — never silently skipped. Skipping it was the cause
+/// of the "can't save then continue" bug: Continue saved nothing, and outside
+/// onboarding the screen then closed as if it had worked, losing the rider's
+/// input with no warning. Only a completely untouched row is skipped.
+({List<ContactEntry> entries, String? error}) validateContactRows(
+    List<String> names, List<String> phones) {
+  const none = <ContactEntry>[];
+  final entries = <ContactEntry>[];
+  for (var i = 0; i < 3; i++) {
+    final name = (i < names.length ? names[i] : '').trim();
+    final phone = (i < phones.length ? phones[i] : '').trim();
+    if (name.isEmpty && phone.isEmpty) continue; // untouched row — fine
+    if (name.isEmpty) {
+      return (entries: none, error: 'Contact ${i + 1}: enter a name.');
+    }
+    if (phone.isEmpty) {
+      return (entries: none, error: 'Contact ${i + 1}: enter a phone number.');
+    }
+    if (!_phonePattern.hasMatch(phone)) {
+      return (entries: none, error: 'Contact ${i + 1}: invalid phone number.');
+    }
+    entries.add((order: i + 1, name: name, phone: phone));
+  }
+  return (entries: entries, error: null);
+}
+
 class ContactsSetupView extends StatefulWidget {
   const ContactsSetupView({super.key, this.inOnboarding = true});
   final bool inOnboarding;
@@ -335,38 +373,54 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
   // validation (UC-2 Flow A — an invalid number must be rejected before save,
   // or SOS SMS would fail). Keep the validation + saveContact; the error
   // SnackBar copy is [EDIT].
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
   Future<void> _save() async {
     final app = context.read<AppViewModel>();
-    var saved = 0;
-    for (var i = 0; i < 3; i++) {
-      final name = _names[i].text.trim();
-      final phone = _phones[i].text.trim();
-      if (name.isEmpty || phone.isEmpty) continue;
-      if (!RegExp(r'^\+?[0-9\- ]{7,15}$').hasMatch(phone)) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Contact ${i + 1}: invalid phone number.')));
+
+    // DO NOT MODIFY LOGIC: validate FIRST and surface the exact problem. A
+    // half-filled row used to be skipped in silence, which is what made
+    // Continue appear to do nothing (in onboarding) or close the screen
+    // without saving (from Settings / the Home banner).
+    final result = validateContactRows(
+        [for (final c in _names) c.text], [for (final c in _phones) c.text]);
+    if (result.error != null) {
+      _toast(result.error!);
+      return;
+    }
+
+    if (result.entries.isEmpty) {
+      // Nothing was typed at all.
+      if (widget.inOnboarding) {
+        _toast('Add at least one contact, or tap Skip for now.');
         return;
       }
+      _next(); // opened from Settings and left untouched — just close.
+      return;
+    }
+
+    var saved = 0;
+    for (final e in result.entries) {
       final existing =
-          app.contacts.where((c) => c.contactOrder == i + 1).toList();
-      // Wrap the write: on a device where local storage is unavailable a
-      // failed save must surface an error, never silently swallow the tap so
-      // the rider is stuck unable to continue past this screen.
+          app.contacts.where((c) => c.contactOrder == e.order).toList();
+      // A failed write must surface an error, never silently swallow the tap.
       try {
         await app.saveContact(
             contactId: existing.isEmpty ? null : existing.first.contactId,
-            name: name,
-            phone: phone,
-            order: i + 1);
+            name: e.name,
+            phone: e.phone,
+            order: e.order);
         saved++;
       } catch (_) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
-            'Could not save contact ${i + 1} — please try again.')));
+        _toast('Could not save contact ${e.order} — please try again.');
         return;
       }
     }
+
     // Grant SEND_SMS now, while we're in the foreground with a dialog we can
     // show. A background SOS (screen off, volume shortcut) cannot request a
     // permission headlessly — so if it isn't granted here, the automatic SMS
@@ -378,9 +432,12 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
       } catch (_) {/* denied, or dialog stalled — proceed regardless */}
     }
     if (!mounted) return;
-    if (saved == 0 && widget.inOnboarding) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Add at least one contact, or tap Skip for now.')));
+
+    // DO NOT MODIFY LOGIC: never navigate away as if the save succeeded when
+    // nothing was written — that is silent data loss. This check is NOT gated
+    // on inOnboarding: the Settings and Home-banner entry points need it most.
+    if (saved == 0) {
+      _toast('Nothing was saved — please check the details and try again.');
       return;
     }
     _next();
