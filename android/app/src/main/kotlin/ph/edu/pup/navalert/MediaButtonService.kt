@@ -319,6 +319,11 @@ class MediaButtonService : Service() {
         }
     }
 
+    // DO NOT MODIFY LOGIC: START_STICKY fulfils UC-1 Exception 1 (Background
+    // Service Terminated) — if Android kills this foreground service under
+    // memory/battery pressure, the OS best-effort re-creates it (null intent)
+    // so the screen-off volume-shortcut capture (SOS / fake call) is restored
+    // without the rider reopening the app. Do not return START_NOT_STICKY.
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
 
     override fun onDestroy() {

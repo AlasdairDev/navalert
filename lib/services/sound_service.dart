@@ -16,7 +16,29 @@ class SoundService {
 
   final AudioPlayer _alarmPlayer = AudioPlayer();
   final AudioPlayer _voicePlayer = AudioPlayer();
-  bool _configured = false;
+
+  /// DO NOT MODIFY LOGIC: earphone-only alarm routing (the paper's "Bluetooth /
+  /// ear-phone only detection" toggle). Set from UserSettings.bluetoothEnabled
+  /// by AppViewModel. When true AND a headset is connected, the alarm is routed
+  /// through the earphones (USAGE_MEDIA) instead of the loud PUV speaker
+  /// (USAGE_ALARM) — quiet and non-disruptive in a crowded vehicle. When it is
+  /// false, or no headset is present, it falls back to the speaker.
+  bool earphoneOnlyAlarm = false;
+
+  /// Queries the native AudioManager for a connected headset (wired/BT/USB).
+  static const _routeChannel = MethodChannel('navalert/audioroute');
+  Future<bool> _isHeadsetConnected() async {
+    try {
+      return await _routeChannel.invokeMethod<bool>('isHeadsetConnected') ??
+          false;
+    } catch (_) {
+      return false; // channel not ready / non-Android — assume speaker.
+    }
+  }
+
+  /// Tracks the last audio-context routing applied so we only re-apply it when
+  /// the earphone/speaker decision actually flips. null forces the first apply.
+  bool? _lastEarphoneRoute;
 
   /// DO NOT MODIFY LOGIC: Batch 2 fix for "alarm triggers visually but makes no
   /// sound". Tells the native MediaButtonService to pause its silent keep-alive
@@ -41,18 +63,28 @@ class SoundService {
     'Air Horn': 'sounds/air_horn.wav',
   };
 
-  Future<void> _configure() async {
-    if (_configured) return;
+  /// DO NOT MODIFY LOGIC: decides the alarm's audio route. If earphone-only
+  /// routing is enabled AND a headset is connected, the alarm plays on the
+  /// MEDIA usage (which the OS routes to the earphones); otherwise it plays on
+  /// the ALARM usage (the loud speaker channel). Re-applies the audio context
+  /// only when the decision flips, so a mid-trip headset unplug on the next
+  /// stage escalation correctly falls back to the speaker.
+  Future<void> _applyAlarmRoute() async {
+    final earphone = earphoneOnlyAlarm && await _isHeadsetConnected();
+    if (_lastEarphoneRoute == earphone) return;
     try {
       await _alarmPlayer.setAudioContext(AudioContext(
-        android: const AudioContextAndroid(
-          usageType: AndroidUsageType.alarm,
+        android: AudioContextAndroid(
+          usageType:
+              earphone ? AndroidUsageType.media : AndroidUsageType.alarm,
           audioFocus: AndroidAudioFocus.gainTransient,
-          contentType: AndroidContentType.sonification,
+          contentType: earphone
+              ? AndroidContentType.music
+              : AndroidContentType.sonification,
         ),
       ));
+      _lastEarphoneRoute = earphone;
     } catch (_) {/* non-Android or unsupported — play on default channel */}
-    _configured = true;
   }
 
   /// Plays the escalating stage alarm. When [highIntensity] is set — a slow
@@ -69,7 +101,7 @@ class SoundService {
       {bool vibrationOnly = false, bool highIntensity = false}) async {
     // Free the audio path from the shortcut keep-alive so the alarm is audible.
     await _yieldAudio(true);
-    await _configure();
+    await _applyAlarmRoute();
     switch (stage) {
       case 1:
         if (highIntensity) {
@@ -124,7 +156,7 @@ class SoundService {
 
   Future<void> previewAlarm(String soundName) async {
     await _yieldAudio(true);
-    await _configure();
+    await _applyAlarmRoute();
     final asset = alarmCatalog[soundName] ?? alarmCatalog.values.first;
     await _alarmPlayer.stop();
     await _alarmPlayer.setReleaseMode(ReleaseMode.release);

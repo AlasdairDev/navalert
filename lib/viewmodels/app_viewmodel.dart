@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
 import '../services/database_service.dart';
+import '../services/sound_service.dart';
 
 /// App-wide ViewModel — app state, user settings, transport preferences,
 /// emergency contacts, fake-call configuration, favorites, the
@@ -34,8 +35,15 @@ class AppViewModel extends ChangeNotifier {
     recordings = await _db.getRecordings();
     favorites = await _db.getFavorites();
     loaded = true;
+    _applyEarphoneRouting();
     notifyListeners();
   }
+
+  /// DO NOT MODIFY LOGIC: mirrors the "Bluetooth / ear-phone only detection"
+  /// toggle into SoundService so the alarm can route through the earphones when
+  /// enabled. Called on load and after every settings save.
+  void _applyEarphoneRouting() =>
+      SoundService.instance.earphoneOnlyAlarm = settings.bluetoothEnabled == 'Allow';
 
   Future<void> completeOnboarding() async {
     appState.onboardingCompleted = true;
@@ -67,6 +75,7 @@ class AppViewModel extends ChangeNotifier {
 
   Future<void> saveSettings() async {
     await _db.saveUserSettings(settings);
+    _applyEarphoneRouting();
     notifyListeners();
   }
 
