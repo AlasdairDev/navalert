@@ -27,10 +27,20 @@ class NavAlertMap {
   static bool isWithinNcr(LatLng p) =>
       RouteEngine.isWithinNcr(p.latitude, p.longitude);
 
-  /// One tile layer for every map. `retinaMode` fixes the blur on
-  /// high-density screens; the larger `keepBuffer` holds already-fetched tiles
-  /// in memory across pan/zoom so revisited areas do not pop in again, and a
-  /// modest `panBuffer` pre-loads the immediate ring around the viewport.
+  /// One tile layer for every map.
+  ///
+  /// DO NOT MODIFY LOGIC (the buffer values): they control how many tiles are
+  /// fetched, and OSM's public server is rate-limited.
+  ///
+  /// `retinaMode` keeps the map sharp on high-density screens, but flutter_map
+  /// has no @2x OSM endpoint to use, so it *simulates* retina by fetching one
+  /// zoom level deeper — that is 4x the tiles for the same area. `panBuffer`
+  /// multiplies on top of that: every extra ring widens the grid in BOTH
+  /// directions, so panBuffer 2 turned a ~3x5 viewport (15 tiles) into 7x9
+  /// (63) — about 250 tiles per load once retina is applied, which is why the
+  /// map took so long to appear. panBuffer 0 fetches only what is on screen;
+  /// `keepBuffer` (memory-only, it never fetches) still holds tiles after they
+  /// scroll off, so panning back is instant.
   static TileLayer tiles(BuildContext context) => TileLayer(
         urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         userAgentPackageName: 'ph.edu.pup.navalert',
@@ -40,7 +50,7 @@ class NavAlertMap {
         // Cancels obsolete requests while flinging, and dedupes in-flight
         // tiles — the main network-latency win without a native cache DB.
         tileProvider: CancellableNetworkTileProvider(),
-        panBuffer: 2,
+        panBuffer: 0,
         keepBuffer: 8,
       );
 }
