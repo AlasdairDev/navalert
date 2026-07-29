@@ -49,6 +49,23 @@ void main() {
       expect(voice.existsSync(), isTrue);
       expect(voice.lengthSync(), greaterThan(0));
     });
+
+    test('the Mom and Dad preset voices are bundled', () {
+      for (final name in ['fake_call_mom.wav', 'fake_call_dad.wav']) {
+        final f = File('assets/sounds/$name');
+        expect(f.existsSync(), isTrue, reason: '$name is missing');
+        expect(f.lengthSync(), greaterThan(0), reason: '$name is empty');
+      }
+    });
+
+    // The point of having two presets: a female "Mom" and a male "Dad". They
+    // used to share ONE file, so picking Dad still played Mom's voice.
+    test('Mom and Dad are genuinely different recordings', () {
+      final mom = File('assets/sounds/fake_call_mom.wav').readAsBytesSync();
+      final dad = File('assets/sounds/fake_call_dad.wav').readAsBytesSync();
+      expect(mom.length, isNot(equals(dad.length)),
+          reason: 'Mom and Dad must not be the same audio file');
+    });
   });
 
   group('transit data', () {
