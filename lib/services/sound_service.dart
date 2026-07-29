@@ -184,6 +184,11 @@ class SoundService {
   }
 
   Future<void> playVoice(String filePath) async {
+    // DO NOT MODIFY LOGIC: like every other play* path, free the media output
+    // from the shortcut keep-alive AudioTrack first — without this the built-in
+    // Mom/Dad voice (and any recording) plays silently, because the always-on
+    // volume-shortcut session still occupies the audio path.
+    await _yieldAudio(true);
     try {
       await _voicePlayer.stop();
       await Vibration.cancel();
