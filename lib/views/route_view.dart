@@ -168,7 +168,12 @@ class _RouteViewState extends State<RouteView> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     isExpanded: true,
-                    value: sound,
+                    // Guard the value like Settings does: a non-catalog sound
+                    // (e.g. from an imported backup) must not crash the sheet
+                    // with DropdownButton's "value not in items" assertion.
+                    value: SoundService.alarmCatalog.containsKey(sound)
+                        ? sound
+                        : SoundService.alarmCatalog.keys.first,
                     dropdownColor: NavAlertColors.card,
                     items: SoundService.alarmCatalog.keys
                         .map((s) =>
