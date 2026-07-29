@@ -26,17 +26,34 @@ class AppViewModel extends ChangeNotifier {
   List<Favorite> favorites = [];
   bool loaded = false;
 
+  /// Set when the initial load could not read the local database (e.g. a device
+  /// where the encrypted store fails). Surfaced to the user; the app still opens
+  /// with default settings rather than hanging on the splash.
+  String? loadError;
+
+  // DO NOT MODIFY LOGIC: the splash gate ([LaunchView]) waits on `loaded`, so
+  // this MUST always finish and set loaded=true — otherwise the app hangs on
+  // the loading screen forever (groupmate-reported). Every DB read is wrapped:
+  // on failure the default-constructed models above are kept, an error is
+  // recorded, and the app proceeds instead of getting stuck.
   Future<void> load() async {
-    appState = await _db.getAppState();
-    settings = await _db.getUserSettings();
-    transportPrefs = await _db.getTransportPreferences();
-    fakeCallConfig = await _db.getFakeCallConfig();
-    contacts = await _db.getContacts();
-    recordings = await _db.getRecordings();
-    favorites = await _db.getFavorites();
-    loaded = true;
-    _applyEarphoneRouting();
-    notifyListeners();
+    try {
+      appState = await _db.getAppState();
+      settings = await _db.getUserSettings();
+      transportPrefs = await _db.getTransportPreferences();
+      fakeCallConfig = await _db.getFakeCallConfig();
+      contacts = await _db.getContacts();
+      recordings = await _db.getRecordings();
+      favorites = await _db.getFavorites();
+    } catch (e, st) {
+      debugPrint('NavAlert: initial load failed — $e\n$st');
+      loadError = 'Could not open local storage — starting with default '
+          'settings. Your saved data may be unavailable.';
+    } finally {
+      loaded = true; // NEVER leave the splash spinning.
+      _applyEarphoneRouting();
+      notifyListeners();
+    }
   }
 
   /// DO NOT MODIFY LOGIC: mirrors the "Bluetooth / ear-phone only detection"

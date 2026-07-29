@@ -35,10 +35,16 @@ class _LaunchViewState extends State<LaunchView> {
   // to the app afterwards. Keep the load-wait + the onboardingCompleted branch.
   // The 1400 ms minimum is just so the splash doesn't flash — that value and
   // everything visual are [EDIT].
+  //
+  // Fail-safe: never wait forever. If init genuinely hangs on a device (e.g. a
+  // stalled encrypted-DB open on some OEM ROMs), proceed after [_maxSplashWait]
+  // so the rider sees the app instead of an endless loading screen. This is the
+  // groupmate-reported "stuck on the loading screen" guard — do not remove it.
+  static const _maxSplashWait = Duration(seconds: 12);
   Future<void> _go() async {
     final app = context.read<AppViewModel>();
     final start = DateTime.now();
-    while (!app.loaded) {
+    while (!app.loaded && DateTime.now().difference(start) < _maxSplashWait) {
       await Future.delayed(const Duration(milliseconds: 100));
       if (!mounted) return;
     }
