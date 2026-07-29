@@ -133,6 +133,36 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // Earphone-only alarm routing (paper: the "Bluetooth / ear-phone only
+        // detection" toggle). SoundService asks whether any headset — wired,
+        // Bluetooth, or USB — is currently an audio OUTPUT so it can route the
+        // alarm through the earphones instead of blasting the PUV speaker.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "navalert/audioroute")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "isHeadsetConnected") {
+                    result.success(isHeadsetConnected())
+                } else {
+                    result.notImplemented()
+                }
+            }
+    }
+
+    /**
+     * True when a headset capable of playing audio is connected: wired
+     * head{set,phones}, Bluetooth A2DP/SCO, or a USB headset. Uses AudioManager's
+     * output-device list (API 23+, and NavAlert's minSdk is 26).
+     */
+    private fun isHeadsetConnected(): Boolean {
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val outputs = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+        return outputs.any {
+            it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                it.type == android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                it.type == android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                it.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET
+        }
     }
 
     /**
