@@ -507,15 +507,25 @@ class TripViewModel extends ChangeNotifier {
     }
   }
 
+  /// DO NOT MODIFY LOGIC: stopping MUST always succeed. Slide-to-Stop is the
+  /// only way off this screen — PopScope blocks Back by design — so anything
+  /// that throws in here strands the rider in a trip they cannot end. Every
+  /// step is isolated and the phase is set in a finally, so the trip ends even
+  /// if the audio, the notification or the database misbehaves.
   Future<void> stopTrip() async {
-    _cancelEscalation();
-    // Same rule as dismissAlarm: silence first so a storage error can never
-    // leave the rider stuck with an alarm they cannot stop.
-    await _sound.stopAll();
-    await _recordReaction();
-    await _endTrip(highestStage > 0 ? 'arrived' : 'cancelled');
-    phase = TripPhase.ended;
-    notifyListeners();
+    try {
+      _cancelEscalation();
+      // Same rule as dismissAlarm: silence first so a storage error can never
+      // leave the rider stuck with an alarm they cannot stop.
+      await _sound.stopAll();
+      await _recordReaction();
+      await _endTrip(highestStage > 0 ? 'arrived' : 'cancelled');
+    } catch (e) {
+      debugPrint('NavAlert: stopTrip cleanup failed — $e');
+    } finally {
+      phase = TripPhase.ended;
+      notifyListeners();
+    }
   }
 
   Future<void> closeSummary() async {
@@ -527,7 +537,13 @@ class TripViewModel extends ChangeNotifier {
   /// The single teardown path shared by _endTrip, startTrip's re-entrancy
   /// guard, and dispose, so no orphaned listener can survive any of them.
   Future<void> _teardownMonitoring() async {
-    await _sub?.cancel();
+    // Isolated: a failing stream cancel must not stop the timers being killed,
+    // or monitoring keeps running after the trip is over.
+    try {
+      await _sub?.cancel();
+    } catch (e) {
+      debugPrint('NavAlert: GPS unsubscribe failed — $e');
+    }
     _sub = null;
     _signalWatchdog?.cancel();
     _signalWatchdog = null;
@@ -536,7 +552,14 @@ class TripViewModel extends ChangeNotifier {
 
   Future<void> _endTrip(String status) async {
     await _teardownMonitoring();
-    await _lockWidget.cancel();
+    // Platform calls, so they CAN throw (a plugin channel error is enough).
+    // Unguarded, this threw before the trip was marked ended, which is what
+    // left Slide-to-Stop dead and the rider stuck on the trip screen.
+    try {
+      await _lockWidget.cancel();
+    } catch (e) {
+      debugPrint('NavAlert: could not clear the trip notification — $e');
+    }
     _homeWidget.showIdle();
     final t = trip;
     if (t != null && t.endedAt == null) {

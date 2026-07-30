@@ -565,7 +565,23 @@ class _SlideToStopState extends State<_SlideToStop> {
             if (_drag >= maxDrag * 0.6 && !_done) {
               _done = true;
               setState(() => _drag = maxDrag);
-              await widget.onCompleted();
+              // DO NOT MODIFY LOGIC: if the action fails, the control MUST
+              // become usable again. _done was previously latched before the
+              // await with no catch, so a single failure inside stopTrip (an
+              // unguarded plugin call was enough) left the slider permanently
+              // dead — and PopScope blocks Back on this screen, so the rider
+              // was trapped in a trip they could not end.
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await widget.onCompleted();
+              } catch (_) {
+                if (!mounted) return;
+                _done = false;
+                setState(() => _drag = 0);
+                messenger.showSnackBar(const SnackBar(
+                    content: Text('Could not stop the trip — please try '
+                        'again.')));
+              }
             } else {
               setState(() => _drag = 0);
             }
