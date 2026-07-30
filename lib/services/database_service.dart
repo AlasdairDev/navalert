@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../models/models.dart';
@@ -27,15 +30,55 @@ class DatabaseService {
   );
   static const _keyName = 'navalert_db_key';
 
-  /// Reads the SQLCipher key from secure storage, generating a random
-  /// 256-bit key on first launch.
+  static String _newKey() {
+    final rnd = Random.secure();
+    return base64UrlEncode(List<int>.generate(32, (_) => rnd.nextInt(256)));
+  }
+
+  /// App-private fallback location for the SQLCipher key, used only when the
+  /// Keystore is unusable. Not world-readable, but weaker than the Keystore —
+  /// the trade is deliberate: without it those devices cannot open the
+  /// database AT ALL, so contacts, recordings and trip history are all lost.
+  Future<File> _fallbackKeyFile() async =>
+      File(p.join((await getApplicationSupportDirectory()).path, _keyName));
+
+  /// DO NOT MODIFY LOGIC: obtaining the key must NEVER throw. It used to call
+  /// FlutterSecureStorage directly, and on devices where the Keystore-backed
+  /// store fails (OEM Keystore bugs, an invalidated master key, restore from
+  /// backup) that exception propagated out of [db] — so every read and write
+  /// failed and the app silently ran on empty data: no recordings, and
+  /// contacts that would not save.
+  ///
+  /// Order: Keystore (preferred) → app-private file → generate a new key and
+  /// persist it to whichever store still works.
   Future<String> _databaseKey() async {
-    var key = await _secure.read(key: _keyName);
-    if (key == null || key.isEmpty) {
-      final rnd = Random.secure();
-      final bytes = List<int>.generate(32, (_) => rnd.nextInt(256));
-      key = base64UrlEncode(bytes);
+    try {
+      final k = await _secure.read(key: _keyName);
+      if (k != null && k.isNotEmpty) return k;
+    } catch (e) {
+      debugPrint('NavAlert: secure storage unavailable ($e) — using fallback.');
+    }
+
+    File? fallback;
+    try {
+      fallback = await _fallbackKeyFile();
+      if (await fallback.exists()) {
+        final k = (await fallback.readAsString()).trim();
+        if (k.isNotEmpty) return k;
+      }
+    } catch (e) {
+      debugPrint('NavAlert: fallback key unreadable — $e');
+    }
+
+    final key = _newKey();
+    try {
       await _secure.write(key: _keyName, value: key);
+    } catch (_) {
+      try {
+        await fallback?.writeAsString(key);
+      } catch (e) {
+        debugPrint('NavAlert: could not persist the database key — $e');
+      }
     }
     return key;
   }
@@ -43,19 +86,43 @@ class DatabaseService {
   Future<Database> get db async {
     if (_db != null) return _db!;
     final dir = await getDatabasesPath();
+    final path = p.join(dir, 'navalert.db');
     final key = await _databaseKey();
-    _db = await openDatabase(
-      p.join(dir, 'navalert.db'),
-      password: key, // SQLCipher AES-256 encryption at rest.
-      version: 1,
-      onConfigure: (d) => d.execute('PRAGMA foreign_keys = ON'),
-      onCreate: _createSchema,
-      onOpen: (d) async {
-        await _ensureSeedData(d);
-        await _closeInterruptedTrips(d);
-      },
-    );
+    _db = await _openOrRecover(path, key);
     return _db!;
+  }
+
+  /// DO NOT MODIFY LOGIC: recovers from an undecryptable database instead of
+  /// leaving the app permanently broken. If the key no longer matches the file
+  /// (the Keystore regenerated it, or the file is corrupt) SQLCipher cannot
+  /// open it and NOTHING in the app works — every launch fails the same way.
+  /// The contents are unrecoverable in that state anyway, so the file is
+  /// recreated: the rider loses old history but gets a working app back.
+  Future<Database> _openOrRecover(String path, String key) async {
+    Future<Database> open() => openDatabase(
+          path,
+          password: key, // SQLCipher AES-256 encryption at rest.
+          version: 1,
+          onConfigure: (d) => d.execute('PRAGMA foreign_keys = ON'),
+          onCreate: _createSchema,
+          onOpen: (d) async {
+            await _ensureSeedData(d);
+            await _closeInterruptedTrips(d);
+          },
+        );
+    try {
+      return await open();
+    } catch (e) {
+      debugPrint('NavAlert: database unopenable ($e) — recreating it.');
+      try {
+        await deleteDatabase(path);
+      } catch (_) {
+        try {
+          await File(path).delete();
+        } catch (_) {}
+      }
+      return open(); // a second failure is genuine — let it surface.
+    }
   }
 
   /// Closes trips left mid-flight by a crash, a force-stop, or the OS killing
