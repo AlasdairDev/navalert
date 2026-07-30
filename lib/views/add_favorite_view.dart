@@ -75,7 +75,14 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
   // DO NOT MODIFY LOGIC: persists the favorite and returns to the list. Keep
   // addFavorite + pop; the snackbar copy is [EDIT]. (This screen intentionally
   // has its OWN search state, separate from Home search — don't merge them.)
+  // DO NOT MODIFY LOGIC: in-flight guard. addFavorite writes a row and only
+  // then pops, so tapping a result five times before the first write returned
+  // saved the same place five times over — five identical rows in Favorites.
+  bool _saving = false;
+
   Future<void> _save(PlaceResult place) async {
+    if (_saving) return;
+    _saving = true;
     final app = context.read<AppViewModel>();
     final messenger = ScaffoldMessenger.of(context);
     // Report a storage failure instead of popping as if the favourite saved.
@@ -83,6 +90,9 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
       await app.addFavorite(
           place.name, place.displayName, place.lat, place.lng);
     } catch (_) {
+      // Released so the rider can retry after a transient storage failure —
+      // a latched guard would leave every result row permanently dead.
+      _saving = false;
       messenger.showSnackBar(const SnackBar(
           content: Text('Could not save — storage is unavailable.')));
       return;
@@ -96,7 +106,13 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Favorite')),
-      body: SafeArea(
+      // Tapping anywhere off the field drops the keyboard. `opaque` so the
+      // empty space below the results still registers the tap; results keep
+      // their own onTap because this sits above them, not over them.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: SafeArea(
         child: Column(
           children: [
             Padding(
@@ -146,8 +162,9 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
                   );
                 },
               ),
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
       ),
     );

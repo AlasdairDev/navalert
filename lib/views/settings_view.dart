@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
@@ -19,8 +21,142 @@ import 'onboarding_flow.dart';
 ///         row spacing, whether sections use cards or dividers.
 ///  [WANT] group sections with icons, add an "About/version" row, a theme
 ///         switch, per-setting helper subtitles.
-class SettingsView extends StatelessWidget {
+class SettingsView extends StatefulWidget {
   const SettingsView({super.key});
+
+  @override
+  State<SettingsView> createState() => _SettingsViewState();
+}
+
+class _SettingsViewState extends State<SettingsView>
+    with WidgetsBindingObserver {
+  // DO NOT MODIFY LOGIC: the REAL OS permission states, re-read on every resume.
+  // Location / Battery / Notifications used to render from the stored strings in
+  // UserSettings, which default to 'Allow' and which NOTHING in the app ever
+  // reads. So a rider who denied location during onboarding opened Settings and
+  // saw "Location Access — Allow": the screen asserted a permission the app did
+  // not hold, and flipping the switch only rewrote a dead string. These three
+  // tiles must reflect and drive the actual OS grant, exactly like the
+  // onboarding PermissionsView does. (Bluetooth stays a stored preference — it
+  // is a real feature toggle for earphone-only alarm routing, not a permission.)
+  bool _location = false;
+  bool _battery = false;
+  bool _notifications = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _syncStatuses();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // Returning from the OS settings page must refresh the toggles, or they stay
+  // stuck at their old value after the rider has just granted the permission.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncStatuses();
+  }
+
+  Future<void> _syncStatuses() async {
+    final battery = await Permission.ignoreBatteryOptimizations.isGranted;
+    final notif = await Permission.notification.isGranted;
+    final loc = await Geolocator.checkPermission();
+    if (!mounted) return;
+    final granted = loc == LocationPermission.always ||
+        loc == LocationPermission.whileInUse;
+    setState(() {
+      _battery = battery;
+      _notifications = notif;
+      _location = granted;
+    });
+    // Keep the persisted strings honest so an exported backup and the DB row
+    // describe what was actually granted rather than the 'Allow' default.
+    final s = context.read<AppViewModel>().settings;
+    final next = [
+      granted ? 'Allow' : 'Deny',
+      battery ? 'Allow' : 'Deny',
+      notif ? 'Allow' : 'Deny',
+    ];
+    if (s.locationAccess != next[0] ||
+        s.optimizeBatteryUsage != next[1] ||
+        s.pushNotifications != next[2]) {
+      s
+        ..locationAccess = next[0]
+        ..optimizeBatteryUsage = next[1]
+        ..pushNotifications = next[2];
+      context.read<AppViewModel>().saveSettings();
+    }
+  }
+
+  /// A permanently denied permission can never be re-granted by asking again —
+  /// Android returns "denied" with no dialog, so the switch just flicks back off
+  /// forever. The OS settings page is the only remaining route. Same contract as
+  /// the onboarding flow's dialog; "Not now" must stay available because every
+  /// one of these is optional.
+  Future<void> _offerSettings(String what, String why) async {
+    if (!mounted) return;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$what is blocked'),
+        content: Text(why, style: const TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Not now')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Open Settings')),
+        ],
+      ),
+    );
+    if (open == true) await openAppSettings();
+  }
+
+  Future<void> _toggleLocation(bool v) async {
+    if (!v) {
+      // An app cannot revoke its own permission. Saying so and offering the OS
+      // page is the only honest response — silently snapping the switch back
+      // would look like the dead toggle this whole screen used to be.
+      await _offerSettings('Location',
+          'NavAlert cannot turn location off for you. Revoke it from the '
+          'system app settings. Without it, trips cannot be tracked.');
+      await _syncStatuses();
+      return;
+    }
+    var p = await Geolocator.checkPermission();
+    if (p == LocationPermission.denied) {
+      p = await Geolocator.requestPermission();
+    }
+    if (p == LocationPermission.deniedForever) {
+      await _offerSettings('Location',
+          'Android will not ask again for Location. You can turn it on from '
+          'NavAlert\'s app settings.');
+    }
+    await _syncStatuses();
+  }
+
+  Future<void> _togglePermission(
+      bool v, Permission perm, String label, String why) async {
+    if (!v) {
+      await _offerSettings(label, why);
+      await _syncStatuses();
+      return;
+    }
+    await perm.request();
+    if (await perm.isPermanentlyDenied) {
+      await _offerSettings(label,
+          'Android will not ask again for $label. You can turn it on from '
+          'NavAlert\'s app settings.');
+    }
+    await _syncStatuses();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +175,24 @@ class SettingsView extends StatelessWidget {
           ),
         );
 
+    // Reflects a REAL OS permission — the value comes from the system, never
+    // from the stored string, so this row can no longer claim a grant the app
+    // does not hold.
+    Widget permissionTile(
+            String title, bool granted, Future<void> Function(bool) onChanged) =>
+        Card(
+          child: SwitchListTile(
+            title: Text(title),
+            subtitle: Text(granted ? 'Granted' : 'Not granted',
+                style: const TextStyle(
+                    fontSize: 11, color: NavAlertColors.textSecondary)),
+            value: granted,
+            onChanged: (v) => onChanged(v),
+          ),
+        );
+
+    // A stored app preference, NOT an OS permission — this one really is just a
+    // saved string (it drives earphone-only alarm routing).
     Widget allowTile(String title, String value,
             void Function(String) onChanged) =>
         Card(
@@ -59,14 +213,28 @@ class SettingsView extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         children: [
           header('Location'),
-          allowTile('Location Access', s.locationAccess,
-              (v) => s.locationAccess = v),
+          permissionTile('Location Access', _location, _toggleLocation),
           header('Battery Optimization'),
-          allowTile('Optimize battery usage', s.optimizeBatteryUsage,
-              (v) => s.optimizeBatteryUsage = v),
+          permissionTile(
+              'Optimize battery usage',
+              _battery,
+              (v) => _togglePermission(
+                  v,
+                  Permission.ignoreBatteryOptimizations,
+                  'Battery optimization',
+                  'NavAlert cannot change this for you. Adjust it from the '
+                      'system app settings. Without it, Android may stop the '
+                      'alarm while the screen is off.')),
           header('Notifications'),
-          allowTile('Push notifications', s.pushNotifications,
-              (v) => s.pushNotifications = v),
+          permissionTile(
+              'Push notifications',
+              _notifications,
+              (v) => _togglePermission(
+                  v,
+                  Permission.notification,
+                  'Notifications',
+                  'NavAlert cannot turn notifications off for you. Change it '
+                      'from the system app settings.')),
           header('Bluetooth'),
           allowTile('Enable bluetooth connection', s.bluetoothEnabled,
               (v) => s.bluetoothEnabled = v),

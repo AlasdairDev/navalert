@@ -41,6 +41,7 @@ class ShellView extends StatefulWidget {
 
 class _ShellViewState extends State<ShellView> {
   int _index = 2; // Home
+  bool _resuming = false; // guards the "trip in progress" resume bar
   StreamSubscription? _sosSub;
   StreamSubscription? _fakeSub;
   StreamSubscription? _widgetSub;
@@ -106,9 +107,11 @@ class _ShellViewState extends State<ShellView> {
 
   Future<void> _launchFakeCall() async {
     final em = context.read<EmergencyViewModel>();
-    await em.startFakeCall(
+    // Repeated triple-Volume-Down presses must not stack call screens — push
+    // only when this trigger actually started the call.
+    final started = await em.startFakeCall(
         callerName: context.read<AppViewModel>().fakeCallConfig.callerName);
-    if (!mounted) return;
+    if (!started || !mounted) return;
     await Navigator.of(context).push(MaterialPageRoute(
         fullscreenDialog: true, builder: (_) => const FakeCallView()));
   }
@@ -145,8 +148,20 @@ class _ShellViewState extends State<ShellView> {
           Material(
             color: NavAlertColors.primaryButton,
             child: InkWell(
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => const ActiveTripView())),
+              // DO NOT MODIFY LOGIC: in-flight guard. Two taps stacked TWO
+              // ActiveTripView routes; sliding to stop then popped only the top
+              // one, leaving a second monitoring screen bound to a trip that had
+              // already ended — a ghost trip the rider cannot make sense of.
+              onTap: () {
+                if (_resuming) return;
+                _resuming = true;
+                Navigator.of(context)
+                    .push(MaterialPageRoute(
+                        builder: (_) => const ActiveTripView()))
+                    .whenComplete(() {
+                  if (mounted) _resuming = false;
+                });
+              },
               child: const SafeArea(
                 bottom: false,
                 child: Padding(

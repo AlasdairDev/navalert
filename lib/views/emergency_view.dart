@@ -177,8 +177,11 @@ class EmergencyView extends StatelessWidget {
                       } catch (_) {/* not persisted — still place the call */}
                       if (!context.mounted) return;
                       final vm = context.read<EmergencyViewModel>();
-                      await vm.startFakeCall(callerName: caller);
-                      if (context.mounted) {
+                      // Only push when this tap actually STARTED the call.
+                      // startFakeCall returns false if one is already running,
+                      // so panic-tapping the row cannot stack call screens.
+                      final started = await vm.startFakeCall(callerName: caller);
+                      if (started && context.mounted) {
                         Navigator.of(context).push(MaterialPageRoute(
                             fullscreenDialog: true,
                             builder: (_) => const FakeCallView()));

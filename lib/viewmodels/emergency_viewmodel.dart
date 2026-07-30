@@ -113,7 +113,17 @@ class EmergencyViewModel extends ChangeNotifier {
   // ---------- fake call (R7) ----------
   /// [callerName] is shown on the lock-screen call UI, so it must match the
   /// name the in-app screen displays (Table 21, default 'Mom').
-  Future<void> startFakeCall({String callerName = 'Mom'}) async {
+  /// Returns false when a fake call is ALREADY running, so the caller knows not
+  /// to push a second call screen.
+  ///
+  /// DO NOT MODIFY LOGIC: the `fakeCallActive` gate is a panic-tap guard. All
+  /// three entry points (the Emergency recording list, the trip screen's Fake
+  /// Call button, and the triple-Volume-Down shortcut) used to push FakeCallView
+  /// unconditionally, so five taps stacked five call screens over five
+  /// overlapping ringtones — each needing its own dismissal, at precisely the
+  /// moment the rider is trying to look calm and get out.
+  Future<bool> startFakeCall({String callerName = 'Mom'}) async {
+    if (fakeCallActive) return false;
     fakeCallActive = true;
     fakeCallAnswered = false;
     notifyListeners();
@@ -121,6 +131,7 @@ class EmergencyViewModel extends ChangeNotifier {
     // works with the phone locked, not only with NavAlert already open.
     await FakeCallScreenService.instance.present(callerName);
     await SoundService.instance.playRingtone();
+    return true;
   }
 
   Future<void> answerFakeCall(String? recordingPath) async {

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -103,8 +105,16 @@ class _Monitoring extends StatelessWidget {
             const SizedBox(height: 24),
             const Text('En Route',
                 style: TextStyle(color: NavAlertColors.textSecondary)),
+            // Capped at two lines: at 26 px a long place name wrapped to four
+            // or five, and this Column already spends 170 px on the monitoring
+            // badge plus the slider and the SOS / Fake Call row. On a short
+            // screen the Spacers collapse to zero and the whole column
+            // overflows — taking the Slide-to-Stop control off screen, which is
+            // the only way to end a trip.
             Text(vm.trip!.destinationLabel,
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                     fontSize: 26, fontWeight: FontWeight.w700)),
             const Text('Get some rest. We got you.',
@@ -206,10 +216,12 @@ class _Monitoring extends StatelessWidget {
               ElevatedButton.icon(
                 onPressed: () async {
                   final em = context.read<EmergencyViewModel>();
-                  await em.startFakeCall(
+                  // Push only if this tap started the call — see the panic-tap
+                  // guard in EmergencyViewModel.startFakeCall.
+                  final started = await em.startFakeCall(
                       callerName:
                           context.read<AppViewModel>().fakeCallConfig.callerName);
-                  if (context.mounted) {
+                  if (started && context.mounted) {
                     Navigator.of(context).push(MaterialPageRoute(
                         fullscreenDialog: true,
                         builder: (_) => const FakeCallView()));
@@ -310,17 +322,27 @@ class _AlarmStage extends StatelessWidget {
                     const Icon(Icons.location_on,
                         color: NavAlertColors.accent),
                     const SizedBox(width: 8),
-                    Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(distText,
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w700, fontSize: 16)),
-                          Text(vm.trip!.destinationLabel,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: NavAlertColors.textSecondary)),
-                        ]),
+                    // Expanded is load-bearing, not decoration: a Row hands its
+                    // non-flex children UNBOUNDED width, so the destination
+                    // name laid out on a single line and ran off the card
+                    // ("RIGHT OVERFLOWED BY N PIXELS"). Place names are long
+                    // enough to do that on an ordinary 360 dp phone — and this
+                    // is the alarm screen, which the rider sees every trip.
+                    Expanded(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(distText,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 16)),
+                            Text(vm.trip!.destinationLabel,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: NavAlertColors.textSecondary)),
+                          ]),
+                    ),
                   ]),
                   const Divider(height: 24),
                   Text(title,
@@ -543,7 +565,11 @@ class _SlideToStopState extends State<_SlideToStop> {
     const height = 54.0;
     return LayoutBuilder(builder: (context, constraints) {
       final width = constraints.maxWidth.clamp(0.0, 320.0);
-      final maxDrag = width - height;
+      // Never negative: if the UI team ever pads this pill down below the 54 px
+      // knob, `width - height` goes negative and `clamp(0.0, maxDrag)` throws
+      // ArgumentError ("max cannot be less than min") on the first drag — a
+      // crash on the one control that ends a trip.
+      final maxDrag = math.max(0.0, width - height);
       return Center(
         // The WHOLE pill accepts the drag, not just the knob. A 48 px knob is
         // an unrealistic target for a rider on a moving jeepney, and claiming
@@ -562,7 +588,13 @@ class _SlideToStopState extends State<_SlideToStop> {
           onHorizontalDragUpdate: (d) => setState(() =>
               _drag = (d.localPosition.dx - height / 2).clamp(0.0, maxDrag)),
           onHorizontalDragEnd: (_) async {
-            if (_drag >= maxDrag * 0.6 && !_done) {
+            // `maxDrag > 0` is NOT redundant with the clamp above. Once maxDrag
+            // is floored at zero, the threshold `_drag >= maxDrag * 0.6` reads
+            // `0 >= 0` — TRUE — so a degenerate pill width would fire the stop
+            // on the faintest sideways touch, silently cancelling the alarm the
+            // rider is relying on. That is worse than the crash it replaces, so
+            // no travel distance must mean no completion.
+            if (maxDrag > 0 && _drag >= maxDrag * 0.6 && !_done) {
               _done = true;
               setState(() => _drag = maxDrag);
               // DO NOT MODIFY LOGIC: if the action fails, the control MUST

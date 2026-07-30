@@ -48,9 +48,24 @@ class SosService {
     // every native send throws SecurityException and the automatic SOS
     // silently degrades to the manual composer. Request it here so the
     // first SOS asks once and every later SOS is fully automatic.
-    if (!await Permission.sms.isGranted) {
-      await Permission.sms.request();
-    }
+    //
+    // DO NOT MODIFY LOGIC: the request MUST be time-boxed. This is the primary
+    // R8 path and it runs from the volume shortcut with the SCREEN OFF, where
+    // Android cannot show a permission dialog at all — the future can simply
+    // never complete. triggerSos would then never return, so the `finally` in
+    // EmergencyViewModel.fireSos that clears `sending` never runs, and because
+    // `sending` is ALSO the in-flight guard the SOS button is dead for the rest
+    // of the session while the ring reads "SENDING…" forever. The onboarding
+    // flow already time-boxes this very call for the far less critical case of
+    // not blocking Continue; the emergency path needs it more, not less.
+    // Proceeding unpermitted is safe: the native send simply fails and the
+    // queue-and-retry below (UC-7 Exception 1) takes over.
+    try {
+      if (!await Permission.sms.isGranted
+          .timeout(const Duration(seconds: 5))) {
+        await Permission.sms.request().timeout(const Duration(seconds: 10));
+      }
+    } catch (_) {/* denied, stalled, or headless — send anyway, then queue */}
 
     Position? pos;
     try {

@@ -31,12 +31,20 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   final _mapController = MapController();
-  late final AnimatedMapMover _mover =
-      AnimatedMapMover(_mapController, this);
+
+  // DO NOT MODIFY LOGIC: the mover is built eagerly in initState, NOT as a lazy
+  // `late final` field initializer. When GPS never returns a fix the mover is
+  // never read, so a lazy field would run its initializer for the FIRST time
+  // inside dispose() below — constructing an AnimationController against an
+  // already-deactivated element. That throws "Looking up a deactivated widget's
+  // ancestor is unsafe" and kills the frame on the way out of the Home tab,
+  // which is exactly the no-signal case the rider is most likely to hit.
+  late final AnimatedMapMover _mover;
 
   @override
   void initState() {
     super.initState();
+    _mover = AnimatedMapMover(_mapController, this);
     // DO NOT MODIFY LOGIC: first-frame GPS acquisition + animated recenter.
     // This is the R2/UC-4 location bootstrap; the map has nothing to show
     // until refreshCurrentLocation() returns. Restyle the map/markers freely,
