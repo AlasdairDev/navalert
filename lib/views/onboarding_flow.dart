@@ -39,6 +39,12 @@ class _TutorialViewState extends State<TutorialView> {
   final _controller = PageController();
   int _page = 0;
 
+  @override
+  void dispose() {
+    _controller.dispose(); // was leaked on every pass through onboarding
+    super.dispose();
+  }
+
   static const _pages = [
     (Icons.airline_seat_recline_extra, 'Welcome to NavAlert.',
         'Never miss your stop again.'),
@@ -386,6 +392,16 @@ class ContactsSetupView extends StatefulWidget {
 class _ContactsSetupViewState extends State<ContactsSetupView> {
   final _names = List.generate(3, (_) => TextEditingController());
   final _phones = List.generate(3, (_) => TextEditingController());
+
+  @override
+  void dispose() {
+    // Six controllers leaked on EVERY visit, and this screen is reopened
+    // from Settings > Emergency Contacts > Update, so it accumulated.
+    for (final c in [..._names, ..._phones]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
   // Figure 17 shows two views: an intro card first, then the input form.
   late bool _showIntro = widget.inOnboarding;
 
@@ -409,7 +425,22 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  // DO NOT MODIFY LOGIC: in-flight guard. Continue writes to the database and
+  // then navigates; a second tap while the first is still saving duplicates
+  // the writes and pushes the next screen twice.
+  bool _saving = false;
+
   Future<void> _save() async {
+    if (_saving) return;
+    _saving = true;
+    try {
+      await _runSave();
+    } finally {
+      if (mounted) _saving = false;
+    }
+  }
+
+  Future<void> _runSave() async {
     final app = context.read<AppViewModel>();
 
     // DO NOT MODIFY LOGIC: validate FIRST and surface the exact problem. A
@@ -684,11 +715,18 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     await SoundService.instance.playVoice(rec.filePath);
   }
 
+  // In-flight guard: Save/Skip completes onboarding and then replaces the whole
+  // navigation stack, so a double tap could run completeOnboarding twice and
+  // push two shells.
+  bool _saving = false;
+
   // DO NOT MODIFY LOGIC: a storage failure must NEVER trap the rider on this
   // screen. Save/Skip is the last step of onboarding — if the write throws and
   // we do not navigate, the app can never be reached at all. Persist
   // best-effort, warn, then continue regardless.
   Future<void> _save() async {
+    if (_saving) return;
+    _saving = true;
     final app = context.read<AppViewModel>();
     await SoundService.instance.stopVoice();
     // Persist the caller name exactly as typed (Save must not require

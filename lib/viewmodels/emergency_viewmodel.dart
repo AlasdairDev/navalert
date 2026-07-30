@@ -78,7 +78,13 @@ class EmergencyViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// DO NOT MODIFY LOGIC: the in-flight guard. Without it a double tap (or the
+  /// on-screen button racing the volume shortcut / home-widget SOS) fires the
+  /// whole batch twice — duplicate SMS to every contact, and double the prepaid
+  /// load, which the rider may not have. The native shortcut already enforces a
+  /// cooldown for the same reason; this covers every other trigger.
   Future<void> fireSos({String? tripId}) async {
+    if (sending) return;
     sending = true;
     statusMessage = null;
     notifyListeners();
@@ -162,6 +168,9 @@ class EmergencyViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _holdTimer?.cancel();
+    // Cancels the queued-SOS retry too: it would otherwise keep firing and
+    // notify this disposed ViewModel.
+    _sos.dispose();
     _recorder.dispose();
     super.dispose();
   }
