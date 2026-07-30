@@ -46,6 +46,20 @@ class MainActivity : FlutterActivity() {
          */
         @JvmStatic
         var activityResumed: Boolean = false
+
+        /**
+         * True for the duration of a fake call (set by setLockScreenVisible,
+         * which already brackets it exactly). MediaButtonService checks this so
+         * relaying a volume change does not pop the system volume panel over the
+         * call: NavAlert holds a REMOTE-volume MediaSession, and a volume change
+         * from any source — an OEM "smart volume" tweak, a headset, or the
+         * rider's own press — was raised with FLAG_SHOW_UI, so the slider
+         * appeared unbidden on top of the incoming-call screen and broke the
+         * illusion the feature exists to create (R7).
+         */
+        @JvmStatic
+        @Volatile
+        var fakeCallActive: Boolean = false
     }
 
     override fun onResume() {
@@ -178,6 +192,8 @@ class MainActivity : FlutterActivity() {
      * the lock screen afterwards.
      */
     private fun setLockScreenVisible(visible: Boolean) = runOnUiThread {
+        // Brackets the fake call for MediaButtonService (see fakeCallActive).
+        fakeCallActive = visible
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(visible)
             setTurnScreenOn(visible)
