@@ -155,6 +155,16 @@ class SosService {
     });
   }
 
+  /// DO NOT MODIFY LOGIC: stops the queued-SOS retry. The timer fires every
+  /// 30 s for minutes and calls [onQueuedSosResolved], which notifies the
+  /// EmergencyViewModel — if that has been disposed in the meantime, the
+  /// callback notifies a dead listener and throws. Cancel the retry with it.
+  void dispose() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    onQueuedSosResolved = null;
+  }
+
   /// Storage failures are swallowed: losing the audit row must never stop the
   /// rider being told what happened to their SOS.
   Future<void> _markQueuedSos(String status, int sent) async {
