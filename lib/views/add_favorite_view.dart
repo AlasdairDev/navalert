@@ -78,7 +78,15 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
   Future<void> _save(PlaceResult place) async {
     final app = context.read<AppViewModel>();
     final messenger = ScaffoldMessenger.of(context);
-    await app.addFavorite(place.name, place.displayName, place.lat, place.lng);
+    // Report a storage failure instead of popping as if the favourite saved.
+    try {
+      await app.addFavorite(
+          place.name, place.displayName, place.lat, place.lng);
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not save — storage is unavailable.')));
+      return;
+    }
     messenger.showSnackBar(
         SnackBar(content: Text('${place.name} added to Favorites.')));
     if (mounted) Navigator.of(context).pop();

@@ -75,9 +75,17 @@ class FavoritesView extends StatelessWidget {
       ),
     );
     if (confirmed != true) return;
-    await app.removeFavorite(f.favoriteId);
-    messenger.showSnackBar(
-        SnackBar(content: Text('${f.name} removed from Favorites.')));
+    // A storage failure must report itself, not leave a button that appears
+    // to do nothing (the success SnackBar below would never be reached).
+    try {
+      await app.removeFavorite(f.favoriteId);
+      messenger.showSnackBar(
+          SnackBar(content: Text('${f.name} removed from Favorites.')));
+    } catch (_) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Could not remove — storage is '
+              'unavailable.')));
+    }
   }
 
   @override
