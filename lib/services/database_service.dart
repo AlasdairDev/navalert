@@ -110,10 +110,7 @@ class DatabaseService {
             await _closeInterruptedTrips(d);
           },
         );
-    try {
-      return await open();
-    } catch (e) {
-      debugPrint('NavAlert: database unopenable ($e) — recreating it.');
+    Future<Database> recreate() async {
       try {
         await deleteDatabase(path);
       } catch (_) {
@@ -122,6 +119,56 @@ class DatabaseService {
         } catch (_) {}
       }
       return open(); // a second failure is genuine — let it surface.
+    }
+
+    Database d;
+    try {
+      d = await open();
+    } catch (e) {
+      debugPrint('NavAlert: database unopenable ($e) — recreating it.');
+      return recreate();
+    }
+
+    // DO NOT MODIFY LOGIC: a database left over from an older build can be
+    // missing tables. `version` is never bumped, so onUpgrade never runs and
+    // onCreate is skipped for an existing file — the open SUCCEEDS and the
+    // stale schema survives, then every query fails with "no such table". The
+    // catch above cannot see that, because nothing threw during the open. Verify
+    // the schema explicitly and rebuild when it is incomplete.
+    if (await _schemaIsComplete(d)) return d;
+    debugPrint('NavAlert: incomplete schema — rebuilding the database.');
+    try {
+      await d.close();
+    } catch (_) {}
+    return recreate();
+  }
+
+  /// Every table the app queries. Checked on each open (see [_openOrRecover]).
+  static const _requiredTables = {
+    'app_state',
+    'user_settings',
+    'transport_preferences',
+    'emergency_contacts',
+    'recordings',
+    'favorites',
+    'fake_call_config',
+    'trips',
+    'route_suggestions',
+    'route_steps',
+    'alarm_events',
+    'overshoot_events',
+    'sos_events',
+  };
+
+  Future<bool> _schemaIsComplete(Database d) async {
+    try {
+      final rows = await d
+          .query('sqlite_master', columns: ['name'], where: "type = 'table'");
+      final present = rows.map((r) => r['name'] as String?).toSet();
+      return _requiredTables.every(present.contains);
+    } catch (e) {
+      debugPrint('NavAlert: could not read the schema — $e');
+      return false;
     }
   }
 
