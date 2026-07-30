@@ -463,18 +463,28 @@ class TripViewModel extends ChangeNotifier {
     phase = TripPhase.overshootConfirmed;
     final lat = _lastLat ?? t.destinationLat;
     final lng = _lastLng ?? t.destinationLng;
-    await _db.insertOvershootEvent({
-      'overshoot_id': _uuid.v4(),
-      'trip_id': t.tripId,
-      'destination_name': t.destinationLabel,
-      'nearest_stop_name': GtfsService.instance.nearestStopName(lat, lng),
-      'overshot_km': overshotM / 1000,
-      'triggered_lat': lat,
-      'triggered_lng': lng,
-      'acknowledged': 1,
-      'triggered_at': DateTime.now().toIso8601String(),
-      'acknowledged_at': DateTime.now().toIso8601String(),
-    });
+    // DO NOT MODIFY LOGIC: the audit row is secondary; acknowledging the
+    // overshoot is what the rider is waiting on. This write was unguarded and
+    // sat between the phase change and _endTrip, so a storage failure meant
+    // "Yes" appeared to do nothing at all — the trip never ended and
+    // notifyListeners never ran, leaving the rider stuck on the overshoot
+    // prompt exactly like the Slide-to-Stop trap.
+    try {
+      await _db.insertOvershootEvent({
+        'overshoot_id': _uuid.v4(),
+        'trip_id': t.tripId,
+        'destination_name': t.destinationLabel,
+        'nearest_stop_name': GtfsService.instance.nearestStopName(lat, lng),
+        'overshot_km': overshotM / 1000,
+        'triggered_lat': lat,
+        'triggered_lng': lng,
+        'acknowledged': 1,
+        'triggered_at': DateTime.now().toIso8601String(),
+        'acknowledged_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      debugPrint('NavAlert: could not record the overshoot event — $e');
+    }
     await _endTrip('overshot');
     notifyListeners();
   }
