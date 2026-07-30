@@ -55,17 +55,25 @@ class _ShellViewState extends State<ShellView> {
     // .listen breaks the emergency shortcuts. The ONLY [EDIT] parts here are
     // the SnackBar copy and, in _launchFakeCall, how the call screen looks.
     HardwareButtons.instance.start();
+    // onError is required, not cosmetic: an error on either stream would
+    // otherwise be unhandled AND cancel the subscription, silently killing the
+    // screen-off volume shortcut for the rest of the session — the rider would
+    // press Volume-Up x3 in an emergency and nothing would happen.
     _sosSub = HardwareButtons.instance.onSosShortcut.listen((_) {
       if (!mounted) return;
       final em = context.read<EmergencyViewModel>();
       em.fireSos();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Volume-Up ×3 — sending SOS to your contacts…')));
-    });
+    }, onError: (e) => debugPrint('NavAlert: SOS shortcut stream error — $e'),
+        cancelOnError: false);
     _fakeSub = HardwareButtons.instance.onFakeCallShortcut.listen((_) {
       if (!mounted) return;
       _launchFakeCall();
-    });
+    },
+        onError: (e) =>
+            debugPrint('NavAlert: fake-call shortcut stream error — $e'),
+        cancelOnError: false);
     // ──────────────────────────────────────────────────────────────────────
   }
 
@@ -79,8 +87,13 @@ class _ShellViewState extends State<ShellView> {
   /// subscription, or the isSosUri gate, breaks the widget's one-tap SOS. The
   /// only [EDIT] part is the SnackBar copy in _handleWidgetUri.
   void _wireHomeWidgetShortcuts() {
-    HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetUri);
-    _widgetSub = HomeWidget.widgetClicked.listen(_handleWidgetUri);
+    // Same reasoning as the volume shortcuts: an unhandled error here would
+    // cancel the subscription and silently disable the widget's one-tap SOS.
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetUri).catchError(
+        (e) => debugPrint('NavAlert: widget launch URI unavailable — $e'));
+    _widgetSub = HomeWidget.widgetClicked.listen(_handleWidgetUri,
+        onError: (e) => debugPrint('NavAlert: widget click stream error — $e'),
+        cancelOnError: false);
   }
 
   void _handleWidgetUri(Uri? uri) {

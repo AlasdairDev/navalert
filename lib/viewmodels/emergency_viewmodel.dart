@@ -121,12 +121,21 @@ class EmergencyViewModel extends ChangeNotifier {
     }
   }
 
+  /// DO NOT MODIFY LOGIC: every teardown step is isolated. This is called
+  /// fire-and-forget from the call screen (which pops first so the End button
+  /// feels instant), so a throw here would be an unhandled async error — and
+  /// worse, it would skip the remaining teardown, leaving NavAlert still
+  /// drawing over the lock screen after the call was ended.
   Future<void> endFakeCall() async {
     fakeCallActive = false;
     fakeCallAnswered = false;
-    await SoundService.instance.stopVoice();
-    // Drop the notification and stop NavAlert rendering over the lock screen.
-    await FakeCallScreenService.instance.dismiss();
+    try {
+      await SoundService.instance.stopVoice();
+    } catch (_) {}
+    try {
+      // Drop the notification and stop NavAlert rendering over the lock screen.
+      await FakeCallScreenService.instance.dismiss();
+    } catch (_) {}
     notifyListeners();
   }
 
