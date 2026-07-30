@@ -227,6 +227,11 @@ class TripViewModel extends ChangeNotifier {
       _sound.playAlarmStage(3, t.alarmSound,
           vibrationOnly: t.vibrationOnlyMode);
       _logAlarm(3, 'Overshoot Alert', 'Did you miss your stop?');
+      // The home widget was pushed above while the phase still read
+      // "Monitoring", and this branch returns early — so without a forced
+      // refresh the launcher kept claiming the trip was fine until the next
+      // fix, or indefinitely if fixes stop arriving.
+      _pushHomeWidget(force: true);
       notifyListeners();
       return;
     }
