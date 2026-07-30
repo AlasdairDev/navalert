@@ -631,36 +631,63 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     super.dispose();
   }
 
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // DO NOT MODIFY LOGIC: every branch must give feedback. A recording that
+  // silently fails to save leaves the rider with a "Record New" button that
+  // appears to do nothing.
   Future<void> _recordNew() async {
     final em = context.read<EmergencyViewModel>();
     final app = context.read<AppViewModel>();
     if (!em.recording) {
       final ok = await em.startRecording();
-      if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Microphone permission is required to record.')));
+      if (!ok) {
+        _toast('Microphone permission is required to record.');
       }
     } else {
       final path = await em.stopRecording();
-      if (path != null) {
-        await app.addRecording(
-            'Custom recording ${app.recordings.where((r) => !r.isPreset).length + 1}',
-            path);
-        app.fakeCallConfig.recordingId = app.recordings
-            .lastWhere((r) => r.filePath == path)
-            .recordingId;
-        await app.saveFakeCallConfig();
+      if (path == null) {
+        _toast('Recording failed — nothing was captured.');
+      } else {
+        try {
+          final title =
+              'Custom recording ${app.recordings.where((r) => !r.isPreset).length + 1}';
+          await app.addRecording(title, path);
+          // firstWhereOrNull-style lookup: lastWhere THROWS when the new row
+          // cannot be found, which would lose the recording behind an
+          // unhandled error.
+          final saved =
+              app.recordings.where((r) => r.filePath == path).toList();
+          if (saved.isNotEmpty) {
+            app.fakeCallConfig.recordingId = saved.last.recordingId;
+            await app.saveFakeCallConfig();
+          }
+          _toast('Recording saved.');
+        } catch (_) {
+          _toast('Could not save the recording — storage is unavailable.');
+        }
       }
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   Future<void> _preview() async {
-    final app = context.read<AppViewModel>();
-    final rec = app.selectedRecording;
-    if (rec != null) await SoundService.instance.playVoice(rec.filePath);
+    final rec = context.read<AppViewModel>().selectedRecording;
+    if (rec == null) {
+      _toast('No recording selected yet.');
+      return;
+    }
+    await SoundService.instance.playVoice(rec.filePath);
   }
 
+  // DO NOT MODIFY LOGIC: a storage failure must NEVER trap the rider on this
+  // screen. Save/Skip is the last step of onboarding — if the write throws and
+  // we do not navigate, the app can never be reached at all. Persist
+  // best-effort, warn, then continue regardless.
   Future<void> _save() async {
     final app = context.read<AppViewModel>();
     await SoundService.instance.stopVoice();
@@ -668,11 +695,18 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     // pressing Enter on the keyboard first).
     final name = _callerCtrl.text.trim();
     app.fakeCallConfig.callerName = name.isEmpty ? 'Mom' : name;
-    await app.saveFakeCallConfig();
+    var stored = true;
+    try {
+      await app.saveFakeCallConfig();
+      if (widget.inOnboarding) await app.completeOnboarding();
+    } catch (_) {
+      stored = false;
+    }
     if (!mounted) return;
+    if (!stored) {
+      _toast('Saved locally only — storage is unavailable.');
+    }
     if (widget.inOnboarding) {
-      await app.completeOnboarding();
-      if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const ShellView()), (_) => false);
     } else {
