@@ -37,19 +37,24 @@ class GeocodingService {
       throw Exception('Nominatim error ${res.statusCode}');
     }
     final list = jsonDecode(res.body) as List<dynamic>;
-    return list.map((e) {
-      final m = e as Map<String, dynamic>;
-      final display = m['display_name'] as String? ?? '';
-      final name = (m['name'] as String?)?.isNotEmpty == true
-          ? m['name'] as String
-          : display.split(',').first;
-      return PlaceResult(
-        name: name,
-        displayName: display,
-        lat: double.parse(m['lat'] as String),
-        lng: double.parse(m['lon'] as String),
-      );
-    }).toList();
+    // DO NOT MODIFY LOGIC: parse defensively. double.parse THROWS on anything
+    // unexpected, and one malformed entry used to take down the whole search
+    // with a FormatException instead of simply being skipped — the rider would
+    // see a failed search rather than the results that did parse.
+    final results = <PlaceResult>[];
+    for (final e in list) {
+      if (e is! Map<String, dynamic>) continue;
+      final lat = double.tryParse('${e['lat']}');
+      final lng = double.tryParse('${e['lon']}');
+      if (lat == null || lng == null) continue;
+      final display = e['display_name'] as String? ?? '';
+      final name = (e['name'] as String?)?.isNotEmpty == true
+          ? e['name'] as String
+          : (display.isEmpty ? 'Unnamed place' : display.split(',').first);
+      results.add(PlaceResult(
+          name: name, displayName: display, lat: lat, lng: lng));
+    }
+    return results;
   }
 
   /// Reverse-geocodes coordinates into a precise street address
