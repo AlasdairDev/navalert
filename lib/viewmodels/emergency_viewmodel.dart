@@ -87,8 +87,13 @@ class EmergencyViewModel extends ChangeNotifier {
     if (sending) return;
     sending = true;
     statusMessage = null;
-    notifyListeners();
+    // DO NOT MODIFY LOGIC: `sending` is BOTH the progress flag and the
+    // in-flight guard, so it must always be released — see the finally below.
+    // It was cleared on the normal path only; anything throwing before that
+    // (this notify, on a disposed listener) latched it true and disabled SOS
+    // for the rest of the session, silently.
     try {
+      notifyListeners();
       final n = await _sos.triggerSos(tripId: tripId);
       statusMessage = n > 0
           ? 'SOS sent — $n contact${n == 1 ? '' : 's'} notified with your GPS location.'
@@ -97,9 +102,10 @@ class EmergencyViewModel extends ChangeNotifier {
       statusMessage = 'No emergency contacts saved. Add contacts in Settings.';
     } catch (_) {
       statusMessage = 'SOS failed — check SMS permission and prepaid load.';
+    } finally {
+      sending = false;
+      notifyListeners();
     }
-    sending = false;
-    notifyListeners();
   }
 
   Future<void> call911() => _sos.call911();
