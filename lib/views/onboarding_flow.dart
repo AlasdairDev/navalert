@@ -307,6 +307,36 @@ class _PermissionsViewState extends State<PermissionsView>
 // =====================================================================
 // Figure 17 — Emergency Contacts Setup
 // =====================================================================
+/// DO NOT MODIFY LOGIC: shown on the setup screens when the local database
+/// could not be read. Without it the rider just sees an empty contact form and
+/// an untappable "Select Recording" dropdown with no explanation — the exact
+/// silent failure that made "can't save contacts / recordings" so hard to
+/// diagnose. Restyle it freely; keep the Retry action wired to retryLoad().
+class _StorageErrorBanner extends StatelessWidget {
+  const _StorageErrorBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final app = context.watch<AppViewModel>();
+    if (!app.dataUnavailable) return const SizedBox.shrink();
+    return Card(
+      color: NavAlertColors.warning.withValues(alpha: 0.15),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(children: [
+          const Icon(Icons.warning_amber, color: NavAlertColors.warning),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Text(app.loadError!,
+                  style: const TextStyle(fontSize: 12))),
+          TextButton(
+              onPressed: app.retryLoad, child: const Text('Retry')),
+        ]),
+      ),
+    );
+  }
+}
+
 /// One validated emergency-contact row, ready to persist.
 typedef ContactEntry = ({int order, String name, String phone});
 
@@ -476,7 +506,9 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: NavAlertColors.textSecondary),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
+              const _StorageErrorBanner(),
+              const SizedBox(height: 8),
               for (var i = 0; i < 3; i++) ...[
                 Card(
                   child: Padding(
@@ -675,7 +707,9 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: NavAlertColors.textSecondary),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              const _StorageErrorBanner(),
+              const SizedBox(height: 12),
               Card(
                 child: Padding(
                   padding:

@@ -37,23 +37,45 @@ class AppViewModel extends ChangeNotifier {
   // on failure the default-constructed models above are kept, an error is
   // recorded, and the app proceeds instead of getting stuck.
   Future<void> load() async {
-    try {
-      appState = await _db.getAppState();
-      settings = await _db.getUserSettings();
-      transportPrefs = await _db.getTransportPreferences();
-      fakeCallConfig = await _db.getFakeCallConfig();
-      contacts = await _db.getContacts();
-      recordings = await _db.getRecordings();
-      favorites = await _db.getFavorites();
-    } catch (e, st) {
-      debugPrint('NavAlert: initial load failed — $e\n$st');
-      loadError = 'Could not open local storage — starting with default '
-          'settings. Your saved data may be unavailable.';
-    } finally {
-      loaded = true; // NEVER leave the splash spinning.
-      _applyEarphoneRouting();
-      notifyListeners();
+    // One silent retry: the first open also creates/keys the encrypted
+    // database, which can lose a race with secure-storage on a cold, loaded
+    // device. A transient failure must not leave the app running on empty
+    // data for the rest of the session.
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      try {
+        appState = await _db.getAppState();
+        settings = await _db.getUserSettings();
+        transportPrefs = await _db.getTransportPreferences();
+        fakeCallConfig = await _db.getFakeCallConfig();
+        contacts = await _db.getContacts();
+        recordings = await _db.getRecordings();
+        favorites = await _db.getFavorites();
+        loadError = null;
+        break;
+      } catch (e, st) {
+        debugPrint('NavAlert: load attempt $attempt failed — $e\n$st');
+        loadError = 'Could not open local storage. Your contacts and '
+            'recordings are unavailable — tap Retry.';
+        if (attempt == 1) {
+          await Future.delayed(const Duration(milliseconds: 400));
+        }
+      }
     }
+    loaded = true; // NEVER leave the splash spinning.
+    _applyEarphoneRouting();
+    notifyListeners();
+  }
+
+  /// True when the local database could not be read, so the app is running on
+  /// empty defaults. The setup screens surface this instead of silently
+  /// showing an empty contact form and an untappable recordings dropdown.
+  bool get dataUnavailable => loadError != null;
+
+  /// Re-runs [load] after a failure (the Retry action on the setup screens).
+  Future<void> retryLoad() async {
+    loadError = null;
+    notifyListeners();
+    await load();
   }
 
   /// DO NOT MODIFY LOGIC: mirrors the "Bluetooth / ear-phone only detection"
