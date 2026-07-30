@@ -109,7 +109,15 @@ class MediaButtonService : Service() {
      * aside or it suppresses that sound. Called from Dart (SoundService) at the
      * start/end of every alarm and ringtone.
      */
-    fun setAudioYield(yield: Boolean) = bg.post {
+    fun setAudioYield(yield: Boolean) {
+        // DO NOT MODIFY LOGIC: this runs INLINE, not on the background handler.
+        // It used to be `bg.post { ... }`, which made the Dart side race the
+        // pause: MainActivity replied to the channel immediately, so
+        // SoundService's `await` returned and started playback while the
+        // keep-alive still held the media output — the recording appeared not to
+        // play at all, then became audible later once the queued pause finally
+        // ran. AudioTrack.pause()/play() are lightweight, non-blocking calls, so
+        // there is nothing to move off the caller's thread.
         try {
             if (yield) keepAlive?.pause() else keepAlive?.play()
         } catch (_: Exception) {

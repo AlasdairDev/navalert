@@ -169,8 +169,31 @@ class SoundService {
   /// rider keeps their visual excuse to leave; only the sound is lost. These
   /// methods therefore swallow playback errors instead of throwing, and still
   /// attempt the vibration that mimics an incoming call.
+  /// DO NOT MODIFY LOGIC: the voice player had NO audio context, so it fell
+  /// back to audioplayers' default, which requests PERMANENT audio focus
+  /// (AndroidAudioFocus.gain). Negotiating that against whatever else holds
+  /// focus is what made a tapped recording sit silent and then start playing on
+  /// its own a while later. gainTransient is both the correct semantic for a
+  /// call-like sound and released cleanly on stop; speech content type keeps it
+  /// on the speaker rather than the earpiece.
+  bool _voiceConfigured = false;
+  Future<void> _configureVoice() async {
+    if (_voiceConfigured) return;
+    try {
+      await _voicePlayer.setAudioContext(AudioContext(
+        android: const AudioContextAndroid(
+          usageType: AndroidUsageType.media,
+          contentType: AndroidContentType.speech,
+          audioFocus: AndroidAudioFocus.gainTransient,
+        ),
+      ));
+    } catch (_) {/* non-Android or unsupported — default context is fine */}
+    _voiceConfigured = true;
+  }
+
   Future<void> playRingtone() async {
     await _yieldAudio(true);
+    await _configureVoice();
     try {
       await _voicePlayer.stop();
       await _voicePlayer.setReleaseMode(ReleaseMode.loop);
@@ -189,6 +212,7 @@ class SoundService {
     // Mom/Dad voice (and any recording) plays silently, because the always-on
     // volume-shortcut session still occupies the audio path.
     await _yieldAudio(true);
+    await _configureVoice();
     try {
       await _voicePlayer.stop();
       await Vibration.cancel();
