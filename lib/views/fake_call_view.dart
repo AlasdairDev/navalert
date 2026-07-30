@@ -38,9 +38,20 @@ class _FakeCallViewState extends State<FakeCallView> {
     // the dark background, white text, and red/green call buttons below are
     // intentionally NOT NavAlert purple — they mimic the native dialer. Match
     // the OS dialer styling here; do not pull app theme colors into it.
-    return Scaffold(
-      backgroundColor: const Color(0xFF101418),
-      body: SafeArea(
+    return PopScope(
+      // DO NOT MODIFY LOGIC: hardware Back and the edge-swipe MUST tear the
+      // call down, not merely hide it. This screen used to pop with no cleanup
+      // at all — the ringtone kept playing and NavAlert stayed drawn over the
+      // lock screen with no visible call left to end it, which is the exact
+      // opposite of a discreet escape. Leaving canPop true is deliberate: the
+      // rider must always be able to leave; only the teardown is enforced.
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) em.endFakeCall();
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF101418),
+        body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(children: [
@@ -65,17 +76,18 @@ class _FakeCallViewState extends State<FakeCallView> {
             const Spacer(),
             if (!em.fakeCallAnswered)
               Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-                // DO NOT MODIFY LOGIC: decline → endFakeCall + pop (also tears
-                // down the lock-screen notification); answer → play the chosen
-                // recording + start the call timer. Restyle the buttons, keep
-                // the handlers. Red/green are the universal call colours — keep.
-                // Bug fix: pop FIRST so the screen closes on the first tap.
-                // endFakeCall's native teardown (stop audio, clear the
-                // lock-screen window) is slow; awaiting it before popping made
-                // the End button feel unresponsive. Fire-and-forget the cleanup.
+                // DO NOT MODIFY LOGIC: decline → pop, and the PopScope above
+                // runs endFakeCall (audio + lock-screen window); answer → play
+                // the chosen recording + start the call timer. Restyle the
+                // buttons, keep the handlers. Red/green are the universal call
+                // colours — keep.
+                // Popping FIRST is deliberate: the native teardown is slow, and
+                // awaiting it before popping made End feel unresponsive. The
+                // teardown now hangs off the PopScope instead of these two
+                // handlers, so it runs on EVERY exit — button, hardware Back,
+                // or edge-swipe — and can no longer be bypassed.
                 _roundButton(Icons.call_end, Colors.red, () {
                   Navigator.of(this.context).pop();
-                  em.endFakeCall();
                 }),
                 _roundButton(Icons.call, Colors.green, () async {
                   final rec = app.selectedRecording;
@@ -89,14 +101,14 @@ class _FakeCallViewState extends State<FakeCallView> {
               // whole screen jumps left the instant the call is answered,
               // which instantly breaks the "real dialer" illusion.
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                // Pop first, tear down after (see the incoming-call branch).
+                // Pop only; the PopScope tears down (see the incoming branch).
                 _roundButton(Icons.call_end, Colors.red, () {
                   Navigator.of(this.context).pop();
-                  em.endFakeCall();
                 }),
               ]),
-            const SizedBox(height: 40),
-          ]),
+              const SizedBox(height: 40),
+            ]),
+          ),
         ),
       ),
     );

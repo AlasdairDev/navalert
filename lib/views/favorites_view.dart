@@ -19,31 +19,58 @@ import 'route_view.dart';
 ///         remove-dialog wording, spacing.
 ///  [WANT] reorder/drag favorites, custom labels/icons (Home/Work/School),
 ///         swipe-to-delete, map thumbnail per favorite.
-class FavoritesView extends StatelessWidget {
+class FavoritesView extends StatefulWidget {
   const FavoritesView({super.key});
+
+  @override
+  State<FavoritesView> createState() => _FavoritesViewState();
+}
+
+class _FavoritesViewState extends State<FavoritesView> {
+  // DO NOT MODIFY LOGIC: in-flight guard. The modal loader below blocks further
+  // taps, but its barrier only appears on the NEXT frame — two taps landing in
+  // the same frame both got through, each re-acquiring GPS, writing its own
+  // trip row and pushing its own RouteView.
+  bool _starting = false;
 
   // DO NOT MODIFY LOGIC: one-tap trip from a saved place — refreshes GPS, sets
   // the destination, and triggers route planning. Keep the flow; the loading
   // spinner and any result screen are [EDIT].
-  Future<void> _startFromFavorite(BuildContext context, Favorite f) async {
+  Future<void> _startFromFavorite(Favorite f) async {
+    if (_starting) return;
+    _starting = true;
     final home = context.read<HomeViewModel>();
     final app = context.read<AppViewModel>();
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => const Center(child: CircularProgressIndicator()));
+    // DO NOT MODIFY LOGIC: a planning failure must SAY so. The exception used
+    // to propagate straight out of this method — the loader closed and nothing
+    // else happened, so tapping a favourite silently did nothing at all.
+    var planned = true;
     try {
       await home.refreshCurrentLocation();
       await home.setDestination(
           PlaceResult(
               name: f.name, displayName: f.address, lat: f.lat, lng: f.lng),
           app.transportPrefs);
+    } catch (_) {
+      planned = false;
     } finally {
-      if (context.mounted) Navigator.of(context).pop();
+      if (mounted) navigator.pop(); // close loader
+      _starting = false;
     }
-    if (!context.mounted) return;
-    Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const RouteView()));
+    if (!mounted) return;
+    if (!planned) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not plan a route from that favorite — '
+              'please try again.')));
+      return;
+    }
+    navigator.push(MaterialPageRoute(builder: (_) => const RouteView()));
   }
 
   /// Click-to-confirm removal: the favorite is only deleted after the
@@ -151,7 +178,7 @@ class FavoritesView extends StatelessWidget {
                       tooltip: 'Remove from Favorites',
                       onPressed: () => _confirmRemove(context, app, f),
                     ),
-                    onTap: () => _startFromFavorite(context, f),
+                    onTap: () => _startFromFavorite(f),
                   ),
                 );
               },

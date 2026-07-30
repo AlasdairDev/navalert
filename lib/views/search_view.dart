@@ -46,20 +46,53 @@ class _SearchViewState extends State<SearchView> {
     });
   }
 
+  // DO NOT MODIFY LOGIC: in-flight guard, matching the one on the Favorites
+  // one-tap start and the Add-Favorite save. The modal loader below only blocks
+  // taps once its barrier is painted on the NEXT frame, so two taps landing in
+  // the same frame BOTH got through. That corrupted the navigation stack rather
+  // than merely doing the work twice: two loaders were pushed, then each run's
+  // `finally` popped one and called pushReplacement — so the second pop ate a
+  // real route and the rider could land on a blank stack or back on Search with
+  // the route already planned. This is the app's primary path (Home → Search →
+  // Route), and picking a destination is exactly where an impatient double tap
+  // happens.
+  bool _selecting = false;
+
   Future<void> _select(PlaceResult place) async {
+    if (_selecting) return;
+    _selecting = true;
     final home = context.read<HomeViewModel>();
     final app = context.read<AppViewModel>();
+    final messenger = ScaffoldMessenger.of(context);
 
     showDialog(
         context: context,
         barrierDismissible: false,
         builder: (_) => const Center(child: CircularProgressIndicator()));
+    // DO NOT MODIFY LOGIC: a failure inside setDestination (the trip write, or
+    // the routing isolate) must SAY so. It used to propagate straight out of
+    // this method: the loader closed and nothing else happened, so the rider
+    // tapped a destination and the app just sat on the search screen with no
+    // error and no route — indistinguishable from a dead results list.
+    var planned = true;
     try {
       await home.setDestination(place, app.transportPrefs);
+    } catch (_) {
+      planned = false;
     } finally {
       if (mounted) Navigator.of(context).pop(); // close loader
+      // Released unconditionally so a transient routing/storage failure cannot
+      // leave every result row permanently dead — the rider must be able to
+      // retry. On the success path this screen is replaced anyway.
+      _selecting = false;
     }
     if (!mounted) return;
+    if (!planned) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not plan a route to that destination — '
+              'please try again.')));
+      return;
+    }
     Navigator.of(context)
         .pushReplacement(MaterialPageRoute(builder: (_) => const RouteView()));
   }
@@ -69,7 +102,12 @@ class _SearchViewState extends State<SearchView> {
     final vm = context.watch<HomeViewModel>();
     return Scaffold(
       appBar: AppBar(title: const Text('Where to?')),
-      body: SafeArea(
+      // Tapping off the field drops the keyboard. `opaque` so empty space below
+      // the results still registers; the result rows keep their own onTap.
+      body: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: SafeArea(
         child: Column(
           children: [
             // Figure 20 — origin → destination header: current-location
@@ -205,6 +243,7 @@ class _SearchViewState extends State<SearchView> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );

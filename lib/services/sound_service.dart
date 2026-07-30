@@ -154,13 +154,21 @@ class SoundService {
     }
   }
 
+  /// Every OTHER play* path wraps its player calls; this one did not, and it is
+  /// the only one invoked fire-and-forget (the Settings and Trip-Settings sound
+  /// dropdowns do not await it). An unplayable asset therefore surfaced as an
+  /// UNHANDLED async error — a red frame in front of the panel — rather than
+  /// simply not previewing. A preview is cosmetic; it must never be louder than
+  /// the failure it is reporting.
   Future<void> previewAlarm(String soundName) async {
     await _yieldAudio(true);
     await _applyAlarmRoute();
     final asset = alarmCatalog[soundName] ?? alarmCatalog.values.first;
-    await _alarmPlayer.stop();
-    await _alarmPlayer.setReleaseMode(ReleaseMode.release);
-    await _alarmPlayer.play(AssetSource(asset), volume: 0.8);
+    try {
+      await _alarmPlayer.stop();
+      await _alarmPlayer.setReleaseMode(ReleaseMode.release);
+      await _alarmPlayer.play(AssetSource(asset), volume: 0.8);
+    } catch (_) {/* unplayable asset — silently skip the preview */}
   }
 
   /// Fake-call ringtone + voice playback (Requirement R7).

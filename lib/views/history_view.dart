@@ -39,6 +39,12 @@ class _HistoryViewState extends State<HistoryView> {
       firstDate: DateTime(2024),
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
+    // Cancelling the picker returns null, which used to be forwarded straight
+    // through and CLEARED an active date filter — so a rider who tapped the
+    // calendar, changed their mind and backed out silently lost the filter they
+    // had already set. Cancel must mean "no change"; clearing has its own two
+    // explicit affordances (long-press the calendar button, or the chip's ✕).
+    if (picked == null) return;
     vm.setDateFilter(picked);
   }
 
