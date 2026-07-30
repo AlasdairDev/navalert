@@ -204,6 +204,50 @@ class _PermissionsViewState extends State<PermissionsView>
     });
   }
 
+  /// DO NOT MODIFY LOGIC: a permanently denied permission can NEVER be granted
+  /// by asking again — Android returns "denied" immediately without showing any
+  /// dialog, so the toggle just flicks back off forever and the rider is stuck
+  /// tapping a control that will never work. The OS settings page is the only
+  /// remaining route, so offer it explicitly. "Not now" must stay available:
+  /// every one of these permissions is optional, and none may block onboarding.
+  Future<void> _offerSettings(String what) async {
+    if (!mounted) return;
+    final open = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$what is blocked'),
+        content: Text(
+            'Android will not ask again for $what. You can turn it on from '
+            'NavAlert\'s app settings. The app still works without it, with '
+            'reduced functionality.',
+            style: const TextStyle(fontSize: 13)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Not now')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Open Settings')),
+        ],
+      ),
+    );
+    if (open == true) await openAppSettings();
+  }
+
+  /// DO NOT MODIFY LOGIC: the tile promises "Location (Always)" and the
+  /// manifest declares ACCESS_BACKGROUND_LOCATION, but on Android 10+ the
+  /// background grant is SEPARATE and can only be requested once foreground
+  /// access is already held — asking up front is auto-denied without a prompt,
+  /// which is why "Always" never actually took effect. Best-effort by design:
+  /// the trip alarm still runs via the foreground service without it, so a
+  /// refusal here must never block onboarding.
+  Future<void> _requestBackgroundLocation() async {
+    try {
+      if (await Permission.locationAlways.isGranted) return;
+      await Permission.locationAlways.request();
+    } catch (_) {/* older OS, or no background support — foreground is enough */}
+  }
+
   Future<void> _toggleLocation(bool v) async {
     if (v) {
       var p = await Geolocator.checkPermission();
@@ -212,17 +256,23 @@ class _PermissionsViewState extends State<PermissionsView>
       }
       _location = p == LocationPermission.always ||
           p == LocationPermission.whileInUse;
+      if (p == LocationPermission.deniedForever) {
+        await _offerSettings('Location');
+      } else if (_location) {
+        await _requestBackgroundLocation();
+      }
     } else {
       _location = false;
     }
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   // DO NOT MODIFY LOGIC: these fire the REAL OS permission dialogs
   // (Figure 16). Each permission must also be declared in AndroidManifest.xml
   // or the request is auto-denied. Restyle the permission tiles; keep the
   // request calls and the granted-state wiring.
-  Future<void> _toggle(Permission perm, void Function(bool) set, bool v) async {
+  Future<void> _toggle(
+      Permission perm, void Function(bool) set, bool v, String label) async {
     if (v) {
       await perm.request();
       // Re-read the ACTUAL status rather than trusting request()'s return.
@@ -230,6 +280,9 @@ class _PermissionsViewState extends State<PermissionsView>
       // immediate result is often stale — checking .isGranted after it settles
       // reflects what the user actually chose, so the toggle stops snapping back.
       set(await perm.isGranted);
+      // "Deny" twice makes Android stop asking. Without this the toggle is
+      // simply dead from then on, with nothing explaining why.
+      if (await perm.isPermanentlyDenied) await _offerSettings(label);
     } else {
       set(false);
     }
@@ -264,18 +317,18 @@ class _PermissionsViewState extends State<PermissionsView>
               _permTile(Icons.notifications, 'Notifications',
                   'Show alarms and alerts.', _notifications,
                   (v) => _toggle(Permission.notification,
-                      (g) => _notifications = g, v)),
+                      (g) => _notifications = g, v, 'Notifications')),
               _permTile(Icons.location_on, 'Location (Always)',
                   'Track your trip even when the app is closed.', _location,
                   _toggleLocation),
               _permTile(Icons.bluetooth, 'Bluetooth',
                   'Allow ear-phone only detection.', _bluetooth,
-                  (v) => _toggle(
-                      Permission.bluetoothConnect, (g) => _bluetooth = g, v)),
+                  (v) => _toggle(Permission.bluetoothConnect,
+                      (g) => _bluetooth = g, v, 'Bluetooth')),
               _permTile(Icons.battery_saver, 'Optimize Battery',
                   'Allow alarms to run reliably in the background.', _battery,
                   (v) => _toggle(Permission.ignoreBatteryOptimizations,
-                      (g) => _battery = g, v)),
+                      (g) => _battery = g, v, 'Battery optimization')),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,

@@ -39,6 +39,16 @@ class RouteView extends StatefulWidget {
 class _RouteViewState extends State<RouteView> {
   bool _showGuide = false;
 
+  // DO NOT MODIFY LOGIC: in-flight guard for "Start Trip". TripViewModel
+  // .startTrip already tears down any live monitoring, so the GPS listener is
+  // safe — but the NAVIGATION here is not. The handler pops the sheet and then
+  // pushes ActiveTripView, so two taps in the same frame ran both handlers:
+  // the second `Navigator.of(ctx).pop()` fired against an already-popped sheet
+  // context and took RouteView down with it, then both pushReplacement calls
+  // ran. The rider ends a trip they just started, or lands on a broken stack.
+  // "Start Trip" is a high-anticipation button — it gets double tapped.
+  bool _startingTrip = false;
+
   Future<void> _toggleFavorite() async {
     final app = context.read<AppViewModel>();
     final home = context.read<HomeViewModel>();
@@ -217,7 +227,11 @@ class _RouteViewState extends State<RouteView> {
               const SizedBox(width: 12),
               ElevatedButton(
                 onPressed: () async {
+                  if (_startingTrip) return;
+                  _startingTrip = true;
                   final tripVm = context.read<TripViewModel>();
+                  final navigator = Navigator.of(context);
+                  final messenger = ScaffoldMessenger.of(context);
                   // Hand the chosen suggestion's guide legs to the trip. They
                   // are memory-only (Table 24 has no coordinates), so this is
                   // the one moment they can be transferred.
@@ -230,10 +244,25 @@ class _RouteViewState extends State<RouteView> {
                     ..alarmSound = sound
                     ..vibrationOnlyMode = vibrationOnly;
                   Navigator.of(ctx).pop();
-                  await tripVm.startTrip(trip, guideLegs: legs);
-                  if (!mounted) return;
-                  // ignore: use_build_context_synchronously
-                  Navigator.of(context).pushReplacement(MaterialPageRoute(
+                  // A failure inside startTrip (the trip write, the GPS stream,
+                  // the foreground service) must SAY so and re-arm the button.
+                  // Unguarded, the exception escaped the handler: the sheet had
+                  // already closed, so the rider saw the sheet dismiss and then
+                  // nothing at all — no trip, no alarm, no error.
+                  try {
+                    await tripVm.startTrip(trip, guideLegs: legs);
+                  } catch (_) {
+                    _startingTrip = false;
+                    messenger.showSnackBar(const SnackBar(
+                        content: Text('Could not start the trip — please try '
+                            'again.')));
+                    return;
+                  }
+                  if (!mounted) {
+                    _startingTrip = false;
+                    return;
+                  }
+                  navigator.pushReplacement(MaterialPageRoute(
                       builder: (_) => const ActiveTripView()));
                 },
                 child: const Text('Start Trip'),

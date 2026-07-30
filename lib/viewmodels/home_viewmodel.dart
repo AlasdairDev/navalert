@@ -21,6 +21,27 @@ class HomeViewModel extends ChangeNotifier {
   final _db = DatabaseService.instance;
   static const _uuid = Uuid();
 
+  // DO NOT MODIFY LOGIC: almost everything here is a long async round trip —
+  // a GPS fix, a Nominatim lookup, the routing isolate — and each one calls
+  // notifyListeners() when it resumes. If the app is torn down while one is
+  // still in flight, that resume lands on a disposed ChangeNotifier and throws
+  // "A HomeViewModel was used after being disposed". Swallowing the notify
+  // after dispose is the correct behaviour: there is no longer anything
+  // listening, so the result has nowhere to go.
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
   // Current location
   double? currentLat;
   double? currentLng;
