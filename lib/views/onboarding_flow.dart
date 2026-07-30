@@ -727,8 +727,23 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   Future<void> _save() async {
     if (_saving) return;
     _saving = true;
+    try {
+      await _runSave();
+    } finally {
+      // DO NOT MODIFY LOGIC: the guard MUST be released. Without this the flag
+      // latched on the first tap and never cleared, so anything that threw on
+      // the way out (the audio stop, the navigation) left Save AND "Skip for
+      // now" permanently dead — and both are the only exits from the last step
+      // of onboarding, so the rider could never reach the app.
+      if (mounted) _saving = false;
+    }
+  }
+
+  Future<void> _runSave() async {
     final app = context.read<AppViewModel>();
-    await SoundService.instance.stopVoice();
+    try {
+      await SoundService.instance.stopVoice();
+    } catch (_) {/* audio teardown must never block finishing setup */}
     // Persist the caller name exactly as typed (Save must not require
     // pressing Enter on the keyboard first).
     final name = _callerCtrl.text.trim();

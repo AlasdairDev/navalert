@@ -216,6 +216,28 @@ void main() {
       vm.dispose();
     });
 
+    // Same trap as Slide-to-Stop: the audit write sat between the phase change
+    // and _endTrip, so a storage failure made "Yes" appear to do nothing and
+    // stranded the rider on the overshoot prompt.
+    test('confirming an overshoot still ends the trip when the write fails',
+        () async {
+      db.failWrites = true;
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+      for (final m in [900.0, 400.0, 120.0, 200.0, 300.0, 450.0]) {
+        gps.add(fixAt(m));
+        await pumpEventQueue();
+      }
+      expect(vm.phase, TripPhase.overshootPrompt);
+
+      await vm.answerOvershoot(true); // must not throw
+
+      expect(vm.phase, TripPhase.overshootConfirmed);
+      expect(db.lastTrip?.status, 'overshot',
+          reason: 'the trip must still be closed out');
+      vm.dispose();
+    });
+
     test('answering "no" to a false overshoot resumes monitoring', () async {
       final vm = newVm();
       await vm.startTrip(buildTrip());
@@ -474,6 +496,8 @@ class _FakeDb implements DatabaseService {
   final overshoots = <Map<String, Object?>>[];
   final dismissed = <String>[];
   Trip? lastTrip;
+  /// Simulates the encrypted database being unavailable on the device.
+  bool failWrites = false;
 
   @override
   Future<double?> averageAwakeSeconds({int lastN = 10}) async => avgAwake;
@@ -482,8 +506,10 @@ class _FakeDb implements DatabaseService {
   @override
   Future<void> insertAlarmEvent(AlarmEvent e) async => alarmEvents.add(e);
   @override
-  Future<void> insertOvershootEvent(Map<String, Object?> row) async =>
-      overshoots.add(row);
+  Future<void> insertOvershootEvent(Map<String, Object?> row) async {
+    if (failWrites) throw Exception('local storage unavailable');
+    overshoots.add(row);
+  }
   @override
   Future<void> markAlarmDismissed(String id) async => dismissed.add(id);
   @override
