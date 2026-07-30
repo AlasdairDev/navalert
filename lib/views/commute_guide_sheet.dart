@@ -25,10 +25,24 @@ class CommuteGuideSheet extends StatelessWidget {
   /// drag handle and the step counter.
   static const double collapsedFraction = 0.062;
 
+  /// DO NOT MODIFY LOGIC: the collapsed size must include the bottom system
+  /// inset. The sheet is measured from the very bottom of the Scaffold body,
+  /// which extends BEHIND the gesture-navigation bar — and 0.062 of the screen
+  /// is only about 57 logical pixels, roughly the height of that bar. The
+  /// collapsed sheet was therefore drawn almost entirely underneath it, leaving
+  /// the step counter jammed into the navigation pill. Growing by the inset
+  /// lifts the handle and counter clear of it.
+  static double _collapsedFractionFor(BuildContext context) {
+    final height = MediaQuery.sizeOf(context).height;
+    if (height <= 0) return collapsedFraction;
+    final inset = MediaQuery.paddingOf(context).bottom;
+    return (collapsedFraction + inset / height).clamp(collapsedFraction, 0.5);
+  }
+
   /// Logical pixels the monitoring screen must reserve at its bottom so the
   /// collapsed sheet never overlaps the SOS / Fake Call controls.
   static double collapsedHeight(BuildContext context) =>
-      MediaQuery.sizeOf(context).height * collapsedFraction;
+      MediaQuery.sizeOf(context).height * _collapsedFractionFor(context);
 
   @override
   Widget build(BuildContext context) {
@@ -47,8 +61,8 @@ class CommuteGuideSheet extends StatelessWidget {
       // buttons underneath remain fully tappable — they are safety controls
       // and must never be covered by a convenience panel. ActiveTripView pads
       // the monitoring body by [collapsedHeight] to match.
-      initialChildSize: collapsedFraction,
-      minChildSize: collapsedFraction,
+      initialChildSize: _collapsedFractionFor(context),
+      minChildSize: _collapsedFractionFor(context),
       maxChildSize: 0.62,
       builder: (context, controller) => Container(
         decoration: const BoxDecoration(
@@ -57,7 +71,9 @@ class CommuteGuideSheet extends StatelessWidget {
         ),
         child: ListView(
           controller: controller,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          // Bottom inset keeps the last card clear of the navigation bar too.
+          padding: EdgeInsets.fromLTRB(
+              16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
           children: [
             Center(
               child: Container(

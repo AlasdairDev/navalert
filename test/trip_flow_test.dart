@@ -338,6 +338,23 @@ void main() {
       vm.dispose();
     });
 
+    // Slide-to-Stop is the ONLY way off the monitoring screen (PopScope blocks
+    // Back), so if stopTrip throws, the rider is trapped in a trip they cannot
+    // end. It must therefore never throw, whatever the teardown hits.
+    test('the trip still ends when notification teardown fails', () async {
+      lock.failOnCancel = true;
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+      expect(vm.isActive, isTrue);
+
+      await vm.stopTrip(); // must not throw
+
+      expect(vm.phase, TripPhase.ended);
+      expect(vm.isActive, isFalse);
+      expect(lock.cancelCount, greaterThan(0), reason: 'teardown was attempted');
+      vm.dispose();
+    });
+
     test('isActive tracks the trip lifecycle', () async {
       final vm = newVm();
       expect(vm.isActive, isFalse);
@@ -490,6 +507,8 @@ class _FakeSound implements SoundService {
 class _FakeLockWidget implements TripNotificationService {
   final distancesShown = <double>[];
   int cancelCount = 0;
+  /// Simulates the notification plugin channel throwing on teardown.
+  bool failOnCancel = false;
   @override
   VoidCallback? onEndTrip;
 
@@ -500,7 +519,10 @@ class _FakeLockWidget implements TripNotificationService {
           double? etaMinutes}) async =>
       distancesShown.add(distanceM);
   @override
-  Future<void> cancel() async => cancelCount++;
+  Future<void> cancel() async {
+    cancelCount++;
+    if (failOnCancel) throw Exception('notification channel unavailable');
+  }
   @override
   dynamic noSuchMethod(Invocation i) => null;
 }
