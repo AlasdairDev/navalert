@@ -372,27 +372,65 @@ class DatabaseService {
   static const _presetDadPath = 'assets/sounds/fake_call_dad.wav';
 
   // ---------- singletons ----------
-  Future<AppState> getAppState() async =>
-      AppState.fromMap((await (await db).query('app_state')).first);
-  Future<void> saveAppState(AppState s) async => (await db)
-      .update('app_state', s.toMap(), where: 'id = 1');
+  /// DO NOT MODIFY LOGIC: these tables hold exactly one row, and the getters
+  /// used to take `.first` of the query straight away. A missing row therefore
+  /// threw StateError — and because the database itself opens perfectly well
+  /// in that state, the open-recovery never fires: instead EVERY read fails
+  /// and the app reports "could not open local storage". Re-seed once, then
+  /// fall back to defaults rather than throwing.
+  Future<Map<String, Object?>?> _singletonRow(String table) async {
+    final d = await db;
+    var rows = await d.query(table);
+    if (rows.isEmpty) {
+      debugPrint('NavAlert: $table row missing — re-seeding.');
+      await _ensureSeedData(d);
+      rows = await d.query(table);
+    }
+    return rows.isEmpty ? null : rows.first;
+  }
 
-  Future<UserSettings> getUserSettings() async =>
-      UserSettings.fromMap((await (await db).query('user_settings')).first);
-  Future<void> saveUserSettings(UserSettings s) async => (await db)
-      .update('user_settings', s.toMap(), where: 'id = 1');
+  /// DO NOT MODIFY LOGIC: `update` on a missing row affects ZERO rows and
+  /// reports success, so the setting silently never persists. Insert it back
+  /// when that happens.
+  Future<void> _saveSingleton(String table, Map<String, Object?> values) async {
+    final d = await db;
+    final changed = await d.update(table, values, where: 'id = 1');
+    if (changed == 0) {
+      await d.insert(table, {...values, 'id': 1},
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+  }
 
-  Future<TransportPreferences> getTransportPreferences() async =>
-      TransportPreferences.fromMap(
-          (await (await db).query('transport_preferences')).first);
-  Future<void> saveTransportPreferences(TransportPreferences s) async =>
-      (await db)
-          .update('transport_preferences', s.toMap(), where: 'id = 1');
+  Future<AppState> getAppState() async {
+    final m = await _singletonRow('app_state');
+    return m == null ? AppState() : AppState.fromMap(m);
+  }
 
-  Future<FakeCallConfig> getFakeCallConfig() async => FakeCallConfig.fromMap(
-      (await (await db).query('fake_call_config')).first);
-  Future<void> saveFakeCallConfig(FakeCallConfig c) async =>
-      (await db).update('fake_call_config', c.toMap(), where: 'id = 1');
+  Future<void> saveAppState(AppState s) => _saveSingleton('app_state', s.toMap());
+
+  Future<UserSettings> getUserSettings() async {
+    final m = await _singletonRow('user_settings');
+    return m == null ? UserSettings() : UserSettings.fromMap(m);
+  }
+
+  Future<void> saveUserSettings(UserSettings s) =>
+      _saveSingleton('user_settings', s.toMap());
+
+  Future<TransportPreferences> getTransportPreferences() async {
+    final m = await _singletonRow('transport_preferences');
+    return m == null ? TransportPreferences() : TransportPreferences.fromMap(m);
+  }
+
+  Future<void> saveTransportPreferences(TransportPreferences s) =>
+      _saveSingleton('transport_preferences', s.toMap());
+
+  Future<FakeCallConfig> getFakeCallConfig() async {
+    final m = await _singletonRow('fake_call_config');
+    return m == null ? FakeCallConfig() : FakeCallConfig.fromMap(m);
+  }
+
+  Future<void> saveFakeCallConfig(FakeCallConfig c) =>
+      _saveSingleton('fake_call_config', c.toMap());
 
   // ---------- emergency contacts ----------
   Future<List<EmergencyContact>> getContacts() async =>
