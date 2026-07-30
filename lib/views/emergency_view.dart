@@ -165,7 +165,16 @@ class EmergencyView extends StatelessWidget {
                       final caller = r.title.split(' ').first;
                       app.fakeCallConfig.recordingId = r.recordingId;
                       app.fakeCallConfig.callerName = caller;
-                      await app.saveFakeCallConfig();
+                      // DO NOT MODIFY LOGIC: persisting the choice must never
+                      // gate the call itself. This write used to be awaited
+                      // unguarded, so a storage failure threw here and the
+                      // fake call NEVER STARTED — the escape feature dying at
+                      // exactly the moment the rider needs it. Remembering the
+                      // selection is a convenience; launching the call is the
+                      // safety feature.
+                      try {
+                        await app.saveFakeCallConfig();
+                      } catch (_) {/* not persisted — still place the call */}
                       if (!context.mounted) return;
                       final vm = context.read<EmergencyViewModel>();
                       await vm.startFakeCall(callerName: caller);

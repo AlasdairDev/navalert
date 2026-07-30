@@ -69,15 +69,29 @@ class _RouteViewState extends State<RouteView> {
         ),
       );
       if (confirmed != true) return;
-      await app.removeFavorite(existing.favoriteId);
-      messenger.showSnackBar(
-          SnackBar(content: Text('${dest.name} removed from Favorites.')));
+      // The star must report a storage failure rather than silently doing
+      // nothing (the success SnackBar below would never be reached).
+      try {
+        await app.removeFavorite(existing.favoriteId);
+        messenger.showSnackBar(
+            SnackBar(content: Text('${dest.name} removed from Favorites.')));
+      } catch (_) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Could not update Favorites — storage is '
+                'unavailable.')));
+      }
     } else {
-      final f = await app.addFavorite(
-          dest.name, dest.displayName, dest.lat, dest.lng);
-      home.plannedTrip?.destinationFavoriteId = f.favoriteId;
-      messenger.showSnackBar(
-          SnackBar(content: Text('${dest.name} added to Favorites.')));
+      try {
+        final f = await app.addFavorite(
+            dest.name, dest.displayName, dest.lat, dest.lng);
+        home.plannedTrip?.destinationFavoriteId = f.favoriteId;
+        messenger.showSnackBar(
+            SnackBar(content: Text('${dest.name} added to Favorites.')));
+      } catch (_) {
+        messenger.showSnackBar(const SnackBar(
+            content: Text('Could not update Favorites — storage is '
+                'unavailable.')));
+      }
     }
     if (mounted) setState(() {});
   }

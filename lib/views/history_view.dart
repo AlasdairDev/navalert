@@ -237,8 +237,13 @@ class _HistoryViewState extends State<HistoryView> {
       ),
     );
     if (confirmed != true) return;
-    await vm.deleteTrip(t);
-    messenger.showSnackBar(const SnackBar(content: Text('Trip deleted.')));
+    try {
+      await vm.deleteTrip(t);
+      messenger.showSnackBar(const SnackBar(content: Text('Trip deleted.')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not delete — storage is unavailable.')));
+    }
   }
 
   Widget _chip(String text, Color color) => Container(
