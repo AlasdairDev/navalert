@@ -112,21 +112,40 @@ class AppViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// DO NOT MODIFY LOGIC: the three preference saves below are called
+  /// fire-and-forget from switch and dropdown handlers (Settings, Trip
+  /// Settings, the fake-call recording picker). If they threw, it would become
+  /// an UNHANDLED async error and the change would silently fail to persist —
+  /// the control flips, then reverts on the next launch with no explanation.
+  /// They report through [loadError] instead, which the setup screens already
+  /// surface with a Retry action. Contact/favorite/recording writes are
+  /// deliberately NOT included: those are awaited by callers that show their
+  /// own specific error, and must keep throwing.
+  Future<void> _savePreference(
+      Future<void> Function() write, String failureMessage) async {
+    try {
+      await write();
+      loadError = null;
+    } catch (e) {
+      debugPrint('NavAlert: $failureMessage — $e');
+      loadError = failureMessage;
+    }
+    notifyListeners();
+  }
+
   Future<void> saveSettings() async {
-    await _db.saveUserSettings(settings);
+    await _savePreference(() => _db.saveUserSettings(settings),
+        'Could not save your settings — storage is unavailable.');
     _applyEarphoneRouting();
-    notifyListeners();
   }
 
-  Future<void> saveTransportPrefs() async {
-    await _db.saveTransportPreferences(transportPrefs);
-    notifyListeners();
-  }
+  Future<void> saveTransportPrefs() => _savePreference(
+      () => _db.saveTransportPreferences(transportPrefs),
+      'Could not save your transport preferences — storage is unavailable.');
 
-  Future<void> saveFakeCallConfig() async {
-    await _db.saveFakeCallConfig(fakeCallConfig);
-    notifyListeners();
-  }
+  Future<void> saveFakeCallConfig() => _savePreference(
+      () => _db.saveFakeCallConfig(fakeCallConfig),
+      'Could not save the fake-call settings — storage is unavailable.');
 
   // ---------- emergency contacts ----------
   Future<void> saveContact(
