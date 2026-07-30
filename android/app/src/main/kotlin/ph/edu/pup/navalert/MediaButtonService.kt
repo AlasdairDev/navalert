@@ -186,12 +186,26 @@ class MediaButtonService : Service() {
 
                 // Relay to the real stream so volume still changes for the
                 // user. Guarded: a failure here must not swallow the press.
+                //
+                // DO NOT MODIFY LOGIC (the flag choice): FLAG_SHOW_UI asks
+                // Android to pop the volume slider. During a fake call that
+                // slider appeared over the incoming-call screen — reported
+                // without the rider touching either volume key, because
+                // NavAlert holds a REMOTE-volume session, so a change from any
+                // source (an OEM "smart volume" tweak, a headset, the system
+                // re-syncing) arrives here and we then forced the panel on
+                // screen. A volume UI popping up mid-"call" destroys the
+                // illusion the whole feature depends on (R7), so the panel is
+                // suppressed for the duration of the call. The volume change
+                // itself is still relayed, so the rider can still adjust it.
+                val flags =
+                    if (MainActivity.fakeCallActive) 0 else AudioManager.FLAG_SHOW_UI
                 try {
                     audio.adjustSuggestedStreamVolume(
                         if (direction > 0) AudioManager.ADJUST_RAISE
                         else AudioManager.ADJUST_LOWER,
                         AudioManager.USE_DEFAULT_STREAM_TYPE,
-                        AudioManager.FLAG_SHOW_UI
+                        flags
                     )
                 } catch (_: Exception) {
                 }
