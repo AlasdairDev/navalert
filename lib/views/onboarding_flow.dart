@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -581,9 +583,17 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
             children: [
               const Icon(Icons.contacts, size: 56, color: NavAlertColors.accent),
               const SizedBox(height: 12),
-              const Text('Add Emergency Contacts',
-                  style:
-                      TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+              // Figure 17 introduces these contacts ("Add…"); Figure 27 is the
+              // SAME form reached later from Settings → Update, where the rider
+              // is editing contacts that already exist. Calling that "Add"
+              // misdescribed what the screen was about to do.
+              Text(
+                  widget.inOnboarding
+                      ? 'Add Emergency Contacts'
+                      : 'Update Emergency Contacts',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               const Text(
                 'Your emergency contacts will be notified with your location '
@@ -621,8 +631,13 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
+                // "Continue" belongs to the onboarding chain, where this screen
+                // is a step on the way to the next one. From Settings there is
+                // nothing to continue to — the action is the Figure 27 "Update".
                 child: ElevatedButton(
-                    onPressed: _save, child: const Text('Continue')),
+                    onPressed: _save,
+                    child: Text(
+                        widget.inOnboarding ? 'Continue' : 'Update')),
               ),
               if (widget.inOnboarding)
                 TextButton(
@@ -703,17 +718,64 @@ class FakeCallSetupView extends StatefulWidget {
 class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   late final TextEditingController _callerCtrl;
 
+  // ── Figure 28 / 28.3 / 28.4 preview transport state ──────────────────────
+  // Which row owns the player right now, whether it is paused, and the live
+  // playhead behind the `00:01.97` readout. Only ONE row can be active,
+  // because there is only one voice player — tracking it by id is what lets
+  // the other rows stay on ▶ instead of all showing a pause icon at once.
+  String? _playingId;
+  bool _previewPaused = false;
+  Duration _pos = Duration.zero;
+  Duration _dur = Duration.zero;
+  final List<StreamSubscription> _subs = [];
+
   @override
   void initState() {
     super.initState();
     _callerCtrl = TextEditingController(
         text: context.read<AppViewModel>().fakeCallConfig.callerName);
+    final sound = SoundService.instance;
+    _subs
+      ..add(sound.voicePosition.listen((p) {
+        if (mounted && _playingId != null) setState(() => _pos = p);
+      }))
+      ..add(sound.voiceDuration.listen((d) {
+        if (mounted && _playingId != null) setState(() => _dur = d);
+      }))
+      // The clip ran to its end on its own — hand the row back to ▶ so the
+      // control never sits on ⏸ over a player that already stopped.
+      ..add(sound.voiceCompleted.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          _playingId = null;
+          _previewPaused = false;
+          _pos = Duration.zero;
+        });
+      }));
   }
 
   @override
   void dispose() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    // Leaving this screen must not leave a preview playing underneath it — but
+    // ONLY stop the player when this screen is the thing using it. A blanket
+    // stop here would also kill a fake call placed from somewhere else, which
+    // is the one piece of audio that must never be cut short.
+    if (_playingId != null) SoundService.instance.stopVoice();
     _callerCtrl.dispose();
     super.dispose();
+  }
+
+  /// `00:01.97` — the elapsed readout in Figures 28.3 / 28.4.
+  static String _clock(Duration d) {
+    final mm = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final ss = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final cs = ((d.inMilliseconds.remainder(1000)) ~/ 10)
+        .toString()
+        .padLeft(2, '0');
+    return '$mm:$ss.$cs';
   }
 
   void _toast(String message) {
@@ -769,14 +831,50 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     await SoundService.instance.playVoice(rec.filePath);
   }
 
-  /// Figure 28 ("All Recordings") — play one specific row rather than whatever
-  /// happens to be selected. Any clip already playing is stopped first so two
-  /// rows cannot overlap.
-  Future<void> _playRecording(Recording r) async {
-    try {
-      await SoundService.instance.stopVoice();
-    } catch (_) {/* nothing was playing */}
-    await SoundService.instance.playVoice(r.filePath);
+  /// Figure 28.3 ▶ / 28.4 ⏸ — one control that plays, pauses and resumes the
+  /// row it belongs to. Starting a different row stops the current one first,
+  /// because a single voice player cannot serve two clips at once.
+  Future<void> _togglePreview(Recording r) async {
+    final sound = SoundService.instance;
+    if (_playingId == r.recordingId) {
+      // Same row: pause ⇄ resume in place, keeping the playhead.
+      if (_previewPaused) {
+        await sound.resumeVoice();
+      } else {
+        await sound.pauseVoice();
+      }
+      if (mounted) setState(() => _previewPaused = !_previewPaused);
+      return;
+    }
+    // A different row (or none) — take the player over from the top.
+    await sound.stopVoice();
+    if (mounted) {
+      setState(() {
+        _playingId = r.recordingId;
+        _previewPaused = false;
+        _pos = Duration.zero;
+        _dur = Duration.zero;
+      });
+    }
+    await sound.previewVoice(r.filePath);
+  }
+
+  /// Figure 28 ↺ — hear the clip again from the beginning. If this row is not
+  /// the one loaded in the player, it simply starts it, so the control is never
+  /// a dead tap.
+  Future<void> _restartPreview(Recording r) async {
+    final sound = SoundService.instance;
+    if (_playingId != r.recordingId) {
+      await _togglePreview(r);
+      return;
+    }
+    await sound.restartVoice();
+    if (mounted) {
+      setState(() {
+        _previewPaused = false;
+        _pos = Duration.zero;
+      });
+    }
   }
 
   /// Selecting a row is what the fake call will actually use — same contract as
@@ -813,6 +911,10 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     return Column(
       children: app.recordings.map((r) {
         final selected = r.recordingId == selectedId;
+        // "Selected" (the clip the fake call will use) and "active" (the clip
+        // currently loaded in the preview player) are independent — a rider can
+        // audition a row without changing what the fake call plays.
+        final active = r.recordingId == _playingId;
         return Card(
           // The active clip is ringed with the accent token, matching how the
           // suggested-route cards mark their selection.
@@ -856,19 +958,43 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                   ]),
                 ),
                 const SizedBox(height: 4),
+                // Figure 28 transport cluster: waveform glyph · ↺ restart ·
+                // ▶/⏸ · elapsed. The mockup's second seek arrow is deliberately
+                // NOT reproduced — these clips run one to five seconds, so a
+                // fixed-seconds skip would either do nothing or jump past the
+                // end. The live `00:01.97` readout from Figures 28.3/28.4 sits
+                // there instead, which is the information that arrow implied.
                 Row(children: [
+                  Icon(Icons.graphic_eq,
+                      size: 20,
+                      color: active
+                          ? NavAlertColors.accent
+                          : NavAlertColors.textSecondary),
                   IconButton(
-                    icon: const Icon(Icons.play_arrow,
-                        color: NavAlertColors.accent),
-                    tooltip: 'Play',
-                    onPressed: () => _playRecording(r),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.stop,
+                    icon: const Icon(Icons.replay,
                         color: NavAlertColors.textSecondary),
-                    tooltip: 'Stop',
-                    onPressed: () => SoundService.instance.stopVoice(),
+                    tooltip: 'Play from the start',
+                    onPressed: () => _restartPreview(r),
                   ),
+                  IconButton(
+                    icon: Icon(
+                        active && !_previewPaused
+                            ? Icons.pause
+                            : Icons.play_arrow,
+                        color: NavAlertColors.accent),
+                    tooltip: active && !_previewPaused ? 'Pause' : 'Play',
+                    onPressed: () => _togglePreview(r),
+                  ),
+                  if (active)
+                    Text(
+                      _dur > Duration.zero
+                          ? '${_clock(_pos)} / ${_clock(_dur)}'
+                          : _clock(_pos),
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                          color: NavAlertColors.textSecondary),
+                    ),
                   const Spacer(),
                   // Presets have no delete — removing one would leave the fake
                   // call without a guaranteed clip to fall back on.
@@ -1010,7 +1136,28 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
       // (Figure 18) and draws its own in-body heading instead.
       appBar: widget.inOnboarding
           ? null
-          : AppBar(title: const Text('All Recordings')),
+          : AppBar(
+              title: const Text('All Recordings'),
+              actions: [
+                // Figure 28 ⊕ — the same capture the "Record New" button below
+                // drives, promoted to the header where the mockup puts it. It
+                // mirrors the recording state so the header is never a second,
+                // contradictory control: while capture is running it shows the
+                // stop glyph and ends the take.
+                IconButton(
+                  icon: Icon(
+                      em.recording
+                          ? Icons.stop_circle_outlined
+                          : Icons.add_circle_outline,
+                      color: em.recording
+                          ? NavAlertColors.danger
+                          : NavAlertColors.accent),
+                  tooltip:
+                      em.recording ? 'Stop recording' : 'Record a new clip',
+                  onPressed: _recordNew,
+                ),
+              ],
+            ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
