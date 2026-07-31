@@ -768,6 +768,58 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     await SoundService.instance.playVoice(rec.filePath);
   }
 
+  /// Click-to-confirm deletion, matching the trip/favorite pattern: nothing is
+  /// removed until the rider explicitly confirms in the dialog.
+  ///
+  /// DO NOT MODIFY LOGIC: stop the audio first. Deleting the .m4a while
+  /// SoundService still holds it open leaves the player pointing at a file that
+  /// no longer exists, and on Android the delete can fail outright because the
+  /// handle is locked — so the row would vanish while the file stayed behind.
+  Future<void> _deleteSelectedRecording() async {
+    final app = context.read<AppViewModel>();
+    final rec = app.selectedRecording;
+    if (rec == null || rec.isPreset) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this recording?'),
+        content: Text(
+          '${rec.title}\n\nThis permanently removes the recording from your '
+          'device. This cannot be undone.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: NavAlertColors.danger,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await SoundService.instance.stopVoice();
+    } catch (_) {/* nothing was playing — proceed with the delete */}
+
+    try {
+      await app.removeRecording(rec.recordingId);
+      messenger.showSnackBar(SnackBar(content: Text('${rec.title} deleted.')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not delete — storage is unavailable.')));
+    }
+    if (mounted) setState(() {});
+  }
+
   // In-flight guard: Save/Skip completes onboarding and then replaces the whole
   // navigation stack, so a double tap could run completeOnboarding twice and
   // push two shells.
@@ -875,6 +927,21 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                   ),
                 ),
               ),
+              // Delete the selected CUSTOM recording. The row does not render
+              // at all for built-in presets — they are bundled assets and
+              // deleting one would leave the fake call with no fallback clip.
+              if (app.selectedRecording != null &&
+                  !app.selectedRecording!.isPreset)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: _deleteSelectedRecording,
+                    icon: const Icon(Icons.delete_outline,
+                        size: 18, color: NavAlertColors.danger),
+                    label: const Text('Delete this recording',
+                        style: TextStyle(color: NavAlertColors.danger)),
+                  ),
+                ),
               const SizedBox(height: 12),
               TextField(
                 decoration: const InputDecoration(
