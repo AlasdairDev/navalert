@@ -14,12 +14,27 @@ class GeocodingService {
     'User-Agent': 'NavAlert-Capstone/1.0 (PUP BSIT; contact: navalert@pup.edu.ph)'
   };
 
-  Future<List<PlaceResult>> search(String query) async {
+  /// Most results the rider is shown. Over-fetching and trimming locally is
+  /// deliberate — see [_rank].
+  static const int maxResults = 5;
+
+  /// Returns at most [maxResults] places, ranked locally.
+  ///
+  /// DO NOT MODIFY LOGIC: Nominatim orders by its own "importance" score, which
+  /// surfaces large distant landmarks above the small nearby place the rider
+  /// actually typed — the reported "too many irrelevant results". We over-fetch
+  /// and re-rank instead of trusting that order. [nearLat]/[nearLng] are the
+  /// rider's position and MUST be null when the position is a fallback, or the
+  /// list gets sorted around a location they are nowhere near.
+  Future<List<PlaceResult>> search(String query,
+      {double? nearLat, double? nearLng}) async {
     if (query.trim().isEmpty) return [];
     final uri = Uri.parse(_base).replace(queryParameters: {
       'q': query,
       'format': 'jsonv2',
-      'limit': '6',
+      // Over-fetch, then rank locally down to maxResults. Still one API call,
+      // so this costs nothing against the Nominatim usage policy.
+      'limit': '10',
       'countrycodes': 'ph',
       // NCR viewbox (lon,lat), aligned to RouteEngine's NCR bounds so search,
       // map panning and pin validation all share one region definition.
@@ -54,7 +69,45 @@ class GeocodingService {
       results.add(PlaceResult(
           name: name, displayName: display, lat: lat, lng: lng));
     }
-    return results;
+    _rank(results, query, nearLat, nearLng);
+    return results.length <= maxResults
+        ? results
+        : results.sublist(0, maxResults);
+  }
+
+  /// Sorts in place: better text match first, then nearer to the rider.
+  ///
+  /// The score is deliberately coarse and totally ordered so the sort is stable
+  /// and predictable: 0 = the place name starts with what was typed, 1 = the
+  /// name contains it, 2 = only the full address contains it, 3 = no textual
+  /// match at all (Nominatim matched on something we are not showing).
+  static void _rank(
+      List<PlaceResult> results, String query, double? lat, double? lng) {
+    final q = query.trim().toLowerCase();
+
+    int textScore(PlaceResult p) {
+      final name = p.name.toLowerCase();
+      if (name.startsWith(q)) return 0;
+      if (name.contains(q)) return 1;
+      if (p.displayName.toLowerCase().contains(q)) return 2;
+      return 3;
+    }
+
+    // Squared degree distance. Real haversine is unnecessary to ORDER
+    // candidates that are all inside one metro region, and this avoids the
+    // trig on every comparison.
+    double proximity(PlaceResult p) {
+      if (lat == null || lng == null) return 0;
+      final dLat = p.lat - lat;
+      final dLng = p.lng - lng;
+      return dLat * dLat + dLng * dLng;
+    }
+
+    results.sort((a, b) {
+      final byText = textScore(a).compareTo(textScore(b));
+      if (byText != 0) return byText;
+      return proximity(a).compareTo(proximity(b));
+    });
   }
 
   /// Reverse-geocodes coordinates into a precise street address

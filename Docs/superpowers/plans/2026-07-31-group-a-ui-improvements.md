@@ -36,8 +36,17 @@
 
 ### Task 1: Delete a custom fake-call recording
 
+> **CORRECTION (found during execution).** `removeRecording` **already
+> existed** at `app_viewmodel.dart:183` as dead code — nothing called it. This
+> task therefore *hardens the existing method*; adding a second one would not
+> compile. The existing version had three defects: no preset guard, no `.m4a`
+> file cleanup, and it nulled the selection instead of falling back to a
+> recording that still exists. A fourth issue surfaced on implementation:
+> `SoundService.stopVoice()` must run before deletion, or a previewed file is
+> still open and Android can refuse the delete.
+
 **Files:**
-- Modify: `lib/viewmodels/app_viewmodel.dart` (add `removeRecording`, near `addRecording` at line 171)
+- Modify: `lib/viewmodels/app_viewmodel.dart:183` (harden the existing `removeRecording`)
 - Modify: `lib/views/onboarding_flow.dart` (`_FakeCallSetupViewState`, recording dropdown area ~line 853)
 
 **Interfaces:**

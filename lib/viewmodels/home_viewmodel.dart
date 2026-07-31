@@ -211,7 +211,13 @@ class HomeViewModel extends ChangeNotifier {
     searchError = null;
     notifyListeners();
     try {
-      results = await _geocoder.search(query);
+      // Rank against the rider's OWN position so nearby places win ties.
+      // DO NOT MODIFY LOGIC: null when the fix is a fallback. Ranking by the
+      // PUP placeholder would sort every result around a location the rider is
+      // not at, which is worse than not ranking by distance at all.
+      results = await _geocoder.search(query,
+          nearLat: locationIsFallback ? null : currentLat,
+          nearLng: locationIsFallback ? null : currentLng);
       if (results.isEmpty) {
         searchError = 'No results — refine your search or pin on the map.';
       }
@@ -273,11 +279,25 @@ class HomeViewModel extends ChangeNotifier {
     // Scope limit: the fare matrix is the LTFRB Metro Manila rate structure and
     // the GTFS feed covers NCR only. Outside it, say so plainly rather than
     // inventing a route and a fare the rider would actually try to pay.
-    if (!RouteEngine.isWithinNcr(trip.destinationLat, trip.destinationLng) ||
-        !RouteEngine.isWithinNcr(trip.originLat, trip.originLng)) {
+    final originInNcr = RouteEngine.isWithinNcr(trip.originLat, trip.originLng);
+    final destInNcr =
+        RouteEngine.isWithinNcr(trip.destinationLat, trip.destinationLng);
+    if (!originInNcr || !destInNcr) {
+      // DO NOT MODIFY LOGIC: name the end that is ACTUALLY out of range. The
+      // old copy always implied the destination was unsupported, so a rider
+      // starting in Bulacan/Cavite/Rizal and travelling INTO Metro Manila — a
+      // very common commute — was told their perfectly valid destination was
+      // the problem. Lead with what still works: the alarm is the product, the
+      // commute guide is the convenience.
+      final which = !originInNcr && !destInNcr
+          ? 'Your starting point and destination are'
+          : !originInNcr
+              ? 'Your starting point is'
+              : 'Your destination is';
       guideUnavailableReason =
-          'No commute guide available — NavAlert covers Metro Manila (NCR) '
-          'only. Your destination alarm will still work.';
+          '$which outside Metro Manila. Route and fare data cover NCR only, '
+          'so there is no commute guide for this trip — but your destination '
+          'alarm will still work normally.';
       return [];
     }
 
