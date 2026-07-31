@@ -278,7 +278,15 @@ class _Monitoring extends StatelessWidget {
                       icon: const Icon(Icons.warning_amber, size: 18),
                       label: Text(em.sending ? 'Sending…' : 'SOS'),
                     ),
-                    const SizedBox(width: 14),
+                    // DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:
+                    // SOS and Fake Call are DIFFERENT emergency actions and
+                    // must stay physically separated. They were 14 px apart,
+                    // which on a moving jeepney is close enough for one thumb
+                    // to catch both — the likeliest cause of "SOS and the
+                    // recording trigger at the same time". UI team: you may
+                    // restyle both buttons, but do not reduce this gap or put
+                    // them back side by side without another separator.
+                    const SizedBox(width: 40),
                     ElevatedButton.icon(
                       onPressed: em.fakeCallActive
                           ? null
