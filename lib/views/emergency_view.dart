@@ -63,29 +63,11 @@ class EmergencyView extends StatelessWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(children: [
-            // Insufficient Load Warning (Activity Diagram / app_state):
-            // SOS uses Native Android SMS and needs prepaid load.
-            if (app.showSosLowLoadWarning)
-              Card(
-                color: NavAlertColors.surface,
-                child: ListTile(
-                  leading: const Icon(Icons.sim_card_alert,
-                      color: NavAlertColors.warning),
-                  title: const Text('Insufficient load warning',
-                      style: TextStyle(fontSize: 13)),
-                  subtitle: const Text(
-                      'SOS sends a native SMS — keep sufficient prepaid load '
-                      'so alerts can be delivered without internet.',
-                      style: TextStyle(
-                          fontSize: 11, color: NavAlertColors.textSecondary)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => context
-                        .read<AppViewModel>()
-                        .dismissSosLowLoadWarning(),
-                  ),
-                ),
-              ),
+            // The insufficient-load warning used to render here. It now lives
+            // on the Home screen, where the Activity Diagram (p.92) and the
+            // "SOS Warning" mockup both put it: this screen is opened when the
+            // rider already needs SOS, which is too late to act on the news
+            // that their prepaid load may be short. See home_view.dart.
             const SizedBox(height: 16),
             // SOS press & hold (UC-7). TODO (UI Team): the button's size,
             // glow, ring, and typography are all restyleable — this is a
