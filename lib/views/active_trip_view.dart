@@ -164,7 +164,31 @@ class _Monitoring extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+            // ╔════════════════════════════════════════════════════════════╗
+            // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
+            // ║ MID-TRIP ALARM ARM/DISARM. The alarm is opt-in per trip, so ║
+            // ║ this is the ONLY way to arm it once a trip has started.     ║
+            // ║                                                            ║
+            // ║ UI TEAM: restyle the chip freely — colours, icon, shape,    ║
+            // ║ copy. Keep it bound to vm.trip!.alarmEnabled and keep the   ║
+            // ║ onPressed wired to vm.setAlarmEnabled. Removing it strands  ║
+            // ║ a rider who started without the alarm and then wants it.    ║
+            // ╚════════════════════════════════════════════════════════════╝
+            ActionChip(
+              avatar: Icon(
+                  vm.trip!.alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
+                  size: 18,
+                  color: vm.trip!.alarmEnabled
+                      ? NavAlertColors.success
+                      : NavAlertColors.textSecondary),
+              label: Text(vm.trip!.alarmEnabled
+                  ? 'Alarm on — tap to turn off'
+                  : 'Alarm off — tap to turn on'),
+              backgroundColor: NavAlertColors.surface,
+              onPressed: () => vm.setAlarmEnabled(!vm.trip!.alarmEnabled),
+            ),
+            const SizedBox(height: 12),
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 28, vertical: 10),
