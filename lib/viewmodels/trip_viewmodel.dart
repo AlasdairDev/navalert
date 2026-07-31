@@ -178,11 +178,44 @@ class TripViewModel extends ChangeNotifier {
       if (clock.now().difference(last) > signalLostThreshold) {
         signalLostAlarm = true;
         error = 'Signal Lost — GPS unavailable for a prolonged period.';
-        _sound.playAlarmStage(2, trip?.alarmSound ?? 'Digital Clock',
-            vibrationOnly: trip?.vibrationOnlyMode ?? false);
+        // Same rule as the overshoot prompt: the WARNING always appears, but a
+        // rider who disabled the alarm is not sounded at. The banner and its
+        // Dismiss action still show either way.
+        if (trip?.alarmEnabled ?? true) {
+          _sound.playAlarmStage(2, trip?.alarmSound ?? 'Digital Clock',
+              vibrationOnly: trip?.vibrationOnlyMode ?? false);
+        }
         notifyListeners();
       }
     });
+  }
+
+  /// Arms or disarms the escalating alarm mid-trip (R1, now opt-in).
+  ///
+  /// DO NOT MODIFY LOGIC: disarming must SILENCE anything already sounding and
+  /// stand the escalation timers down, otherwise the rider turns the alarm off
+  /// and it keeps blaring — and a pending Stage-2/3 timer would re-fire it
+  /// seconds later. Re-arming does not replay a missed stage; stages resume
+  /// from the next GPS fix, which is what `_firedStages` already guarantees.
+  Future<void> setAlarmEnabled(bool enabled) async {
+    final t = trip;
+    if (t == null || t.alarmEnabled == enabled) return;
+    t.alarmEnabled = enabled;
+    if (!enabled) {
+      _cancelEscalation();
+      try {
+        await _sound.stopAll();
+      } catch (e) {
+        debugPrint('NavAlert: could not silence the alarm — $e');
+      }
+      // Drop back to monitoring if a stage was on screen; the trip continues.
+      if (phase == TripPhase.alarmStage1 ||
+          phase == TripPhase.alarmStage2 ||
+          phase == TripPhase.alarmStage3) {
+        phase = TripPhase.monitoring;
+      }
+    }
+    notifyListeners();
   }
 
   Future<void> dismissSignalLostAlarm() async {
@@ -224,8 +257,14 @@ class TripViewModel extends ChangeNotifier {
       overshotM = past;
       phase = TripPhase.overshootPrompt;
       _cancelEscalation();
-      _sound.playAlarmStage(3, t.alarmSound,
-          vibrationOnly: t.vibrationOnlyMode);
+      // DO NOT MODIFY LOGIC: the overshoot PROMPT always shows, but the alarm
+      // SOUND respects the rider's choice. Someone who deliberately disabled
+      // the alarm must not be blasted with a Stage-3 tone; they still need to
+      // be told they went past their stop, and the event is still logged.
+      if (t.alarmEnabled) {
+        _sound.playAlarmStage(3, t.alarmSound,
+            vibrationOnly: t.vibrationOnlyMode);
+      }
       _logAlarm(3, 'Overshoot Alert', 'Did you miss your stop?');
       // The home widget was pushed above while the phase still read
       // "Monitoring", and this branch returns early — so without a forced
@@ -243,8 +282,16 @@ class TripViewModel extends ChangeNotifier {
       return;
     }
 
+    // DO NOT MODIFY LOGIC: the alarm is OPT-IN per trip (t.alarmEnabled).
+    // Everything else on this screen keeps running when it is off — distance,
+    // ETA, the lock-screen widget, overshoot detection and the commute guide —
+    // only the escalating stages are suppressed. The rider can arm it mid-trip
+    // from the Active Trip screen, and stages then fire from the next fix.
     final stage = engine.stageFor(distanceM);
-    if (stage > 0 && !_firedStages.contains(stage) && stage > highestStage) {
+    if (t.alarmEnabled &&
+        stage > 0 &&
+        !_firedStages.contains(stage) &&
+        stage > highestStage) {
       _fireStage(stage);
     }
 

@@ -203,6 +203,11 @@ class _RouteViewState extends State<RouteView> {
     if (trip == null) return;
     var sound = app.settings.alarmSound;
     var vibrationOnly = false;
+    // DO NOT MODIFY LOGIC: the destination alarm is OPT-IN. This local default
+    // of false is what makes it off-by-default for real riders — the Trip model
+    // itself defaults alarmEnabled to TRUE so that every other caller (and the
+    // alarm test-suite) is unaffected. Do not "align" the two defaults.
+    var alarmEnabled = false;
 
     showModalBottomSheet(
       context: context,
@@ -243,10 +248,30 @@ class _RouteViewState extends State<RouteView> {
               ),
             ),
             Card(
+              child: SwitchListTile(
+                secondary: Icon(
+                    alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
+                    color: NavAlertColors.accent),
+                title: const Text('Destination alarm'),
+                subtitle: Text(
+                    alarmEnabled
+                        ? 'You will be woken as you approach your stop.'
+                        : 'Off — you can turn it on any time during the trip.',
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+                value: alarmEnabled,
+                onChanged: (v) => setSheet(() => alarmEnabled = v),
+              ),
+            ),
+            Card(
               child: CheckboxListTile(
                 title: const Text('Vibration Only Mode'),
+                // Meaningless while the alarm is off — disabled rather than
+                // left tappable so the sheet cannot imply it does something.
                 value: vibrationOnly,
-                onChanged: (v) => setSheet(() => vibrationOnly = v ?? false),
+                onChanged: alarmEnabled
+                    ? (v) => setSheet(() => vibrationOnly = v ?? false)
+                    : null,
               ),
             ),
             const SizedBox(height: 12),
@@ -277,7 +302,8 @@ class _RouteViewState extends State<RouteView> {
                   // .startTrip() persists it (keeps the DB out of the View).
                   trip
                     ..alarmSound = sound
-                    ..vibrationOnlyMode = vibrationOnly;
+                    ..vibrationOnlyMode = vibrationOnly
+                    ..alarmEnabled = alarmEnabled;
                   Navigator.of(ctx).pop();
                   // A failure inside startTrip (the trip write, the GPS stream,
                   // the foreground service) must SAY so and re-arm the button.
