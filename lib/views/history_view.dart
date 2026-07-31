@@ -89,8 +89,9 @@ class _HistoryViewState extends State<HistoryView> {
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: InputChip(
-                label: Text(
-                    'On ${vm.dateFilter!.toLocal().toString().substring(0, 10)}'),
+                // Same long-form date as the cards below it — the raw ISO
+                // "2026-04-20" read like debug output beside "April 20, 2026".
+                label: Text('On ${_longDate(vm.dateFilter)}'),
                 onDeleted: () => vm.setDateFilter(null),
               ),
             ),
@@ -135,6 +136,21 @@ class _HistoryViewState extends State<HistoryView> {
         ]),
       ),
     );
+  }
+
+  /// "April 20, 2026" — the long-form date shown beside the calendar glyph on
+  /// each history card in Figure 30. The previous `toLocal().substring(0, 16)`
+  /// rendered the raw ISO form ("2026-04-20 12:00"), which duplicated the
+  /// departure time already printed above and read like debug output.
+  static const _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  static String _longDate(DateTime? d) {
+    if (d == null) return '—';
+    final l = d.toLocal();
+    return '${_months[l.month - 1]} ${l.day}, ${l.year}';
   }
 
   /// Google-Maps-style short place name: the first two comma components of a
@@ -186,10 +202,7 @@ class _HistoryViewState extends State<HistoryView> {
             const Icon(Icons.calendar_month,
                 size: 14, color: NavAlertColors.textSecondary),
             const SizedBox(width: 4),
-            Text(
-                t.startedAt == null
-                    ? '—'
-                    : '${t.startedAt!.toLocal()}'.substring(0, 16),
+            Text(_longDate(t.startedAt),
                 style: const TextStyle(
                     fontSize: 11, color: NavAlertColors.textSecondary)),
             const Spacer(),

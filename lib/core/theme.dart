@@ -65,11 +65,21 @@ ThemeData buildNavAlertTheme() {
       surface: NavAlertColors.surface,
       error: NavAlertColors.danger,
     ),
+    // [EDIT] Screen titles ("Settings", "Trip History", "Favorites", "All
+    // Recordings") are drawn large and LEFT-aligned to match the Chapter 3
+    // GUI figures, where each page leads with a big flush-left heading rather
+    // than a centred bar title. Colours stay on the existing tokens.
     appBarTheme: const AppBarTheme(
       backgroundColor: NavAlertColors.background,
       foregroundColor: NavAlertColors.textPrimary,
       elevation: 0,
-      centerTitle: true,
+      centerTitle: false,
+      titleSpacing: 20,
+      titleTextStyle: TextStyle(
+        color: NavAlertColors.textPrimary,
+        fontSize: 24,
+        fontWeight: FontWeight.w800,
+      ),
     ),
     cardTheme: const CardThemeData(
       color: NavAlertColors.card,

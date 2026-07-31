@@ -36,6 +36,15 @@ class SoundService {
     }
   }
 
+  /// Read-only public view of the same native query, for UI that needs to SHOW
+  /// the headset state rather than route audio with it — the Main Screen's
+  /// "Earphones connected" pill (GUI Page 8, the visible half of the paper's
+  /// "Bluetooth / ear-phone only detection" toggle).
+  ///
+  /// Deliberately a thin delegate: the alarm's route stays owned exclusively by
+  /// [_applyAlarmRoute], so a UI read can never change where the alarm plays.
+  Future<bool> isHeadsetConnected() => _isHeadsetConnected();
+
   /// Tracks the last audio-context routing applied so we only re-apply it when
   /// the earphone/speaker decision actually flips. null forces the first apply.
   bool? _lastEarphoneRoute;

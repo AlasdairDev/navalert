@@ -265,9 +265,18 @@ class _SettingsViewState extends State<SettingsView>
           header('Emergency Contacts'),
           Card(
             child: ListTile(
-              title: Text(app.contacts.isEmpty
-                  ? 'No contacts saved'
-                  : app.contacts.map((c) => c.name).join(', ')),
+              // Figure 33 labels the row itself ("Emergency contacts"); the
+              // saved names move to the subtitle so the row still says what is
+              // actually stored.
+              title: const Text('Emergency contacts'),
+              subtitle: Text(
+                  app.contacts.isEmpty
+                      ? 'No contacts saved'
+                      : app.contacts.map((c) => c.name).join(', '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 11, color: NavAlertColors.textSecondary)),
               trailing: ElevatedButton(
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) =>
@@ -279,7 +288,12 @@ class _SettingsViewState extends State<SettingsView>
           header('Fake Call'),
           Card(
             child: ListTile(
-              title: Text('${app.recordings.length} recording(s)'),
+              title: const Text('All recordings'),
+              subtitle: Text(
+                  '${app.recordings.length} recording'
+                  '${app.recordings.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                      fontSize: 11, color: NavAlertColors.textSecondary)),
               trailing: ElevatedButton(
                 onPressed: () => Navigator.of(context).push(MaterialPageRoute(
                     builder: (_) =>

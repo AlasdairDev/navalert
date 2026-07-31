@@ -135,26 +135,40 @@ class _FavoritesViewState extends State<FavoritesView> {
         ],
       ),
       body: favs.isEmpty
-          ? Center(
-              child: Padding(
+          // Figure 31 — the empty state is a single tall rounded panel filling
+          // the body, not loose text on the background. Colour comes from the
+          // existing `card` token so it matches every other surface.
+          ? Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+              child: Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: NavAlertColors.card,
+                  borderRadius: BorderRadius.circular(20),
+                ),
                 padding: const EdgeInsets.all(32),
-                child: Column(mainAxisSize: MainAxisSize.min, children: const [
-                  Icon(Icons.explore, size: 96, color: NavAlertColors.primary),
-                  SizedBox(height: 18),
-                  Text('No favorites yet.',
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.explore, size: 120,
+                        color: NavAlertColors.primary),
+                    SizedBox(height: 24),
+                    Text('No favorites yet.',
+                        style: TextStyle(
+                            fontSize: 20, fontWeight: FontWeight.w700)),
+                    SizedBox(height: 8),
+                    Text(
+                      'Add favorites from the Home Screen by tapping the star '
+                      'on a place. They\'ll show here and for one-tap trips.',
+                      textAlign: TextAlign.center,
                       style: TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.w700)),
-                  SizedBox(height: 6),
-                  Text(
-                    'Add favorites from the Home Screen by tapping the star on '
-                    'a place. They\'ll show here and for one-tap trips.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                        color: NavAlertColors.textSecondary,
-                        fontStyle: FontStyle.italic,
-                        fontSize: 13),
-                  ),
-                ]),
+                          color: NavAlertColors.textSecondary,
+                          fontStyle: FontStyle.italic,
+                          fontSize: 13,
+                          height: 1.4),
+                    ),
+                  ],
+                ),
               ),
             )
           : ListView.builder(
@@ -164,14 +178,20 @@ class _FavoritesViewState extends State<FavoritesView> {
                 final f = favs[i];
                 return Card(
                   child: ListTile(
+                    // Figure 31 rows breathe more than a dense tile — the pin,
+                    // the wrapped address and the star each get room.
+                    contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
                     leading: const Icon(Icons.location_on,
                         color: NavAlertColors.accent),
                     title: Text(f.name),
+                    // The mockup wraps the full address over several lines
+                    // rather than truncating it after two.
                     subtitle: Text(f.address,
-                        maxLines: 2,
+                        maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             fontSize: 12,
+                            height: 1.35,
                             color: NavAlertColors.textSecondary)),
                     trailing: IconButton(
                       icon: const Icon(Icons.star, color: Colors.amber),
