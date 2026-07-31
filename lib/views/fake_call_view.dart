@@ -26,7 +26,19 @@ class FakeCallView extends StatefulWidget {
 class _FakeCallViewState extends State<FakeCallView> {
   int _seconds = 0;
 
-  // DO NOT MODIFY LOGIC: panic-tap guards for the two call buttons.
+  // ╔══════════════════════════════════════════════════════════════════════╗
+  // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                     ║
+  // ║ SPAM-TAP DEBOUNCERS (isProcessing flags) for Answer and End.         ║
+  // ║                                                                      ║
+  // ║ UI TEAM: `_ticking` and `_leaving` are the in-flight guards. Restyle ║
+  // ║ the call buttons however you like (size, colour, icon, position),    ║
+  // ║ but keep `_leave` wired to the End/Decline button and keep the       ║
+  // ║ `if (_ticking) return;` line at the top of Answer. Bypassing them    ║
+  // ║ makes the call timer count several seconds per second and lets a     ║
+  // ║ second End tap pop the screen UNDERNEATH this one — throwing the     ║
+  // ║ rider out of their live trip.                                        ║
+  // ╚══════════════════════════════════════════════════════════════════════╝
+  // Panic-tap guards for the two call buttons.
   //
   // _ticking — the call timer must have exactly ONE loop. Answer is an async
   // handler, and `fakeCallAnswered` only flips the UI on the NEXT frame, so two
@@ -67,6 +79,19 @@ class _FakeCallViewState extends State<FakeCallView> {
       // lock screen with no visible call left to end it, which is the exact
       // opposite of a discreet escape. Leaving canPop true is deliberate: the
       // rider must always be able to leave; only the teardown is enforced.
+      // ╔══════════════════════════════════════════════════════════════════╗
+      // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                 ║
+      // ║ HARDWARE BACK-BUTTON GUARD + call teardown (UC-8).               ║
+      // ║                                                                  ║
+      // ║ UI TEAM: this screen is your highest-value restyle target — it   ║
+      // ║ must look like the phone's REAL incoming-call UI, and the whole  ║
+      // ║ `child:` subtree is yours (background, avatar, typography,       ║
+      // ║ button shapes). But do NOT unwrap this PopScope or touch         ║
+      // ║ `onPopInvokedWithResult`: that callback is the ONLY teardown     ║
+      // ║ path, and it runs on every exit. Remove it and the ringtone      ║
+      // ║ keeps playing with NavAlert stuck over the lock screen and no    ║
+      // ║ visible call left to end — the opposite of a discreet escape.    ║
+      // ╚══════════════════════════════════════════════════════════════════╝
       // canPop is HARD false: hardware Back and the edge-swipe can no longer
       // dismiss the call. The rider leaves through the red End button, which
       // uses Navigator.pop() — PopScope does not intercept programmatic pops,

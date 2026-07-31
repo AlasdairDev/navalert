@@ -50,7 +50,18 @@ class ActiveTripView extends StatelessWidget {
     };
 
     return PopScope(
-      // DO NOT MODIFY LOGIC: blocks the Back button mid-trip (anti-oversleep).
+      // ╔══════════════════════════════════════════════════════════════════╗
+      // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                 ║
+      // ║ HARDWARE BACK-BUTTON GUARD (anti-oversleep, R1).                 ║
+      // ║                                                                  ║
+      // ║ UI TEAM: this PopScope wrapper is a presentation-critical SAFETY ║
+      // ║ guard, demonstrated live to the panel. You may restyle anything  ║
+      // ║ inside `child:` — colours, padding, typography, the whole        ║
+      // ║ layout. You must NOT remove or unwrap this PopScope, change      ║
+      // ║ `canPop`, or edit `onPopInvokedWithResult`. Deleting the wrapper ║
+      // ║ lets the Back button silently cancel a live trip, which kills    ║
+      // ║ the alarm the rider is asleep trusting.                          ║
+      // ╚══════════════════════════════════════════════════════════════════╝
       // The rider must Slide-to-Stop to leave.
       //
       // canPop is now HARD false: the hardware Back button and the edge-swipe
@@ -208,12 +219,25 @@ class _Monitoring extends StatelessWidget {
               if (context.mounted) Navigator.of(context).pop();
             }),
             const SizedBox(height: 14),
-            // DO NOT MODIFY LOGIC: both safety buttons are DISABLED while their
-            // action is in flight. The ViewModel guards (fireSos's `sending`
-            // flag, startFakeCall's `fakeCallActive` gate) already stop the work
-            // running twice, but an enabled-looking button that silently eats
-            // taps reads as "the app is broken" at the exact moment the rider
-            // needs it — so the state is now visible, not just enforced.
+            // ╔════════════════════════════════════════════════════════════╗
+            // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
+            // ║ SPAM-TAP DEBOUNCERS for the SOS and Fake Call buttons.     ║
+            // ║                                                            ║
+            // ║ UI TEAM: `em.sending` and `em.fakeCallActive` are the      ║
+            // ║ in-flight (isProcessing) flags. Restyle these buttons all  ║
+            // ║ you like — colours, icons, sizes, spacing, the label copy. ║
+            // ║ Do NOT replace the `onPressed: <flag> ? null : ...`        ║
+            // ║ pattern with a plain handler, and do NOT drop the Builder  ║
+            // ║ or its context.watch — that is what re-enables the button  ║
+            // ║ when the action finishes. Hard-wiring onPressed lets a     ║
+            // ║ panic-tapping rider fire duplicate SOS texts (real cost:   ║
+            // ║ their prepaid load) and stack fake-call screens.           ║
+            // ╚════════════════════════════════════════════════════════════╝
+            // The ViewModel guards (fireSos's `sending` flag, startFakeCall's
+            // `fakeCallActive` gate) already stop the work running twice, but an
+            // enabled-looking button that silently eats taps reads as "the app
+            // is broken" at the exact moment the rider needs it — so the state
+            // is now visible, not just enforced.
             Builder(builder: (context) {
               final em = context.watch<EmergencyViewModel>();
               return Row(
@@ -676,6 +700,19 @@ class _SlideToStopState extends State<_SlideToStop> {
       // knob, `width - height` goes negative and `clamp(0.0, maxDrag)` throws
       // ArgumentError ("max cannot be less than min") on the first drag — a
       // crash on the one control that ends a trip.
+      // ╔══════════════════════════════════════════════════════════════════╗
+      // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                 ║
+      // ║ SLIDER WIDTH MATH — math.max(0.0, width - height).               ║
+      // ║                                                                  ║
+      // ║ UI TEAM: the `math.max(0.0, ...)` floor is not defensive         ║
+      // ║ decoration. If you pad this pill narrower than the 54 px knob,   ║
+      // ║ `width - height` goes NEGATIVE and the `.clamp(0.0, maxDrag)`    ║
+      // ║ below throws ArgumentError ("max cannot be less than min") on    ║
+      // ║ the first drag — a hard crash, on stage, on the ONE control that ║
+      // ║ ends a trip. Restyle the pill's height, colour, radius and knob  ║
+      // ║ freely; never remove this floor or the `maxDrag > 0` check in    ║
+      // ║ the drag-end handler.                                            ║
+      // ╚══════════════════════════════════════════════════════════════════╝
       final maxDrag = math.max(0.0, width - height);
       return Center(
         // The WHOLE pill accepts the drag, not just the knob. A 48 px knob is

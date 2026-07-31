@@ -102,8 +102,18 @@ class _SearchViewState extends State<SearchView> {
     final vm = context.watch<HomeViewModel>();
     return Scaffold(
       appBar: AppBar(title: const Text('Where to?')),
-      // Tapping off the field drops the keyboard. `opaque` so empty space below
-      // the results still registers; the result rows keep their own onTap.
+      // ╔══════════════════════════════════════════════════════════════════╗
+      // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                 ║
+      // ║ KEYBOARD UNFOCUS WRAPPER (soft-keyboard dismissal).              ║
+      // ║                                                                  ║
+      // ║ UI TEAM: this GestureDetector must stay wrapped around the body, ║
+      // ║ with `behavior: HitTestBehavior.opaque` and the `unfocus()`      ║
+      // ║ onTap. Restyle everything inside it. Removing it (or dropping    ║
+      // ║ `opaque`) traps the soft keyboard open over the results list —   ║
+      // ║ the rider cannot see or reach the destination they searched for, ║
+      // ║ on the app's primary Home → Search → Route path. Do not add a    ║
+      // ║ competing onTap here; the result rows keep their own.            ║
+      // ╚══════════════════════════════════════════════════════════════════╝
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
