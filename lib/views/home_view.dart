@@ -103,25 +103,36 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               // buffering). Restyle markers/overlays, but don't inline-replace
               // these — they keep the map crisp and inside the service area.
               NavAlertMap.tiles(context),
+              // DO NOT MODIFY LOGIC: the "you are here" dot renders ONLY for a
+              // real GPS fix. `center` falls back to PUP Sta. Mesa when there
+              // is no fix, and drawing the blue dot there presented a hardcoded
+              // location as the rider's own — visually identical to a working
+              // fix, on the very screen where they choose where they are going.
+              // A missing pin is honest; a confident wrong pin is not. The
+              // fallback banner below already explains the situation, and the
+              // map still CENTRES on `center` because it needs somewhere to
+              // look — only the "this is you" claim is withheld.
               MarkerLayer(markers: [
-                // TODO (UI Team): the current-location dot style.
-                // Google-Maps-style blue is intentional and widely recognised;
-                // this 0xFF4285F4 is a deliberate keep, not theme purple.
-                Marker(
-                  point: center,
-                  width: 22,
-                  height: 22,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF4285F4),
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black38, blurRadius: 4),
-                      ],
+                if (!vm.locationIsFallback && vm.currentLat != null)
+                  // TODO (UI Team): the current-location dot style.
+                  // Google-Maps-style blue is intentional and widely
+                  // recognised; 0xFF4285F4 is a deliberate keep, not theme
+                  // purple.
+                  Marker(
+                    point: center,
+                    width: 22,
+                    height: 22,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: const Color(0xFF4285F4),
+                        border: Border.all(color: Colors.white, width: 3),
+                        boxShadow: const [
+                          BoxShadow(color: Colors.black38, blurRadius: 4),
+                        ],
+                      ),
                     ),
                   ),
-                ),
               ]),
             ],
           ),
