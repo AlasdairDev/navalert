@@ -49,7 +49,25 @@ class _RouteViewState extends State<RouteView> {
   // "Start Trip" is a high-anticipation button — it gets double tapped.
   bool _startingTrip = false;
 
+  // DO NOT MODIFY LOGIC: in-flight guard, matching the one on the Add-Favorite
+  // save. The star stays tappable for the whole addFavorite/removeFavorite DB
+  // round trip and `isFav` only flips once the write returns, so two taps both
+  // saw "not a favorite" and each wrote a row — the same place saved twice, and
+  // then only one copy removed by the un-star. A wide, easily hit window.
+  bool _togglingFavorite = false;
+
   Future<void> _toggleFavorite() async {
+    if (_togglingFavorite) return;
+    _togglingFavorite = true;
+    try {
+      await _runToggleFavorite();
+    } finally {
+      // Always re-armed: a transient storage failure must stay retryable.
+      if (mounted) _togglingFavorite = false;
+    }
+  }
+
+  Future<void> _runToggleFavorite() async {
     final app = context.read<AppViewModel>();
     final home = context.read<HomeViewModel>();
     final messenger = ScaffoldMessenger.of(context);
@@ -226,9 +244,14 @@ class _RouteViewState extends State<RouteView> {
                   child: const Text('Cancel')),
               const SizedBox(width: 12),
               ElevatedButton(
-                onPressed: () async {
+                // Disabled while the trip is being started, so the button
+                // visibly reflects the in-flight guard instead of silently
+                // swallowing the taps of an impatient rider.
+                onPressed: _startingTrip
+                    ? null
+                    : () async {
                   if (_startingTrip) return;
-                  _startingTrip = true;
+                  setSheet(() => _startingTrip = true);
                   final tripVm = context.read<TripViewModel>();
                   final navigator = Navigator.of(context);
                   final messenger = ScaffoldMessenger.of(context);
@@ -559,7 +582,18 @@ class _RouteViewState extends State<RouteView> {
   }
 
   Widget _buildCommuteGuide(HomeViewModel home) {
-    final s = home.selectedSuggestion!;
+    // Defensive, not currently reachable: "Show Commute Guide" is disabled until
+    // a suggestion is selected, and regenerating always re-selects one. But this
+    // is a force-unwrap inside build() on state another screen can mutate, so a
+    // future change to the suggestion pipeline would turn it into a hard crash
+    // on the route screen rather than a graceful fallback.
+    final s = home.selectedSuggestion;
+    if (s == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _showGuide) setState(() => _showGuide = false);
+      });
+      return const SizedBox.shrink();
+    }
     final estimate = home.suggestionsAreEstimates;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [

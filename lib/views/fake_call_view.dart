@@ -26,6 +26,28 @@ class FakeCallView extends StatefulWidget {
 class _FakeCallViewState extends State<FakeCallView> {
   int _seconds = 0;
 
+  // DO NOT MODIFY LOGIC: panic-tap guards for the two call buttons.
+  //
+  // _ticking — the call timer must have exactly ONE loop. Answer is an async
+  // handler, and `fakeCallAnswered` only flips the UI on the NEXT frame, so two
+  // taps landing in the same frame both ran _tick(): the timer then counted two
+  // seconds per second and the "real dialer" illusion — the entire point of this
+  // screen — broke on sight.
+  //
+  // _leaving — End/Decline stays on screen for the whole pop transition, so a
+  // second tap fired a SECOND Navigator.pop() that ate the route underneath
+  // (ActiveTripView, or the shell tab). The rider tapped "end call" and was
+  // thrown out of their live trip. This is the widest double-tap window in the
+  // app, because the button never visually leaves until the route is gone.
+  bool _ticking = false;
+  bool _leaving = false;
+
+  void _leave() {
+    if (_leaving) return;
+    _leaving = true;
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     final em = context.watch<EmergencyViewModel>();
@@ -45,7 +67,13 @@ class _FakeCallViewState extends State<FakeCallView> {
       // lock screen with no visible call left to end it, which is the exact
       // opposite of a discreet escape. Leaving canPop true is deliberate: the
       // rider must always be able to leave; only the teardown is enforced.
-      canPop: true,
+      // canPop is HARD false: hardware Back and the edge-swipe can no longer
+      // dismiss the call. The rider leaves through the red End button, which
+      // uses Navigator.pop() — PopScope does not intercept programmatic pops,
+      // so that exit (and the teardown below) still works. The teardown stays
+      // on onPopInvokedWithResult so it runs on EVERY real exit and can never
+      // be bypassed, leaving the ringtone playing over the lock screen.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) em.endFakeCall();
       },
@@ -86,10 +114,10 @@ class _FakeCallViewState extends State<FakeCallView> {
                 // teardown now hangs off the PopScope instead of these two
                 // handlers, so it runs on EVERY exit — button, hardware Back,
                 // or edge-swipe — and can no longer be bypassed.
-                _roundButton(Icons.call_end, Colors.red, () {
-                  Navigator.of(this.context).pop();
-                }),
+                _roundButton(Icons.call_end, Colors.red, _leave),
                 _roundButton(Icons.call, Colors.green, () async {
+                  if (_ticking) return;
+                  _ticking = true;
                   final rec = app.selectedRecording;
                   await em.answerFakeCall(rec?.filePath);
                   _tick();
@@ -102,9 +130,7 @@ class _FakeCallViewState extends State<FakeCallView> {
               // which instantly breaks the "real dialer" illusion.
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                 // Pop only; the PopScope tears down (see the incoming branch).
-                _roundButton(Icons.call_end, Colors.red, () {
-                  Navigator.of(this.context).pop();
-                }),
+                _roundButton(Icons.call_end, Colors.red, _leave),
               ]),
               const SizedBox(height: 40),
             ]),

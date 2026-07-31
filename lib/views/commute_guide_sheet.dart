@@ -56,14 +56,24 @@ class CommuteGuideSheet extends StatelessWidget {
     // all rather than an empty panel the rider has to dismiss.
     if (guide.isEmpty) return const SizedBox.shrink();
 
+    final collapsed = _collapsedFractionFor(context);
     return DraggableScrollableSheet(
       // Collapsed height must stay small enough that the SOS and Fake Call
       // buttons underneath remain fully tappable — they are safety controls
       // and must never be covered by a convenience panel. ActiveTripView pads
       // the monitoring body by [collapsedHeight] to match.
-      initialChildSize: _collapsedFractionFor(context),
-      minChildSize: _collapsedFractionFor(context),
+      initialChildSize: collapsed,
+      minChildSize: collapsed,
       maxChildSize: 0.62,
+      // DO NOT MODIFY LOGIC: without snapping, DraggableScrollableSheet rests
+      // at WHATEVER fraction the finger was released at. A quick flick down left
+      // the guide parked half-open over the monitoring screen — covering the SOS
+      // and Fake Call buttons that ActiveTripView only reserves [collapsedHeight]
+      // for. A convenience panel must never be able to sit on the safety
+      // controls, so the sheet is now always either fully collapsed or fully
+      // open, and never in between.
+      snap: true,
+      snapSizes: [collapsed, 0.62],
       builder: (context, controller) => Container(
         decoration: const BoxDecoration(
           color: NavAlertColors.surface,

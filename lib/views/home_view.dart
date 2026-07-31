@@ -32,6 +32,9 @@ class HomeView extends StatefulWidget {
 class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   final _mapController = MapController();
 
+  /// True while the locate-me FAB is acquiring a fix — see its onPressed.
+  bool _locating = false;
+
   // DO NOT MODIFY LOGIC: the mover is built eagerly in initState, NOT as a lazy
   // `late final` field initializer. When GPS never returns a fix the mover is
   // never read, so a lazy field would run its initializer for the FIRST time
@@ -51,7 +54,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     // but leave this callback and the animateTo call intact.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final vm = context.read<HomeViewModel>();
-      await vm.refreshCurrentLocation();
+      // promptIfDisabled: false — nothing the rider did triggered this, so it
+      // must never eject them into the system location settings page. With GPS
+      // off it falls through to the fallback banner below, which offers Retry
+      // and Settings as an explicit choice. See refreshCurrentLocation's note.
+      await vm.refreshCurrentLocation(promptIfDisabled: false);
       if (mounted && vm.currentLat != null) {
         _mover.animateTo(LatLng(vm.currentLat!, vm.currentLng!), 16);
       }
@@ -237,18 +244,36 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               // DO NOT MODIFY LOGIC: re-fetches GPS and re-centres the map
               // (UC-4). Keep refreshCurrentLocation() + animateTo; the snackbar
               // copy is [EDIT].
-              onPressed: () async {
-                final messenger = ScaffoldMessenger.of(context);
-                messenger.showSnackBar(const SnackBar(
-                    content: Text('Getting your GPS location…'),
-                    duration: Duration(seconds: 2)));
-                await vm.refreshCurrentLocation();
-                if (vm.currentLat != null) {
-                  _mover.animateTo(
-                      LatLng(vm.currentLat!, vm.currentLng!), 16.5);
-                  messenger.hideCurrentSnackBar();
-                }
-              },
+              // DO NOT MODIFY LOGIC: in-flight guard + mounted check.
+              // refreshCurrentLocation can spend ~22 s in GPS timeouts, and the
+              // FAB stayed live throughout: spam-tapping it queued that many
+              // overlapping acquisitions, each ending in its own animateTo, so
+              // the map yanked around for half a minute after the taps stopped.
+              // The mounted check matters because animateTo drives an
+              // AnimationController that dispose() has already torn down — an
+              // in-flight fix returning after the tab is destroyed threw
+              // "AnimationController used after being disposed".
+              onPressed: _locating
+                  ? null
+                  : () async {
+                      setState(() => _locating = true);
+                      final messenger = ScaffoldMessenger.of(context);
+                      messenger.showSnackBar(const SnackBar(
+                          content: Text('Getting your GPS location…'),
+                          duration: Duration(seconds: 2)));
+                      try {
+                        await vm.refreshCurrentLocation();
+                      } catch (_) {
+                        // refreshCurrentLocation reports through vm.locationError.
+                      }
+                      if (!mounted) return;
+                      if (vm.currentLat != null) {
+                        _mover.animateTo(
+                            LatLng(vm.currentLat!, vm.currentLng!), 16.5);
+                        messenger.hideCurrentSnackBar();
+                      }
+                      setState(() => _locating = false);
+                    },
               child: const Icon(Icons.my_location, color: Colors.black87),
             ),
           ),

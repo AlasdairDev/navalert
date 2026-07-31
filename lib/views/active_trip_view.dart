@@ -51,8 +51,14 @@ class ActiveTripView extends StatelessWidget {
 
     return PopScope(
       // DO NOT MODIFY LOGIC: blocks the Back button mid-trip (anti-oversleep).
-      // The rider must Slide-to-Stop to leave. Keep canPop tied to phase.
-      canPop: vm.phase == TripPhase.ended,
+      // The rider must Slide-to-Stop to leave.
+      //
+      // canPop is now HARD false: the hardware Back button and the edge-swipe
+      // can never abandon the trip screen, in any phase. This is safe because
+      // PopScope only intercepts SYSTEM back gestures — it does not affect
+      // programmatic Navigator.pop(), so Slide-to-Stop and the summary's
+      // Done/Close buttons still close this screen exactly as before.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -202,35 +208,52 @@ class _Monitoring extends StatelessWidget {
               if (context.mounted) Navigator.of(context).pop();
             }),
             const SizedBox(height: 14),
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: NavAlertColors.danger),
-                onPressed: () =>
-                    context.read<EmergencyViewModel>().fireSos(
-                        tripId: vm.trip!.tripId),
-                icon: const Icon(Icons.warning_amber, size: 18),
-                label: const Text('SOS'),
-              ),
-              const SizedBox(width: 14),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final em = context.read<EmergencyViewModel>();
-                  // Push only if this tap started the call — see the panic-tap
-                  // guard in EmergencyViewModel.startFakeCall.
-                  final started = await em.startFakeCall(
-                      callerName:
-                          context.read<AppViewModel>().fakeCallConfig.callerName);
-                  if (started && context.mounted) {
-                    Navigator.of(context).push(MaterialPageRoute(
-                        fullscreenDialog: true,
-                        builder: (_) => const FakeCallView()));
-                  }
-                },
-                icon: const Icon(Icons.phone_in_talk, size: 18),
-                label: const Text('Fake Call'),
-              ),
-            ]),
+            // DO NOT MODIFY LOGIC: both safety buttons are DISABLED while their
+            // action is in flight. The ViewModel guards (fireSos's `sending`
+            // flag, startFakeCall's `fakeCallActive` gate) already stop the work
+            // running twice, but an enabled-looking button that silently eats
+            // taps reads as "the app is broken" at the exact moment the rider
+            // needs it — so the state is now visible, not just enforced.
+            Builder(builder: (context) {
+              final em = context.watch<EmergencyViewModel>();
+              return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: NavAlertColors.danger),
+                      onPressed: em.sending
+                          ? null
+                          : () => context
+                              .read<EmergencyViewModel>()
+                              .fireSos(tripId: vm.trip!.tripId),
+                      icon: const Icon(Icons.warning_amber, size: 18),
+                      label: Text(em.sending ? 'Sending…' : 'SOS'),
+                    ),
+                    const SizedBox(width: 14),
+                    ElevatedButton.icon(
+                      onPressed: em.fakeCallActive
+                          ? null
+                          : () async {
+                              final em = context.read<EmergencyViewModel>();
+                              // Push only if this tap started the call — see the
+                              // panic-tap guard in startFakeCall.
+                              final started = await em.startFakeCall(
+                                  callerName: context
+                                      .read<AppViewModel>()
+                                      .fakeCallConfig
+                                      .callerName);
+                              if (started && context.mounted) {
+                                Navigator.of(context).push(MaterialPageRoute(
+                                    fullscreenDialog: true,
+                                    builder: (_) => const FakeCallView()));
+                              }
+                            },
+                      icon: const Icon(Icons.phone_in_talk, size: 18),
+                      label: const Text('Fake Call'),
+                    ),
+                  ]);
+            }),
           ]),
         ),
       ),
@@ -390,12 +413,36 @@ class _AlarmStage extends StatelessWidget {
 // ---------------------------------------------------------------------
 // Figure 29 — Overshoot Detected
 // ---------------------------------------------------------------------
-class _OvershootPrompt extends StatelessWidget {
+class _OvershootPrompt extends StatefulWidget {
   const _OvershootPrompt({required this.vm});
   final TripViewModel vm;
 
   @override
+  State<_OvershootPrompt> createState() => _OvershootPromptState();
+}
+
+class _OvershootPromptState extends State<_OvershootPrompt> {
+  // DO NOT MODIFY LOGIC: in-flight guard. answerOvershoot(true) writes the
+  // overshoot audit row and then ENDS the trip, and both buttons stay on screen
+  // for the whole await — so a panic-tapped "Yes" wrote duplicate overshoot
+  // events for one trip and ran the end-of-trip teardown twice. Tapping "No"
+  // then "Yes" in quick succession could also interleave the two answers.
+  bool _answering = false;
+
+  Future<void> _answer(bool missed) async {
+    if (_answering) return;
+    _answering = true;
+    try {
+      await widget.vm.answerOvershoot(missed);
+    } catch (_) {
+      // Re-arm so the rider is never stuck on the prompt with dead buttons.
+      if (mounted) _answering = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final vm = widget.vm;
     final m = vm.overshotM;
     return Container(
       color: NavAlertColors.background,
@@ -425,11 +472,11 @@ class _OvershootPrompt extends StatelessWidget {
                   const SizedBox(height: 18),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
                     ElevatedButton(
-                        onPressed: () => vm.answerOvershoot(false),
+                        onPressed: () => _answer(false),
                         child: const Text('No')),
                     const SizedBox(width: 14),
                     ElevatedButton(
-                        onPressed: () => vm.answerOvershoot(true),
+                        onPressed: () => _answer(true),
                         child: const Text('Yes')),
                   ]),
                 ]),
@@ -440,6 +487,79 @@ class _OvershootPrompt extends StatelessWidget {
       ),
     );
   }
+}
+
+/// DO NOT MODIFY LOGIC: shared exit for the two end-of-trip summary cards.
+///
+/// "Close"/"Done" stays on screen for the whole pop transition, so a second tap
+/// fired a SECOND Navigator.pop() that ate the route underneath and dropped the
+/// rider out of the shell onto a blank stack. Same double-pop class as the
+/// fake-call End button. `closeSummary` is idempotent (it only sets the phase),
+/// so the guard is purely about the navigation.
+class _SummaryCloseButton extends StatefulWidget {
+  const _SummaryCloseButton({required this.vm, required this.child, this.filled = false});
+  final TripViewModel vm;
+  final Widget child;
+  final bool filled;
+
+  @override
+  State<_SummaryCloseButton> createState() => _SummaryCloseButtonState();
+}
+
+class _SummaryCloseButtonState extends State<_SummaryCloseButton> {
+  bool _closing = false;
+
+  Future<void> _close() async {
+    if (_closing) return;
+    _closing = true;
+    try {
+      await widget.vm.closeSummary();
+    } catch (_) {
+      // Never strand the rider on the summary: leaving is the whole job here.
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.filled
+      ? ElevatedButton(onPressed: _close, child: widget.child)
+      : OutlinedButton(onPressed: _close, child: widget.child);
+}
+
+/// Panic-tap guard for the reroute hand-off. Each tap fires an EXTERNAL intent,
+/// so five taps queued five Google Maps launches — the rider returns to a stack
+/// of map windows over the app they were trying to get back to. The button is
+/// re-armed once the launch settles, because a failed hand-off must stay
+/// retryable (the ViewModel falls back to a clipboard copy).
+class _RerouteButton extends StatefulWidget {
+  const _RerouteButton({required this.vm});
+  final TripViewModel vm;
+
+  @override
+  State<_RerouteButton> createState() => _RerouteButtonState();
+}
+
+class _RerouteButtonState extends State<_RerouteButton> {
+  bool _launching = false;
+
+  Future<void> _open() async {
+    if (_launching) return;
+    setState(() => _launching = true);
+    try {
+      await widget.vm.openRerouteInGoogleMaps();
+    } catch (_) {
+      // The ViewModel already reports failure through vm.error.
+    } finally {
+      if (mounted) setState(() => _launching = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ElevatedButton.icon(
+        onPressed: _launching ? null : _open,
+        icon: const Icon(Icons.map, size: 18),
+        label: const Text('Open in GMaps'),
+      );
 }
 
 class _OvershootConfirmed extends StatelessWidget {
@@ -474,17 +594,9 @@ class _OvershootConfirmed extends StatelessWidget {
                           color: NavAlertColors.textSecondary)),
                   const SizedBox(height: 18),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    OutlinedButton(
-                        onPressed: () async {
-                          await vm.closeSummary();
-                          if (context.mounted) Navigator.of(context).pop();
-                        },
-                        child: const Text('Close')),
+                    _SummaryCloseButton(vm: vm, child: const Text('Close')),
                     const SizedBox(width: 14),
-                    ElevatedButton.icon(
-                        onPressed: vm.openRerouteInGoogleMaps,
-                        icon: const Icon(Icons.map, size: 18),
-                        label: const Text('Open in GMaps')),
+                    _RerouteButton(vm: vm),
                   ]),
                 ]),
               ),
@@ -515,13 +627,8 @@ class _Arrived extends StatelessWidget {
             Text(vm.trip!.destinationLabel,
                 style: const TextStyle(color: NavAlertColors.textSecondary)),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await vm.closeSummary();
-                if (context.mounted) Navigator.of(context).pop();
-              },
-              child: const Text('Done'),
-            ),
+            _SummaryCloseButton(
+                vm: vm, filled: true, child: const Text('Done')),
           ]),
         ),
       ),
@@ -587,6 +694,15 @@ class _SlideToStopState extends State<_SlideToStop> {
           // follows the finger exactly. Threshold relaxed to 60%.
           onHorizontalDragUpdate: (d) => setState(() =>
               _drag = (d.localPosition.dx - height / 2).clamp(0.0, maxDrag)),
+          // A drag the system takes away from us (notification shade pulled
+          // down, an incoming call overlay, the pointer cancelled) does not
+          // always deliver an end event. Without this the knob stayed frozen
+          // mid-track, which reads as "the control is broken" on the one gesture
+          // that ends a trip — and Back is blocked here by design.
+          onHorizontalDragCancel: () {
+            if (_done || _drag == 0) return;
+            setState(() => _drag = 0);
+          },
           onHorizontalDragEnd: (_) async {
             // `maxDrag > 0` is NOT redundant with the clamp above. Once maxDrag
             // is floored at zero, the threshold `_drag >= maxDrag * 0.6` reads
