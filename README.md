@@ -15,7 +15,17 @@ emergency tools (SOS SMS, fake call) for late-night safety.
 
 ---
 
-## Project status — FEATURE FROZEN
+## Project status
+
+> **Note (2026-07-31):** the backend was feature-frozen at `d69760a`, then
+> deliberately reopened for one approved batch of eight changes — recording
+> deletion, search ranking, location-pin correctness, NCR messaging, an opt-in
+> alarm, the SOS retry cadence, emergency-trigger separation, and a lock-screen
+> SOS action. See
+> `Docs/superpowers/specs/2026-07-31-navalert-feature-batch-design.md`.
+> **Two behaviour changes worth knowing before a demo:** the destination alarm
+> is now **off by default** (opt-in per trip, toggleable mid-trip), and **Call
+> 911 now asks for confirmation** instead of dialling on a single tap.
 
 | Layer | Status |
 |---|---|
