@@ -381,6 +381,70 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 ),
               ),
             ),
+          // ── SOS Warning (GUI "SOS Warning", Activity Diagram p.92) ─────────
+          // The Activity Diagram fires this straight off "Launch App", and the
+          // mockup draws it on the main screen — not on the Emergency tab,
+          // where it used to live. That placement was the problem: the warning
+          // says the SOS SMS may not send, and a rider only opens Emergency
+          // when they ALREADY need it. Telling them their lifeline might be out
+          // of load at that moment is too late to act on. On Home it lands
+          // before the trip, while there is still time to top up.
+          //
+          // Last in the Stack so it draws over the map and the pill. Dismissal
+          // is persisted (app_state.sos_low_load_warning_dismissed), so this is
+          // a once-ever card, not a nag on every launch.
+          if (context.watch<AppViewModel>().showSosLowLoadWarning)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: NavAlertColors.card,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black54, blurRadius: 18),
+                    ],
+                  ),
+                  padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sim_card_alert,
+                          size: 34, color: NavAlertColors.warning),
+                      const SizedBox(height: 10),
+                      const Text('SOS Warning',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Make sure your SIM card has sufficient prepaid load '
+                        'before your trip to ensure your SOS message can be '
+                        'sent.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: NavAlertColors.textSecondary),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        // DO NOT MODIFY LOGIC: this is the only way to clear the
+                        // card. dismissSosLowLoadWarning persists the flag; drop
+                        // the call and the warning returns on every launch with
+                        // no way to silence it.
+                        child: ElevatedButton(
+                          onPressed: () => context
+                              .read<AppViewModel>()
+                              .dismissSosLowLoadWarning(),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
