@@ -255,6 +255,68 @@ class SoundService {
     await _yieldAudio(false); // fake call ended — restore shortcut keep-alive
   }
 
+  // ── "All Recordings" transport controls (GUI Figures 28, 28.3, 28.4) ──────
+  //
+  // A DELIBERATELY SEPARATE preview path from [playVoice]. The fake call loops
+  // its clip forever, because the rider needs a continuous conversation to walk
+  // away from; the recordings list must instead play a clip ONCE, so the
+  // play/pause control can return to ▶ by itself and the elapsed timer can
+  // actually finish. Reusing playVoice here left every preview looping until
+  // the rider hunted for a stop button. playVoice is untouched.
+
+  /// Live playhead of the preview player — drives the `00:01.97` readout.
+  Stream<Duration> get voicePosition => _voicePlayer.onPositionChanged;
+
+  /// Total length of the loaded clip, once the decoder reports it.
+  Stream<Duration> get voiceDuration => _voicePlayer.onDurationChanged;
+
+  /// Fires when a preview reaches its end, so the row can reset to ▶.
+  Stream<void> get voiceCompleted => _voicePlayer.onPlayerComplete;
+
+  /// Plays [filePath] exactly once. Same yield/context preparation as every
+  /// other play path — without _yieldAudio the shortcut keep-alive occupies the
+  /// media output and the preview is silent.
+  Future<void> previewVoice(String filePath) async {
+    await _yieldAudio(true);
+    await _configureVoice();
+    try {
+      await _voicePlayer.stop();
+      // `stop` (not `release`) keeps the decoded source loaded after the clip
+      // ends, which is what lets restart/resume work without re-reading it.
+      await _voicePlayer.setReleaseMode(ReleaseMode.stop);
+      if (filePath.startsWith('assets/')) {
+        await _voicePlayer.play(
+            AssetSource(filePath.replaceFirst('assets/', '')), volume: 1.0);
+      } else if (File(filePath).existsSync()) {
+        await _voicePlayer.play(DeviceFileSource(filePath), volume: 1.0);
+      }
+    } catch (_) {/* undecodable clip — the row simply never starts */}
+  }
+
+  Future<void> pauseVoice() async {
+    try {
+      await _voicePlayer.pause();
+    } catch (_) {/* nothing playing — the row falls back to ▶ */}
+  }
+
+  Future<void> resumeVoice() async {
+    await _yieldAudio(true);
+    try {
+      await _voicePlayer.resume();
+    } catch (_) {/* source released — the row falls back to ▶ */}
+  }
+
+  /// The ↺ control in Figure 28: rewind to the top and keep playing. On a
+  /// two-second clip a fixed-seconds skip would be meaningless, so the icon
+  /// means "hear it again from the start", which is the only useful seek here.
+  Future<void> restartVoice() async {
+    await _yieldAudio(true);
+    try {
+      await _voicePlayer.seek(Duration.zero);
+      await _voicePlayer.resume();
+    } catch (_) {/* source released — caller re-previews instead */}
+  }
+
   /// Runs on the dismiss/stop-trip path, so each teardown step is isolated:
   /// a failing player must not leave the alarm ringing or block the trip
   /// from ending.

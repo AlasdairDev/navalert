@@ -248,29 +248,47 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   if (context.watch<AppViewModel>().showIncompleteSetupPrompt)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
+                      // GUI Page 7 leads with a bold "Incomplete Setup" heading
+                      // and then NAMES what is unfinished, rather than opening
+                      // mid-sentence. The old single line mentioned only
+                      // contacts, so a rider who had also skipped permissions
+                      // and the fake-call clip was told about one third of the
+                      // problem. Copy only — the prompt's own show/dismiss
+                      // wiring is unchanged.
                       child: MaterialBanner(
                         padding: const EdgeInsets.all(10),
                         backgroundColor: NavAlertColors.surface,
-                        content: const Text(
-                          'Setup incomplete — add emergency contacts so the '
-                          'SOS feature can protect you.',
-                          style: TextStyle(fontSize: 12),
+                        content: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Incomplete Setup',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700)),
+                            SizedBox(height: 4),
+                            Text(
+                              'Some features are not ready: permissions, SOS '
+                              'contacts, and fake call simulation.',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ],
                         ),
                         leading: const Icon(Icons.warning_amber,
                             color: NavAlertColors.warning),
                         actions: [
                           TextButton(
-                            onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const ContactsSetupView(
-                                        inOnboarding: false))),
-                            child: const Text('Add now'),
-                          ),
-                          TextButton(
                             onPressed: () => context
                                 .read<AppViewModel>()
                                 .dismissIncompleteSetupPrompt(),
                             child: const Text('Dismiss'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const ContactsSetupView(
+                                        inOnboarding: false))),
+                            child: const Text('Setup'),
                           ),
                         ],
                       ),
