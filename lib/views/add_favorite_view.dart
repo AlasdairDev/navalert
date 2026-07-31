@@ -106,9 +106,16 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Add Favorite')),
-      // Tapping anywhere off the field drops the keyboard. `opaque` so the
-      // empty space below the results still registers the tap; results keep
-      // their own onTap because this sits above them, not over them.
+      // ╔══════════════════════════════════════════════════════════════════╗
+      // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                 ║
+      // ║ KEYBOARD UNFOCUS WRAPPER (soft-keyboard dismissal).              ║
+      // ║                                                                  ║
+      // ║ UI TEAM: same contract as search_view.dart — keep this           ║
+      // ║ GestureDetector wrapping the body, with HitTestBehavior.opaque   ║
+      // ║ and the unfocus() onTap. Restyle freely inside. Without it the   ║
+      // ║ keyboard covers the result list and the rider cannot tap the     ║
+      // ║ place they are trying to save.                                   ║
+      // ╚══════════════════════════════════════════════════════════════════╝
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () => FocusManager.instance.primaryFocus?.unfocus(),

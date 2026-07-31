@@ -27,7 +27,16 @@ class EmergencyView extends StatelessWidget {
     final em = context.watch<EmergencyViewModel>();
     final app = context.watch<AppViewModel>();
 
-    // DO NOT MODIFY LOGIC — and note why this is NOT a plain canPop: false.
+    // ╔══════════════════════════════════════════════════════════════════════╗
+    // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                     ║
+    // ║ HARDWARE BACK-BUTTON GUARD, scoped to an in-flight SOS.              ║
+    // ║                                                                      ║
+    // ║ UI TEAM: restyle everything inside `child:`. Do NOT unwrap this      ║
+    // ║ PopScope, and do NOT "simplify" `canPop: !sosInFlight` to a plain    ║
+    // ║ `canPop: false` — that looks tidier and would BREAK THE WHOLE APP.   ║
+    // ║ Read the reason below before touching this line.                     ║
+    // ╚══════════════════════════════════════════════════════════════════════╝
+    // Why this is NOT a plain canPop: false.
     //
     // EmergencyView is a TAB inside ShellView's IndexedStack, not a pushed
     // route. IndexedStack builds and mounts all five tabs at once, so this
@@ -86,9 +95,20 @@ class EmergencyView extends StatelessWidget {
               // accidental SOS. Keep beginSosHold/cancelSosHold on down/up/
               // cancel and the onFired → _showResult callback. `holdProgress`
               // (0→1) drives the ring below — keep reading it.
-              // Spam-tap protection: while an SOS is actually being sent, a new
-              // hold must not start. fireSos already refuses re-entry, so this
-              // stops the ring re-arming and pretending a second send began.
+              // ╔══════════════════════════════════════════════════════════╗
+              // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:         ║
+              // ║ SPAM-TAP DEBOUNCER (isProcessing) on the SOS hold.       ║
+              // ║                                                          ║
+              // ║ UI TEAM: the SOS button's size, glow, ring and copy are  ║
+              // ║ all yours. Keep `onTapDown: em.sending ? null : ...` and ║
+              // ║ the 3-second press-and-hold wiring (beginSosHold /       ║
+              // ║ cancelSosHold on down/up/cancel). The hold IS the        ║
+              // ║ accidental-trigger guard (R8); a plain onTap would fire  ║
+              // ║ real SMS to every contact on one stray touch.            ║
+              // ╚══════════════════════════════════════════════════════════╝
+              // While an SOS is actually being sent, a new hold must not start.
+              // fireSos already refuses re-entry, so this stops the ring
+              // re-arming and pretending a second send began.
               onTapDown: em.sending
                   ? null
                   : (_) => context.read<EmergencyViewModel>().beginSosHold(

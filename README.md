@@ -15,6 +15,112 @@ emergency tools (SOS SMS, fake call) for late-night safety.
 
 ---
 
+## Project status — FEATURE FROZEN
+
+| Layer | Status |
+|---|---|
+| Core routing engine (GTFS + Dijkstra, fares) | ✅ **Complete — feature-frozen** |
+| State management (MVVM ViewModels) | ✅ **Complete — feature-frozen** |
+| Background alarm & trip monitoring services | ✅ **Complete — feature-frozen** |
+| Android hardware integration (SMS, Bluetooth, widgets) | ✅ **Complete — feature-frozen** |
+| Local persistence (SQLCipher schema) | ✅ **Complete — feature-frozen** |
+| Core-engine unit tests | ✅ **165 / 165 passing** |
+| UI / UX visual polish | 🎨 **Open — active hand-off to the UI team** |
+
+**Feature-frozen means:** no new backend features, no schema changes, no
+ViewModel API changes. The remaining work is *presentation only*. Anything
+outside `lib/views/` styling and `lib/core/theme.dart` is closed.
+
+---
+
+## ⚠️ UI TEAM — HAND-OFF RULES (READ BEFORE YOUR FIRST COMMIT)
+
+**Your scope is colours, typography, padding, spacing, iconography, and
+theming. That is all. The behaviour underneath is finished, tested, and
+demonstrated live to the capstone panel.**
+
+**The three annotation markers you will meet in `lib/views/`:**
+
+| Marker | What it means for you |
+|---|---|
+| `// TODO (UI Team):` | 🟢 **Green light.** Style this freely. |
+| `// USE THEME:` | 🟡 Pull the value from `NavAlertColors` / `ThemeData` instead of hardcoding it. |
+| `// DO NOT MODIFY LOGIC:` | 🔴 Wired to the backend. Restyle *around* it; never change the marked call. |
+| `// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` | ⛔ **Hard stop.** A safety guard shown live to the panel. See below. |
+
+**The `CAPSTONE DEFENSE CRITICAL` blocks are non-negotiable.** Each is a boxed
+comment naming exactly what it protects and what breaks without it. There are
+**10 of them across 6 files**:
+
+| Guard | Files |
+|---|---|
+| `PopScope` hardware back-button guards | `active_trip_view.dart`, `fake_call_view.dart`, `emergency_view.dart` |
+| Spam-tap debouncers (SOS · Fake Call · Start Trip) | `active_trip_view.dart`, `emergency_view.dart`, `fake_call_view.dart`, `route_view.dart` |
+| `math.max` slider-width floor | `active_trip_view.dart` |
+| Keyboard-unfocus wrappers | `search_view.dart`, `add_favorite_view.dart` |
+
+**Never do these:**
+
+- ❌ Unwrap or delete a `PopScope` — the Back button then silently cancels a
+  live trip or an emergency sequence.
+- ❌ Replace `onPressed: <flag> ? null : ...` with a plain handler — that is the
+  debouncer; removing it lets a panicking rider send duplicate SOS texts
+  (which costs them real prepaid load) and stack fake-call screens.
+- ❌ Remove `math.max(0.0, width - height)` in `_SlideToStop`, or pad the pill
+  narrower than its knob — it throws `ArgumentError` on the one control that
+  ends a trip.
+- ❌ Remove a keyboard `GestureDetector` wrapper or its `HitTestBehavior.opaque`.
+- ❌ "Simplify" `canPop: !sosInFlight` in `emergency_view.dart` to `canPop: false`.
+  It looks tidier and **breaks the Back button across the entire app** — that
+  screen is a tab in an `IndexedStack`, so its `PopScope` is mounted even while
+  another tab is showing. The boxed comment explains it in full.
+
+**Rule of thumb:** `onPressed` / `onTap` / `controller` / `context.read|watch` /
+`Navigator` / `setState` / `.listen` → **logic, leave it.** Everything visual →
+**yours.** When in doubt, keep the call and change only how it *looks*.
+
+**Start here:** `lib/core/theme.dart` is the central style surface — 11 colour
+tokens plus `ThemeData` drive the entire app. Restyle there first; one change
+updates every screen. Each screen also has a `UI/UX MAP` header listing what is
+safe to touch.
+
+**Verify before you commit:** `flutter analyze` (expect *No issues found*) and
+`flutter test` (expect **165/165**). If either regresses, your change touched
+logic — revert and restyle instead.
+
+---
+
+## Technical architecture highlights
+
+**Multimodal transit routing (R6).** Real Metro Manila jeepney/bus routes from
+the bundled DOTC/Sakay.ph GTFS feed (0.77 MB gzipped) are decompressed once and
+built into an in-memory graph of ~230K edges, then searched with **Dijkstra**
+over a long-lived **worker isolate** — transfers, a 3-transfer cap, walking
+links, and a transfer penalty, with LTFRB fare rates applied per leg. The isolate
+is spawned lazily, bounded by a startup timeout, and torn down when idle so a
+rider who never opens the guide pays nothing. Trips with no direct GTFS match
+fall back to a synthetic estimate that is explicitly labelled as such.
+
+**Adaptive three-stage alarm (R1–R4).** A foreground-service GPS stream feeds an
+adaptive engine that sizes the trigger radius from the vehicle's *live* speed and
+the rider's learned historic reaction time. Stages escalate on distance **and**
+on unresponsiveness (30 s windows), ending in a hard-to-dismiss full-screen
+alert. A watchdog raises a fallback alarm after 90 s of GPS loss, and a
+consecutive-fix latch detects overshoot and offers a Google Maps return route.
+
+**Android hardware integration.** Native `SmsManager` over a platform channel
+sends the SOS with GPS coordinates **without internet**, queued and retried when
+there is no signal. Triple-Volume-Up / Volume-Down shortcuts and a home-screen
+App Widget trigger SOS and fake call. A full-screen intent raises the fake call
+**over the keyguard**; Bluetooth/earphone-only routing keeps the alarm discreet;
+wake-locks and battery-optimisation exemption keep monitoring alive screen-off.
+
+**Persistence.** SQLite encrypted at rest with **SQLCipher**, key held in the
+Android Keystore. All personal data (trips, contacts, behavioural profile) stays
+on-device — there is no backend server (RA 10173 compliance).
+
+---
+
 ## Tech stack (per the paper's *Development Tools*)
 
 | Layer | Choice |
@@ -461,19 +567,63 @@ SMS, wake-locks, and battery behave fully only on a **physical device** — the
 emulator only simulates SMS delivery and can't hold a locked-screen background
 service over a real commute.
 
-## Unit tests
+## Test status — 165 / 165 passing
 
 ```powershell
-flutter test    # 124 passing
+flutter test    # 165 passed, 0 failed, 0 skipped
+flutter analyze # No issues found
 ```
 
-Covers the adaptive lead-radius math and stage escalation, the consecutive-fix
-overshoot latch, behavioural window learning, the LTFRB fare matrix and
-mode-priority filters, **Dijkstra routing correctness** (transfer penalty,
-3-transfer cap, deduplication) including a pass over the full production GTFS
-feed, NCR boundary checks, live commute-guide step advancement, Data Dictionary
-round-trips, and bundled-asset integrity. A full breakdown is in
+| Suite | Tests |
+|---|---:|
+| `route_engine_test.dart` — LTFRB fares, mode priority, NCR bounds | 26 |
+| `models_test.dart` — Data Dictionary round-trips | 23 |
+| `adaptive_alarm_engine_test.dart` — lead radius, stage escalation | 21 |
+| `transit_router_test.dart` — Dijkstra correctness, transfers, dedup | 17 |
+| `trip_flow_test.dart` — full UC-5/UC-6 state machine from mock GPS | 17 |
+| `guide_progress_test.dart` — live commute-guide advancement | 14 |
+| `assets_test.dart` — bundled-asset integrity | 13 |
+| `contact_form_test.dart` — emergency-contact validation | 11 |
+| `trip_notification_text_test.dart` — lock-screen widget text | 8 |
+| `gtfs_service_test.dart` | 6 |
+| `transit_graph_real_test.dart` — pass over the production GTFS feed | 6 |
+| `schema_guard_test.dart` — SQLCipher schema guard | 3 |
+| **Total** | **165** |
+
+**Scope of this suite — stated plainly.** These 165 tests cover the *core
+engine*: models, services, and ViewModels. They are headless — the trip suite
+drives the whole alarm state machine from a mock GPS stream with the database,
+audio, notification and widget collaborators stubbed, and the router suite runs
+against the real production GTFS feed.
+
+They do **not** cover the view layer. There are currently no widget tests, so
+the `PopScope` guards, button debouncers and gesture handlers in `lib/views/`
+are **not** exercised by `flutter test`. Those are verified by running the app
+on a device and by the on-device sweep in `integration_test/`. A green
+`flutter test` therefore proves *the core logic did not regress* — it is not
+evidence that a UI change is safe. UI team: this is exactly why the
+`CAPSTONE DEFENSE CRITICAL` annotations exist.
+
+A full breakdown of the functional phase is in
 [docs/CHANGELOG-functional-phase.md](docs/CHANGELOG-functional-phase.md).
+
+### On-device sweep
+
+```powershell
+flutter test integration_test/full_app_sweep_test.dart -d <device-id>
+```
+
+Baseline is **+4 −1**. The one failure is environmental, not a defect: a fresh
+install has no runtime permissions, so Android's `GrantPermissionsActivity`
+appears and the integration driver cannot tap OS dialogs. Pre-grant location to
+see it pass:
+
+```powershell
+adb -s <device> shell pm grant ph.edu.pup.navalert android.permission.ACCESS_FINE_LOCATION
+```
+
+Grant it only for single-test runs — `pm grant` restarts a running app, which
+corrupts the test binding and produces cascading failures that look real.
 
 ---
 
