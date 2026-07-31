@@ -11,6 +11,7 @@ import '../core/theme.dart';
 import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
+import '../viewmodels/trip_viewmodel.dart';
 import 'onboarding_flow.dart';
 import 'search_view.dart';
 
@@ -116,6 +117,10 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
     final center = LatLng(vm.currentLat ?? 14.5979, vm.currentLng ?? 121.0108);
+    // `select`, NOT `watch`: TripViewModel notifies on every GPS tick during a
+    // trip, and watching it here would rebuild this screen — map included —
+    // several times a second. Only the on/off transition matters.
+    final tripActive = context.select<TripViewModel, bool>((t) => t.isActive);
 
     return Scaffold(
       body: Stack(
@@ -170,20 +175,36 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               ]),
             ],
           ),
-          // Greeting + search header
-          SafeArea(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              decoration: BoxDecoration(
-                color: NavAlertColors.background.withValues(alpha: 0.94),
-                borderRadius: const BorderRadius.vertical(
-                    bottom: Radius.circular(24)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+          // Greeting + search header.
+          //
+          // GUI Page 10 geometry (the mockups are 360x780 dp, this device is
+          // 360x800 dp, so mockup pixels are read as dp 1:1):
+          //   greeting top y=38 · search bar y=146-192 (h=46) · panel ends
+          //   y=210 · side margins 20.
+          //
+          // The SafeArea used to wrap this Container from the OUTSIDE, which
+          // pushed the whole panel BELOW the status bar and left a strip of
+          // bare map above it — the dead space at the top of the screen. In the
+          // mockup the dark header runs edge to edge from y=0. The inset now
+          // lives INSIDE the panel, so the background reaches the top of the
+          // screen while the text still clears the status bar.
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: NavAlertColors.background.withValues(alpha: 0.94),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                // 6 dp over the status-bar inset puts the greeting at roughly
+                // the mockup's y=38; 18 dp below matches its 192->210 gap.
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   // TODO (UI Team): greeting + heading typography. Consider a
                   // theme text style instead of inline fontSize/weight.
                   Text(_greeting,
@@ -192,7 +213,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   const Text('Where are you headed?',
                       style: TextStyle(
                           fontSize: 22, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 12),
+                  // Mockup gap between the heading (ends y=130) and the search
+                  // bar (starts y=146).
+                  const SizedBox(height: 16),
                   GestureDetector(
                     // DO NOT MODIFY LOGIC: opens the destination search (UC-4).
                     // Restyle the pill below, but keep this onTap → SearchView.
@@ -293,17 +316,21 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                         ],
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
           // Locate me button
           // TODO (UI Team): FAB position/size/icon/color are free to restyle.
           Positioned(
-            right: 16,
-            // Page 8 stacks the locate button ABOVE the earphones pill, so the
-            // FAB lifts out of the way only while that pill is on screen.
-            bottom: _earphones ? 96 : 24,
+            // Mockup: FAB spans x=265-317 of 360 dp, so 43 dp from the right.
+            right: 43,
+            // Mockup: FAB occupies y=605-657 with the bottom nav starting at
+            // y=730 — a constant 73 dp above the nav, whether or not a pill is
+            // on screen. The pills live at 14-52, so they never collide and the
+            // button no longer needs to hop when one appears.
+            bottom: 73,
             child: FloatingActionButton(
               backgroundColor: Colors.white,
               // DO NOT MODIFY LOGIC: re-fetches GPS and re-centres the map
@@ -353,7 +380,12 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
             Positioned(
               left: 20,
               right: 20,
-              bottom: 24,
+              // Mockup: the pill sits 14 dp above the bottom nav (y=678-716,
+              // nav at y=730) with the same 20 dp side margins as the search
+              // bar. Page 8 and Page 13.5 draw their pills in the SAME slot, so
+              // when a trip is running this one steps up over the shell's
+              // "View Active Trip" pill (38 high + 8 gap) instead of colliding.
+              bottom: tripActive ? 60 : 14,
               child: IgnorePointer(
                 child: Container(
                   padding: const EdgeInsets.symmetric(
