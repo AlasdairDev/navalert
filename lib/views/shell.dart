@@ -162,46 +162,64 @@ class _ShellViewState extends State<ShellView> {
     return Scaffold(
       // DO NOT MODIFY LOGIC: IndexedStack keeps all 5 tabs alive (state is
       // preserved across tab switches). Keep the 5 pages and their order.
-      body: Column(children: [
+      // GUI Page 13.5 — the resume-trip affordance is a CENTRED PILL floating
+      // just above the bottom navigation, not a full-width bar stealing a strip
+      // off the top of every tab. Mockup geometry (360x780 dp): pill x=88-272
+      // (w=184), y=678-716 (h=38), bottom nav starts y=730, so the pill sits
+      // 14 dp above it. Overlaying it in a Stack instead of stacking it in a
+      // Column also stops it from shoving the whole tab down when a trip
+      // starts. It stays in the SHELL, not on Home, so a rider who wandered
+      // into Settings mid-trip still has the way back.
+      body: Stack(children: [
+        IndexedStack(index: _index, children: pages),
         if (tripActive)
-          // TODO (UI Team): restyle this "resume trip" bar (colors, height,
-          // icon, copy) — but keep the onTap that re-opens ActiveTripView.
-          Material(
-            color: NavAlertColors.primaryButton,
-            child: InkWell(
-              // DO NOT MODIFY LOGIC: in-flight guard. Two taps stacked TWO
-              // ActiveTripView routes; sliding to stop then popped only the top
-              // one, leaving a second monitoring screen bound to a trip that had
-              // already ended — a ghost trip the rider cannot make sense of.
-              onTap: () {
-                if (_resuming) return;
-                _resuming = true;
-                Navigator.of(context)
-                    .push(MaterialPageRoute(
-                        builder: (_) => const ActiveTripView()))
-                    .whenComplete(() {
-                  if (mounted) _resuming = false;
-                });
-              },
-              child: const SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(children: [
-                    Icon(Icons.directions_walk, size: 18, color: Colors.white),
-                    SizedBox(width: 10),
-                    Expanded(
-                        child: Text('Trip in progress — tap to return',
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 14,
+            child: Center(
+              // TODO (UI Team): pill colour/icon/copy are [EDIT] — but keep the
+              // onTap that re-opens ActiveTripView.
+              child: Material(
+                color: NavAlertColors.primaryButton,
+                borderRadius: BorderRadius.circular(19),
+                elevation: 4,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(19),
+                  // DO NOT MODIFY LOGIC: in-flight guard. Two taps stacked TWO
+                  // ActiveTripView routes; sliding to stop then popped only the
+                  // top one, leaving a second monitoring screen bound to a trip
+                  // that had already ended — a ghost trip the rider cannot make
+                  // sense of.
+                  onTap: () {
+                    if (_resuming) return;
+                    _resuming = true;
+                    Navigator.of(context)
+                        .push(MaterialPageRoute(
+                            builder: (_) => const ActiveTripView()))
+                        .whenComplete(() {
+                      if (mounted) _resuming = false;
+                    });
+                  },
+                  child: const SizedBox(
+                    height: 38,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 18),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.location_on, size: 18, color: Colors.white),
+                        SizedBox(width: 8),
+                        Text('View Active Trip',
                             style: TextStyle(
                                 color: Colors.white,
-                                fontWeight: FontWeight.w600))),
-                    Icon(Icons.chevron_right, color: Colors.white),
-                  ]),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-        Expanded(child: IndexedStack(index: _index, children: pages)),
       ]),
       // TODO (UI Team): the bottom nav's look (colors, selected highlight,
       // shape, label visibility) is mostly driven by the theme's
