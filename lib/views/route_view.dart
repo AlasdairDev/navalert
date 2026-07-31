@@ -633,14 +633,50 @@ class _RouteViewState extends State<RouteView> {
       return const SizedBox.shrink();
     }
     final estimate = home.suggestionsAreEstimates;
+    // Figure 22 — the guide header is flanked by ‹ › chevrons that page
+    // between the suggested routes WITHOUT leaving the guide, so the rider can
+    // compare "Option A" and "Option B" step by step. The guide is the primary
+    // feature; dismissing it is the separate "Close" button below.
+    final index = home.suggestions
+        .indexWhere((x) => x.suggestionId == s.suggestionId);
+    final hasPrev = index > 0;
+    final hasNext = index >= 0 && index < home.suggestions.length - 1;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: () => setState(() => _showGuide = false)),
-        const Text('Step-by-Step Commute Guide',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            tooltip: 'Previous route',
+            // DO NOT MODIFY LOGIC: paging re-selects the suggestion, which is
+            // what feeds the fare, the map polyline and the live guide legs.
+            // Keep the home.selectSuggestion call.
+            onPressed: hasPrev
+                ? () => home.selectSuggestion(home.suggestions[index - 1])
+                : null),
+        const Flexible(
+          child: Text('Step-by-Step Commute Guide',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+        IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next route',
+            onPressed: hasNext
+                ? () => home.selectSuggestion(home.suggestions[index + 1])
+                : null),
       ]),
+      // Which of the suggested routes this guide belongs to — the mockup pages
+      // between two options, so the rider must be able to tell them apart.
+      if (home.suggestions.length > 1 && index >= 0)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+              'Route ${index + 1} of ${home.suggestions.length}  ·  '
+              '${s.routeLabel}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11, color: NavAlertColors.textSecondary)),
+        ),
       // No direct GTFS route was matched — the boarding points below are
       // approximate, so label the whole guide as an estimate to avoid sending
       // the rider looking for a specific named terminal that isn't real data.
@@ -742,14 +778,33 @@ class _RouteViewState extends State<RouteView> {
           },
         ),
       ),
-      const SizedBox(height: 8),
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        OutlinedButton(
+      const SizedBox(height: 10),
+      // ── Figure 22 footer ────────────────────────────────────────────────
+      // THE COMMUTE GUIDE IS THE PRIMARY FEATURE; the alarm is an optional
+      // add-on (Chapter 3, UC-4 alt-flow B "Commute Guide Only"). These two
+      // buttons are therefore equal-weight siblings, not one forced action:
+      //   Close        — outlined. Dismisses the sheet and lets the rider
+      //                  navigate on their own using the steps above.
+      //   Enable Alarm — solid pill. Opens the OPTIONAL Trip Settings sheet.
+      // Do not collapse this back into a single button.
+      Row(children: [
+        Expanded(
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14)),
             onPressed: () => setState(() => _showGuide = false),
-            child: const Text('Close')),
+            child: const Text('Close'),
+          ),
+        ),
         const SizedBox(width: 12),
-        ElevatedButton(
-            onPressed: _openTripSettings, child: const Text('Enable Alarm')),
+        Expanded(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: _openTripSettings,
+            child: const Text('Enable Alarm'),
+          ),
+        ),
       ]),
     ]);
   }
