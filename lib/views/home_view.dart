@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -6,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../core/map_support.dart';
 import '../core/theme.dart';
+import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
 import 'onboarding_flow.dart';
@@ -35,6 +38,29 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   /// True while the locate-me FAB is acquiring a fix — see its onPressed.
   bool _locating = false;
 
+  /// GUI Page 8 — "Earphones connected" pill. True while the device reports a
+  /// wired/Bluetooth/USB headset, which is the state in which the paper's
+  /// "Bluetooth / ear-phone only detection" setting routes the destination
+  /// alarm quietly through the earphones instead of the loud PUV speaker.
+  /// Purely informational: the pill reflects the route, it never sets it.
+  bool _earphones = false;
+
+  /// Headset plug/unplug has no Dart-side event on this app's platform channel,
+  /// so the pill is refreshed on a slow poll. The underlying call is a single
+  /// AudioManager query — orders of magnitude cheaper than the GPS stream this
+  /// screen already runs — and setState fires only when the answer CHANGES, so
+  /// a steady state costs no rebuilds.
+  Timer? _earphonePoll;
+  static const _earphonePollInterval = Duration(seconds: 5);
+
+  Future<void> _refreshEarphones() async {
+    final connected = await SoundService.instance.isHeadsetConnected();
+    // The poll outlives no-longer-mounted states, and the value is only worth a
+    // rebuild when it actually flipped.
+    if (!mounted || connected == _earphones) return;
+    setState(() => _earphones = connected);
+  }
+
   // DO NOT MODIFY LOGIC: the mover is built eagerly in initState, NOT as a lazy
   // `late final` field initializer. When GPS never returns a fix the mover is
   // never read, so a lazy field would run its initializer for the FIRST time
@@ -48,6 +74,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _mover = AnimatedMapMover(_mapController, this);
+    // Show the headset state immediately rather than after the first poll tick,
+    // so plugging in before opening the app still lights the pill at once.
+    _refreshEarphones();
+    _earphonePoll =
+        Timer.periodic(_earphonePollInterval, (_) => _refreshEarphones());
     // DO NOT MODIFY LOGIC: first-frame GPS acquisition + animated recenter.
     // This is the R2/UC-4 location bootstrap; the map has nothing to show
     // until refreshCurrentLocation() returns. Restyle the map/markers freely,
@@ -67,6 +98,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    // Without this the timer keeps firing against a dead State and every tick
+    // calls setState on it.
+    _earphonePoll?.cancel();
     _mover.dispose();
     super.dispose();
   }
@@ -249,7 +283,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           // TODO (UI Team): FAB position/size/icon/color are free to restyle.
           Positioned(
             right: 16,
-            bottom: 24,
+            // Page 8 stacks the locate button ABOVE the earphones pill, so the
+            // FAB lifts out of the way only while that pill is on screen.
+            bottom: _earphones ? 96 : 24,
             child: FloatingActionButton(
               backgroundColor: Colors.white,
               // DO NOT MODIFY LOGIC: re-fetches GPS and re-centres the map
@@ -288,6 +324,45 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               child: const Icon(Icons.my_location, color: Colors.black87),
             ),
           ),
+          // GUI Page 8 — "Earphones connected" pill, pinned just above the
+          // shell's bottom navigation. It appears only while a headset is
+          // actually attached, so it reports a real device state rather than
+          // decorating the screen.
+          //
+          // [EDIT] pill shape, icon and copy. Colours are the existing
+          // primaryButton / textPrimary tokens — no new palette.
+          if (_earphones)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 24,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: NavAlertColors.primaryButton,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black38, blurRadius: 8),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.headset,
+                          size: 18, color: NavAlertColors.textPrimary),
+                      SizedBox(width: 10),
+                      Text('Earphones connected',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: NavAlertColors.textPrimary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
