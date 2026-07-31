@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../services/hardware_buttons.dart';
 import '../services/home_widget_service.dart';
+import '../services/trip_notification_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../viewmodels/history_viewmodel.dart';
@@ -50,6 +51,7 @@ class _ShellViewState extends State<ShellView> {
   void initState() {
     super.initState();
     _wireHomeWidgetShortcuts();
+    _wireLockScreenSos();
     // ─── DO NOT MODIFY LOGIC (entire block) ───────────────────────────────
     // These streams are fed by the native MediaButtonService (screen-off
     // triple-Volume shortcuts, R7/R8). Removing/reordering start() or either
@@ -87,6 +89,25 @@ class _ShellViewState extends State<ShellView> {
   /// DO NOT MODIFY LOGIC (both methods below): removing/reordering either
   /// subscription, or the isSosUri gate, breaks the widget's one-tap SOS. The
   /// only [EDIT] part is the SnackBar copy in _handleWidgetUri.
+  /// Routes the lock-screen notification's "SOS — send my location" action.
+  ///
+  /// DO NOT MODIFY LOGIC: wired HERE, not in TripViewModel, because the shell
+  /// is the one place that owns every external SOS trigger (volume shortcut,
+  /// home-screen widget, and now the notification) and can reach
+  /// EmergencyViewModel. TripViewModel has no SosService of its own, and giving
+  /// it one would create a SECOND service with its own independent retry queue
+  /// — two timers retrying the same emergency, sending duplicate SMS.
+  void _wireLockScreenSos() {
+    TripNotificationService.instance.onSos = () {
+      if (!mounted) return;
+      final em = context.read<EmergencyViewModel>();
+      final tripId = context.read<TripViewModel>().trip?.tripId;
+      em.fireSos(tripId: tripId);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Lock screen SOS — sending your location…')));
+    };
+  }
+
   void _wireHomeWidgetShortcuts() {
     // Same reasoning as the volume shortcuts: an unhandled error here would
     // cancel the subscription and silently disable the widget's one-tap SOS.

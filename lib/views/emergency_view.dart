@@ -175,8 +175,19 @@ class EmergencyView extends StatelessWidget {
                     style: const TextStyle(
                         color: NavAlertColors.warning, fontSize: 12)),
               ),
+            // ╔════════════════════════════════════════════════════════════╗
+            // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
+            // ║ CALL 911 IS A SEPARATE, CONFIRMED TRIGGER.                 ║
+            // ║                                                            ║
+            // ║ UI TEAM: restyle the button, keep the confirm dialog. This ║
+            // ║ used to dial 911 on a SINGLE TAP with no confirmation, on  ║
+            // ║ a screen used by people in a panic, directly beneath a     ║
+            // ║ 190 px SOS target — a mis-tap placed a real emergency call.║
+            // ║ SOS SMS, the fake call, and 911 must each need their own   ║
+            // ║ deliberate action; never collapse them into one gesture.   ║
+            // ╚════════════════════════════════════════════════════════════╝
             TextButton.icon(
-              onPressed: () => context.read<EmergencyViewModel>().call911(),
+              onPressed: () => _confirmCall911(context),
               icon: const Icon(Icons.call, color: NavAlertColors.danger),
               label: const Text('Call 911',
                   style: TextStyle(color: NavAlertColors.danger)),
@@ -244,6 +255,40 @@ class EmergencyView extends StatelessWidget {
       ),
       ),
     );
+  }
+
+  /// Confirm before placing a REAL emergency call.
+  ///
+  /// DO NOT MODIFY LOGIC: 911 is a live emergency service. The dialog is the
+  /// separation between "I touched the screen" and "I called the police", and
+  /// it is what keeps this trigger distinct from the SOS hold beside it.
+  Future<void> _confirmCall911(BuildContext context) async {
+    final vm = context.read<EmergencyViewModel>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Call 911?'),
+        content: const Text(
+          'This places a real call to emergency services.\n\n'
+          'To text your location to your saved contacts instead, press and '
+          'hold the SOS button for 3 seconds.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Call 911',
+                style: TextStyle(
+                    color: NavAlertColors.danger,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await vm.call911();
   }
 
   void _showResult(BuildContext context) {

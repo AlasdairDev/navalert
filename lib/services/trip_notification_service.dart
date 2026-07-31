@@ -18,6 +18,22 @@ class TripNotificationService {
   /// Called when the rider taps "End trip" on the lock-screen widget.
   VoidCallback? onEndTrip;
 
+  /// Called when the rider taps "SOS — send my location" on the lock-screen
+  /// widget.
+  ///
+  /// DO NOT MODIFY LOGIC: this fires the SAME `fireSos` path as the on-screen
+  /// button and the volume shortcut, so its in-flight guard already prevents
+  /// duplicate SMS if the notification is tapped twice.
+  ///
+  /// LIMITATION, stated rather than hidden: this is delivered through
+  /// `onDidReceiveNotificationResponse`, which only runs while the Flutter
+  /// engine is alive. With the app swiped away the tap re-launches the app
+  /// (`showsUserInterface: true`) and the SOS fires once it is up. A true
+  /// headless send from a killed process needs a background isolate with its
+  /// own database and platform-channel setup — the volume shortcut and the
+  /// home-screen widget remain the fully headless SOS paths.
+  VoidCallback? onSos;
+
   /// Idempotent under concurrency: main() fires this without awaiting and
   /// showTrip() awaits it again — caching the Future guarantees
   /// FlutterLocalNotificationsPlugin.initialize() runs exactly once even
@@ -31,6 +47,7 @@ class TripNotificationService {
       ),
       onDidReceiveNotificationResponse: (response) {
         if (response.actionId == 'end_trip') onEndTrip?.call();
+        if (response.actionId == 'sos_send') onSos?.call();
       },
     );
   }
@@ -103,7 +120,17 @@ class TripNotificationService {
           showWhen: false,
           visibility: NotificationVisibility.public,
           category: AndroidNotificationCategory.navigation,
+          // DO NOT MODIFY LOGIC: SOS is listed FIRST. Android collapses the
+          // action row on narrow lock screens and drops the trailing actions,
+          // so the emergency action must never be the one that gets cut.
+          //
+          // NOTE FOR THE UI TEAM: a notification cannot be styled like the
+          // home-screen App Widget — Android renders it, and 12+ reformats
+          // custom layouts. These are system-drawn text actions by necessity,
+          // not by choice.
           actions: [
+            AndroidNotificationAction('sos_send', 'SOS — send my location',
+                showsUserInterface: true),
             AndroidNotificationAction('open_app', 'Open in App',
                 showsUserInterface: true),
             AndroidNotificationAction('end_trip', 'End trip',
