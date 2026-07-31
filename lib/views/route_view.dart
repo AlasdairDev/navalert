@@ -39,7 +39,19 @@ class RouteView extends StatefulWidget {
 class _RouteViewState extends State<RouteView> {
   bool _showGuide = false;
 
-  // DO NOT MODIFY LOGIC: in-flight guard for "Start Trip". TripViewModel
+  // ╔══════════════════════════════════════════════════════════════════════╗
+  // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                     ║
+  // ║ SPAM-TAP DEBOUNCER (isProcessing) for the "Start Trip" button.       ║
+  // ║                                                                      ║
+  // ║ UI TEAM: `_startingTrip` is the in-flight flag. In the Trip Settings ║
+  // ║ sheet below, keep `onPressed: _startingTrip ? null : ...` and the    ║
+  // ║ `setSheet(() => _startingTrip = true)` that disables the button.     ║
+  // ║ Style the sheet and the button freely. "Start Trip" is the single    ║
+  // ║ most double-tapped control in the app — without this guard two taps  ║
+  // ║ corrupt the navigation stack and the rider lands on a blank screen   ║
+  // ║ or ends the trip they just started.                                  ║
+  // ╚══════════════════════════════════════════════════════════════════════╝
+  // In-flight guard for "Start Trip". TripViewModel
   // .startTrip already tears down any live monitoring, so the GPS listener is
   // safe — but the NAVIGATION here is not. The handler pops the sheet and then
   // pushes ActiveTripView, so two taps in the same frame ran both handlers:
