@@ -27,7 +27,29 @@ class EmergencyView extends StatelessWidget {
     final em = context.watch<EmergencyViewModel>();
     final app = context.watch<AppViewModel>();
 
-    return Scaffold(
+    // DO NOT MODIFY LOGIC — and note why this is NOT a plain canPop: false.
+    //
+    // EmergencyView is a TAB inside ShellView's IndexedStack, not a pushed
+    // route. IndexedStack builds and mounts all five tabs at once, so this
+    // PopScope registers with the SHELL's route and stays active even while
+    // Home, History, Favorites or Settings is the visible tab. An unconditional
+    // canPop: false here would therefore kill the hardware Back button across
+    // the ENTIRE app, permanently — the rider could never back out of NavAlert
+    // from any screen. There is also no route to "kill" here: Back on a tab
+    // exits the app, it does not close the Emergency screen.
+    //
+    // What actually needs protecting is the emergency SEQUENCE, so Back is
+    // blocked precisely while an SOS is being held or sent, and is released the
+    // instant it finishes.
+    final sosInFlight = em.holdingSos || em.sending;
+    return PopScope(
+      canPop: !sosInFlight,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('SOS in progress — wait for it to finish.')));
+      },
+      child: Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -64,8 +86,13 @@ class EmergencyView extends StatelessWidget {
               // accidental SOS. Keep beginSosHold/cancelSosHold on down/up/
               // cancel and the onFired → _showResult callback. `holdProgress`
               // (0→1) drives the ring below — keep reading it.
-              onTapDown: (_) => context.read<EmergencyViewModel>().beginSosHold(
-                  onFired: () => _showResult(context)),
+              // Spam-tap protection: while an SOS is actually being sent, a new
+              // hold must not start. fireSos already refuses re-entry, so this
+              // stops the ring re-arming and pretending a second send began.
+              onTapDown: em.sending
+                  ? null
+                  : (_) => context.read<EmergencyViewModel>().beginSosHold(
+                      onFired: () => _showResult(context)),
               onTapUp: (_) =>
                   context.read<EmergencyViewModel>().cancelSosHold(),
               onTapCancel: () =>
@@ -156,6 +183,9 @@ class EmergencyView extends StatelessWidget {
                             color: NavAlertColors.textSecondary)),
                     trailing: const Icon(Icons.phone_callback,
                         color: NavAlertColors.accent),
+                    // Disabled outright while a fake call is already running,
+                    // so the row cannot be panic-tapped into stacking screens.
+                    enabled: !em.fakeCallActive,
                     onTap: () async {
                       // Bug fix: the caller name must follow the CHOSEN
                       // recording, otherwise picking "Dad call recording" still
@@ -192,10 +222,17 @@ class EmergencyView extends StatelessWidget {
           ]),
         ),
       ),
+      ),
     );
   }
 
   void _showResult(BuildContext context) {
+    // DO NOT MODIFY LOGIC: this runs from the 3-second hold timer, long after
+    // the tap that armed it, so the Emergency tab may be gone by the time the
+    // SOS resolves. Reading a ViewModel or a ScaffoldMessenger off a defunct
+    // context throws, and that throw would surface as an unhandled async error
+    // on the SOS path — the one path that must never fault.
+    if (!context.mounted) return;
     final msg = context.read<EmergencyViewModel>().statusMessage;
     if (msg != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));

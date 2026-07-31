@@ -98,7 +98,19 @@ class HomeViewModel extends ChangeNotifier {
   List<RouteSuggestion> suggestions = [];
   RouteSuggestion? selectedSuggestion;
 
-  Future<void> refreshCurrentLocation() async {
+  /// [promptIfDisabled] controls UC-4 Exception 2's hand-off to the system
+  /// location settings page. It must stay TRUE for anything the rider explicitly
+  /// asked for (the locate button, picking a destination, a favourite shortcut)
+  /// — there, being sent to the toggle is the expected, useful response.
+  ///
+  /// DO NOT MODIFY LOGIC: it must be FALSE for the unprompted first-frame
+  /// acquisition on Home. That call runs the instant the tab builds, so on a
+  /// fresh install with location services off the rider was ejected into
+  /// Android's Settings app before ever seeing NavAlert — no explanation, no
+  /// action of theirs that asked for it, and the app left sitting in the
+  /// background. A background bootstrap must fall back to the banner (which
+  /// already offers Retry and Settings) rather than hijack the foreground.
+  Future<void> refreshCurrentLocation({bool promptIfDisabled = true}) async {
     locationError = null;
     locationIsFallback = false;
     try {
@@ -108,6 +120,7 @@ class HomeViewModel extends ChangeNotifier {
       // must be checked. openLocationSettings() is the system prompt the use
       // case calls for.
       if (!await Geolocator.isLocationServiceEnabled()) {
+        if (!promptIfDisabled) throw const LocationServiceDisabledException();
         await Geolocator.openLocationSettings();
         if (!await Geolocator.isLocationServiceEnabled()) {
           throw const LocationServiceDisabledException();
