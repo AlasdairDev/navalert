@@ -105,7 +105,8 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Add Favorite')),
+      // Figure 24.2 titles this screen "Add New Favorite".
+      appBar: AppBar(title: const Text('Add New Favorite')),
       // ╔══════════════════════════════════════════════════════════════════╗
       // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                 ║
       // ║ KEYBOARD UNFOCUS WRAPPER (soft-keyboard dismissal).              ║
@@ -145,30 +146,68 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
                     style: const TextStyle(color: NavAlertColors.warning)),
               ),
             Expanded(
-              child: ListView.builder(
-                itemCount: _results.length,
-                itemBuilder: (_, i) {
-                  final r = _results[i];
-                  return ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: NavAlertColors.surface,
-                      child: Icon(Icons.star_border,
-                          color: Colors.amber, size: 20),
+              // Figure 24.2 puts the ⊕ on the LEFT of each row — it reads as
+              // "add this one" before the name, instead of a star that looked
+              // like the row was already saved. Rows are cards there, and the
+              // list had no empty state at all: before the first search, and
+              // after a search that matched nothing, the screen was simply
+              // blank with no indication which of the two had happened.
+              child: _results.isEmpty && !_searching && _error == null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            // Only ever the pre-search prompt. A "nothing
+                            // matched" message does NOT belong here: _search
+                            // already reports that through _error, and the
+                            // search does not even run until 3 characters, so
+                            // keying this on "results are empty" would tell a
+                            // rider who has typed "SM" that their search found
+                            // nothing when no search had been made.
+                            Icon(Icons.search,
+                                size: 48, color: NavAlertColors.textSecondary),
+                            SizedBox(height: 12),
+                            Text(
+                              'Search for a place to save it to your '
+                              'Favorites.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: NavAlertColors.textSecondary,
+                                  fontSize: 13,
+                                  height: 1.4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      itemCount: _results.length,
+                      itemBuilder: (_, i) {
+                        final r = _results[i];
+                        return Card(
+                          child: ListTile(
+                            contentPadding:
+                                const EdgeInsets.fromLTRB(12, 6, 16, 6),
+                            leading: const Icon(Icons.add_circle_outline,
+                                color: NavAlertColors.accent),
+                            title: Text(r.name,
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(r.displayName,
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: NavAlertColors.textSecondary,
+                                    fontSize: 12,
+                                    height: 1.35)),
+                            onTap: () => _save(r),
+                          ),
+                        );
+                      },
                     ),
-                    title: Text(r.name,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    subtitle: Text(r.displayName,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: NavAlertColors.textSecondary,
-                            fontSize: 12)),
-                    trailing: const Icon(Icons.add_circle_outline,
-                        color: NavAlertColors.accent),
-                    onTap: () => _save(r),
-                  );
-                },
-              ),
               ),
             ],
           ),

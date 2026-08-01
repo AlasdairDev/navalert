@@ -21,9 +21,9 @@ import 'active_trip_view.dart';
 ///         destination pin · star _toggleFavorite · "Mode of Transport" →
 ///         _openModePriority sheet (bus/UV/jeepney switches + Done) ·
 ///         suggestion card onTap → home.selectSuggestion · "Show Commute
-///         Guide" gate on selectedSuggestion · "Enable Alarm" →
-///         _openTripSettings (sound + vibration-only + Start Trip →
-///         tripVm.startTrip → ActiveTripView).
+///         Guide" gate on selectedSuggestion · "Start Trip" →
+///         _openTripSettings (optional destination alarm + sound +
+///         vibration-only + Start Trip → tripVm.startTrip → ActiveTripView).
 ///  [EDIT] header card layout, tag chip colors/labels (_tag), suggestion
 ///         card styling, "SUGGESTED ROUTES FOUND" copy, step list rows,
 ///         polyline colors/width, pin styles, sheet cosmetics.
@@ -158,6 +158,7 @@ class _RouteViewState extends State<RouteView> {
         return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const _SheetHandle(),
             const Text('Mode Priority',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -218,15 +219,51 @@ class _RouteViewState extends State<RouteView> {
         return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const _SheetHandle(),
             const Text('Trip Settings',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            // Say what this sheet actually starts. The rider arrived here from
+            // "Start Trip" on the commute guide, so the destination and the
+            // fact that the GUIDE is what runs must be the first thing read —
+            // the three controls below are all alarm options, and leading with
+            // them made an optional add-on look like the subject of the screen.
+            const SizedBox(height: 4),
+            Text(
+                'Monitoring to ${trip.destinationLabel.split(',').first}. '
+                'Your step-by-step guide runs for the whole trip.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 12, color: NavAlertColors.textSecondary)),
             const SizedBox(height: 14),
+            // The optional add-on comes FIRST among the alarm controls, because
+            // the two below it only mean anything once it is on.
             Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: DropdownButtonHideUnderline(
+              child: SwitchListTile(
+                secondary: Icon(
+                    alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
+                    color: NavAlertColors.accent),
+                title: const Text('Destination alarm'),
+                subtitle: Text(
+                    alarmEnabled
+                        ? 'You will be woken as you approach your stop.'
+                        : 'Optional — off. You can turn it on any time '
+                            'during the trip.',
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+                value: alarmEnabled,
+                onChanged: (v) => setSheet(() => alarmEnabled = v),
+              ),
+            ),
+            Card(
+              child: ListTile(
+                leading: Icon(Icons.music_note,
+                    color: alarmEnabled
+                        ? NavAlertColors.accent
+                        : NavAlertColors.textSecondary),
+                title: const Text('Alarm sound',
+                    style: TextStyle(fontSize: 13)),
+                trailing: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    isExpanded: true,
                     // Guard the value like Settings does: a non-catalog sound
                     // (e.g. from an imported backup) must not crash the sheet
                     // with DropdownButton's "value not in items" assertion.
@@ -238,34 +275,28 @@ class _RouteViewState extends State<RouteView> {
                         .map((s) =>
                             DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setSheet(() => sound = v);
-                      SoundService.instance.previewAlarm(v);
-                    },
+                    // Picking a sound for an alarm that is switched off does
+                    // nothing, and previewing one implies the alarm is armed.
+                    // Disabled until the toggle above turns it on.
+                    onChanged: alarmEnabled
+                        ? (v) {
+                            if (v == null) return;
+                            setSheet(() => sound = v);
+                            SoundService.instance.previewAlarm(v);
+                          }
+                        : null,
                   ),
                 ),
               ),
             ),
             Card(
-              child: SwitchListTile(
-                secondary: Icon(
-                    alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
-                    color: NavAlertColors.accent),
-                title: const Text('Destination alarm'),
-                subtitle: Text(
-                    alarmEnabled
-                        ? 'You will be woken as you approach your stop.'
-                        : 'Off — you can turn it on any time during the trip.',
-                    style: const TextStyle(
-                        fontSize: 11, color: NavAlertColors.textSecondary)),
-                value: alarmEnabled,
-                onChanged: (v) => setSheet(() => alarmEnabled = v),
-              ),
-            ),
-            Card(
               child: CheckboxListTile(
-                title: const Text('Vibration Only Mode'),
+                secondary: Icon(Icons.vibration,
+                    color: alarmEnabled
+                        ? NavAlertColors.accent
+                        : NavAlertColors.textSecondary),
+                title: const Text('Vibration Only Mode',
+                    style: TextStyle(fontSize: 13)),
                 // Meaningless while the alarm is off — disabled rather than
                 // left tappable so the sheet cannot imply it does something.
                 value: vibrationOnly,
@@ -783,10 +814,18 @@ class _RouteViewState extends State<RouteView> {
       // THE COMMUTE GUIDE IS THE PRIMARY FEATURE; the alarm is an optional
       // add-on (Chapter 3, UC-4 alt-flow B "Commute Guide Only"). These two
       // buttons are therefore equal-weight siblings, not one forced action:
-      //   Close        — outlined. Dismisses the sheet and lets the rider
-      //                  navigate on their own using the steps above.
-      //   Enable Alarm — solid pill. Opens the OPTIONAL Trip Settings sheet.
+      //   Close      — outlined. Dismisses the sheet and lets the rider
+      //                navigate on their own using the steps above.
+      //   Start Trip — solid pill. Opens Trip Settings and begins MONITORING.
       // Do not collapse this back into a single button.
+      //
+      // This button used to read "Enable Alarm", which misnamed the whole
+      // product: it made the alarm look like the thing you were starting, and
+      // a rider who only wanted the step-by-step guide had to press a button
+      // promising an alarm they did not want. What the tap actually begins is
+      // trip MONITORING, which is what carries the live guide; the destination
+      // alarm is one optional switch inside the sheet it opens, and it is off
+      // by default. Name the trip, not the add-on.
       Row(children: [
         Expanded(
           child: OutlinedButton(
@@ -802,7 +841,7 @@ class _RouteViewState extends State<RouteView> {
             style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14)),
             onPressed: _openTripSettings,
-            child: const Text('Enable Alarm'),
+            child: const Text('Start Trip'),
           ),
         ),
       ]),
@@ -821,4 +860,23 @@ class _RouteViewState extends State<RouteView> {
     if (m < 60) return '$m min';
     return '${m ~/ 60} hr ${m % 60} min';
   }
+}
+
+/// The grab bar every bottom sheet in the mockups is topped with (Mode
+/// Priority Page 13, Trip Settings Page 13). Both sheets are draggable, and
+/// without it nothing on screen said so. Same 44x4 bar the live commute-guide
+/// sheet already uses, so the two read as one component.
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 44,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: NavAlertColors.textSecondary,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
 }
