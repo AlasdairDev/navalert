@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
+import '../models/models.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import '../services/sound_service.dart';
@@ -580,9 +583,17 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
             children: [
               const Icon(Icons.contacts, size: 56, color: NavAlertColors.accent),
               const SizedBox(height: 12),
-              const Text('Add Emergency Contacts',
-                  style:
-                      TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+              // Figure 17 introduces these contacts ("Add…"); Figure 27 is the
+              // SAME form reached later from Settings → Update, where the rider
+              // is editing contacts that already exist. Calling that "Add"
+              // misdescribed what the screen was about to do.
+              Text(
+                  widget.inOnboarding
+                      ? 'Add Emergency Contacts'
+                      : 'Update Emergency Contacts',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               const Text(
                 'Your emergency contacts will be notified with your location '
@@ -620,8 +631,13 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
+                // "Continue" belongs to the onboarding chain, where this screen
+                // is a step on the way to the next one. From Settings there is
+                // nothing to continue to — the action is the Figure 27 "Update".
                 child: ElevatedButton(
-                    onPressed: _save, child: const Text('Continue')),
+                    onPressed: _save,
+                    child: Text(
+                        widget.inOnboarding ? 'Continue' : 'Update')),
               ),
               if (widget.inOnboarding)
                 TextButton(
@@ -702,17 +718,64 @@ class FakeCallSetupView extends StatefulWidget {
 class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   late final TextEditingController _callerCtrl;
 
+  // ── Figure 28 / 28.3 / 28.4 preview transport state ──────────────────────
+  // Which row owns the player right now, whether it is paused, and the live
+  // playhead behind the `00:01.97` readout. Only ONE row can be active,
+  // because there is only one voice player — tracking it by id is what lets
+  // the other rows stay on ▶ instead of all showing a pause icon at once.
+  String? _playingId;
+  bool _previewPaused = false;
+  Duration _pos = Duration.zero;
+  Duration _dur = Duration.zero;
+  final List<StreamSubscription> _subs = [];
+
   @override
   void initState() {
     super.initState();
     _callerCtrl = TextEditingController(
         text: context.read<AppViewModel>().fakeCallConfig.callerName);
+    final sound = SoundService.instance;
+    _subs
+      ..add(sound.voicePosition.listen((p) {
+        if (mounted && _playingId != null) setState(() => _pos = p);
+      }))
+      ..add(sound.voiceDuration.listen((d) {
+        if (mounted && _playingId != null) setState(() => _dur = d);
+      }))
+      // The clip ran to its end on its own — hand the row back to ▶ so the
+      // control never sits on ⏸ over a player that already stopped.
+      ..add(sound.voiceCompleted.listen((_) {
+        if (!mounted) return;
+        setState(() {
+          _playingId = null;
+          _previewPaused = false;
+          _pos = Duration.zero;
+        });
+      }));
   }
 
   @override
   void dispose() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    // Leaving this screen must not leave a preview playing underneath it — but
+    // ONLY stop the player when this screen is the thing using it. A blanket
+    // stop here would also kill a fake call placed from somewhere else, which
+    // is the one piece of audio that must never be cut short.
+    if (_playingId != null) SoundService.instance.stopVoice();
     _callerCtrl.dispose();
     super.dispose();
+  }
+
+  /// `00:01.97` — the elapsed readout in Figures 28.3 / 28.4.
+  static String _clock(Duration d) {
+    final mm = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final ss = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    final cs = ((d.inMilliseconds.remainder(1000)) ~/ 10)
+        .toString()
+        .padLeft(2, '0');
+    return '$mm:$ss.$cs';
   }
 
   void _toast(String message) {
@@ -766,6 +829,249 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
       return;
     }
     await SoundService.instance.playVoice(rec.filePath);
+  }
+
+  /// Figure 28.3 ▶ / 28.4 ⏸ — one control that plays, pauses and resumes the
+  /// row it belongs to. Starting a different row stops the current one first,
+  /// because a single voice player cannot serve two clips at once.
+  Future<void> _togglePreview(Recording r) async {
+    final sound = SoundService.instance;
+    if (_playingId == r.recordingId) {
+      // Same row: pause ⇄ resume in place, keeping the playhead.
+      if (_previewPaused) {
+        await sound.resumeVoice();
+      } else {
+        await sound.pauseVoice();
+      }
+      if (mounted) setState(() => _previewPaused = !_previewPaused);
+      return;
+    }
+    // A different row (or none) — take the player over from the top.
+    await sound.stopVoice();
+    if (mounted) {
+      setState(() {
+        _playingId = r.recordingId;
+        _previewPaused = false;
+        _pos = Duration.zero;
+        _dur = Duration.zero;
+      });
+    }
+    await sound.previewVoice(r.filePath);
+  }
+
+  /// Figure 28 ↺ — hear the clip again from the beginning. If this row is not
+  /// the one loaded in the player, it simply starts it, so the control is never
+  /// a dead tap.
+  Future<void> _restartPreview(Recording r) async {
+    final sound = SoundService.instance;
+    if (_playingId != r.recordingId) {
+      await _togglePreview(r);
+      return;
+    }
+    await sound.restartVoice();
+    if (mounted) {
+      setState(() {
+        _previewPaused = false;
+        _pos = Duration.zero;
+      });
+    }
+  }
+
+  /// Selecting a row is what the fake call will actually use — same contract as
+  /// the onboarding dropdown, so the two screens stay interchangeable.
+  // DO NOT MODIFY LOGIC: keep the recordingId assignment + saveFakeCallConfig;
+  // this is the wiring that makes the chosen clip play during a fake call.
+  Future<void> _selectRecording(Recording r) async {
+    final app = context.read<AppViewModel>();
+    app.fakeCallConfig.recordingId = r.recordingId;
+    try {
+      await app.saveFakeCallConfig();
+    } catch (_) {
+      _toast('Could not save the selection — storage is unavailable.');
+    }
+    if (mounted) setState(() {});
+  }
+
+  /// The full "All Recordings" list from Figure 28: every clip as its own card
+  /// with a play control, and a delete for the rider's own recordings (presets
+  /// are bundled assets and must stay as the fake call's fallback).
+  ///
+  /// [EDIT] card shape, icons and typography. Colours are the existing tokens.
+  Widget _recordingsList(AppViewModel app) {
+    if (app.recordings.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Text('No recordings yet — use "Record New" below.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+                fontSize: 13, color: NavAlertColors.textSecondary)),
+      );
+    }
+    final selectedId = app.fakeCallConfig.recordingId;
+    return Column(
+      children: app.recordings.map((r) {
+        final selected = r.recordingId == selectedId;
+        // "Selected" (the clip the fake call will use) and "active" (the clip
+        // currently loaded in the preview player) are independent — a rider can
+        // audition a row without changing what the fake call plays.
+        final active = r.recordingId == _playingId;
+        return Card(
+          // The active clip is ringed with the accent token, matching how the
+          // suggested-route cards mark their selection.
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: selected
+                ? const BorderSide(color: NavAlertColors.accent, width: 2)
+                : BorderSide.none,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: () => _selectRecording(r),
+                  child: Row(children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(r.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 2),
+                          Text(
+                              r.isPreset
+                                  ? 'Built-in recording'
+                                  : _shortDate(r.recordedAt),
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: NavAlertColors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                    if (selected)
+                      const Icon(Icons.check_circle,
+                          size: 18, color: NavAlertColors.success),
+                  ]),
+                ),
+                const SizedBox(height: 4),
+                // Figure 28 transport cluster: waveform glyph · ↺ restart ·
+                // ▶/⏸ · elapsed. The mockup's second seek arrow is deliberately
+                // NOT reproduced — these clips run one to five seconds, so a
+                // fixed-seconds skip would either do nothing or jump past the
+                // end. The live `00:01.97` readout from Figures 28.3/28.4 sits
+                // there instead, which is the information that arrow implied.
+                Row(children: [
+                  Icon(Icons.graphic_eq,
+                      size: 20,
+                      color: active
+                          ? NavAlertColors.accent
+                          : NavAlertColors.textSecondary),
+                  IconButton(
+                    icon: const Icon(Icons.replay,
+                        color: NavAlertColors.textSecondary),
+                    tooltip: 'Play from the start',
+                    onPressed: () => _restartPreview(r),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                        active && !_previewPaused
+                            ? Icons.pause
+                            : Icons.play_arrow,
+                        color: NavAlertColors.accent),
+                    tooltip: active && !_previewPaused ? 'Pause' : 'Play',
+                    onPressed: () => _togglePreview(r),
+                  ),
+                  if (active)
+                    Text(
+                      _dur > Duration.zero
+                          ? '${_clock(_pos)} / ${_clock(_dur)}'
+                          : _clock(_pos),
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                          color: NavAlertColors.textSecondary),
+                    ),
+                  const Spacer(),
+                  // Presets have no delete — removing one would leave the fake
+                  // call without a guaranteed clip to fall back on.
+                  if (!r.isPreset)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline,
+                          color: NavAlertColors.danger),
+                      tooltip: 'Delete recording',
+                      onPressed: () => _deleteRecording(r),
+                    ),
+                ]),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  /// dd/MM/yy — the compact stamp under custom recordings in Figure 28.
+  static String _shortDate(DateTime d) {
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${two(d.year % 100)}';
+  }
+
+  /// Click-to-confirm deletion, matching the trip/favorite pattern: nothing is
+  /// removed until the rider explicitly confirms in the dialog.
+  ///
+  /// DO NOT MODIFY LOGIC: stop the audio first. Deleting the .m4a while
+  /// SoundService still holds it open leaves the player pointing at a file that
+  /// no longer exists, and on Android the delete can fail outright because the
+  /// handle is locked — so the row would vanish while the file stayed behind.
+  Future<void> _deleteSelectedRecording() =>
+      _deleteRecording(context.read<AppViewModel>().selectedRecording);
+
+  Future<void> _deleteRecording(Recording? rec) async {
+    final app = context.read<AppViewModel>();
+    if (rec == null || rec.isPreset) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete this recording?'),
+        content: Text(
+          '${rec.title}\n\nThis permanently removes the recording from your '
+          'device. This cannot be undone.',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete',
+                style: TextStyle(
+                    color: NavAlertColors.danger,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await SoundService.instance.stopVoice();
+    } catch (_) {/* nothing was playing — proceed with the delete */}
+
+    try {
+      await app.removeRecording(rec.recordingId);
+      messenger.showSnackBar(SnackBar(content: Text('${rec.title} deleted.')));
+    } catch (_) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Could not delete — storage is unavailable.')));
+    }
+    if (mounted) setState(() {});
   }
 
   // In-flight guard: Save/Skip completes onboarding and then replaces the whole
@@ -825,22 +1131,51 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     final app = context.watch<AppViewModel>();
     final em = context.watch<EmergencyViewModel>();
     return Scaffold(
+      // Figure 28 titles this screen "All Recordings" when it is reached from
+      // Settings; during onboarding it is still the Fake Call Setup step
+      // (Figure 18) and draws its own in-body heading instead.
       appBar: widget.inOnboarding
           ? null
-          : AppBar(title: const Text('Fake Call Setup')),
+          : AppBar(
+              title: const Text('All Recordings'),
+              actions: [
+                // Figure 28 ⊕ — the same capture the "Record New" button below
+                // drives, promoted to the header where the mockup puts it. It
+                // mirrors the recording state so the header is never a second,
+                // contradictory control: while capture is running it shows the
+                // stop glyph and ends the take.
+                IconButton(
+                  icon: Icon(
+                      em.recording
+                          ? Icons.stop_circle_outlined
+                          : Icons.add_circle_outline,
+                      color: em.recording
+                          ? NavAlertColors.danger
+                          : NavAlertColors.accent),
+                  tooltip:
+                      em.recording ? 'Stop recording' : 'Record a new clip',
+                  onPressed: _recordNew,
+                ),
+              ],
+            ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              const SizedBox(height: 24),
-              const Icon(Icons.phone_in_talk,
-                  size: 56, color: NavAlertColors.accent),
-              const SizedBox(height: 12),
-              const Text('Fake Call Setup',
-                  style:
-                      TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
+              // The big icon + title only belong to the onboarding step; from
+              // Settings the AppBar already names the screen, and repeating it
+              // pushed the recordings list below the fold.
+              if (widget.inOnboarding) ...[
+                const SizedBox(height: 24),
+                const Icon(Icons.phone_in_talk,
+                    size: 56, color: NavAlertColors.accent),
+                const SizedBox(height: 12),
+                const Text('Fake Call Setup',
+                    style:
+                        TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+              ],
               const Text(
                 'Choose or record the audio that plays during a fake call so '
                 'you can believably exit unsafe situations.',
@@ -850,31 +1185,52 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
               const SizedBox(height: 12),
               const _StorageErrorBanner(),
               const SizedBox(height: 12),
-              Card(
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      isExpanded: true,
-                      value: app.selectedRecording?.recordingId,
-                      hint: const Text('Select Recording'),
-                      // Shown only if the recordings list is somehow empty, so
-                      // the control never looks like a silently-dead button.
-                      disabledHint: const Text('No recordings available'),
-                      dropdownColor: NavAlertColors.card,
-                      items: app.recordings
-                          .map((r) => DropdownMenuItem(
-                              value: r.recordingId, child: Text(r.title)))
-                          .toList(),
-                      onChanged: (v) {
-                        app.fakeCallConfig.recordingId = v;
-                        app.saveFakeCallConfig();
-                      },
+              // Onboarding keeps the compact "Select Recording" dropdown of
+              // Figure 18; the Settings route shows the full Figure 28 list,
+              // where every clip has its own play and delete controls.
+              if (widget.inOnboarding) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 4),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: app.selectedRecording?.recordingId,
+                        hint: const Text('Select Recording'),
+                        // Shown only if the recordings list is somehow empty,
+                        // so the control never looks like a dead button.
+                        disabledHint: const Text('No recordings available'),
+                        dropdownColor: NavAlertColors.card,
+                        items: app.recordings
+                            .map((r) => DropdownMenuItem(
+                                value: r.recordingId, child: Text(r.title)))
+                            .toList(),
+                        onChanged: (v) {
+                          app.fakeCallConfig.recordingId = v;
+                          app.saveFakeCallConfig();
+                        },
+                      ),
                     ),
                   ),
                 ),
-              ),
+                // Delete the selected CUSTOM recording. The row does not render
+                // at all for built-in presets — they are bundled assets and
+                // deleting one would leave the fake call with no fallback clip.
+                if (app.selectedRecording != null &&
+                    !app.selectedRecording!.isPreset)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: _deleteSelectedRecording,
+                      icon: const Icon(Icons.delete_outline,
+                          size: 18, color: NavAlertColors.danger),
+                      label: const Text('Delete this recording',
+                          style: TextStyle(color: NavAlertColors.danger)),
+                    ),
+                  ),
+              ] else
+                _recordingsList(app),
               const SizedBox(height: 12),
               TextField(
                 decoration: const InputDecoration(

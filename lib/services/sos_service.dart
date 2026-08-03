@@ -26,7 +26,7 @@ class SosService {
   static const _uuid = Uuid();
 
   Timer? _retryTimer;
-  int _retriesLeft = 0;
+  int _attemptsMade = 0;
   List<EmergencyContact> _queuedContacts = [];
   String _queuedMessage = '';
   String? _queuedSosId;
@@ -142,32 +142,68 @@ class SosService {
     return address == null ? coords : 'Location: $address\n$coords';
   }
 
+  /// Fast attempts made before backing off, INCLUDING the initial send in
+  /// [triggerSos]. So: send, then two 30-second retries.
+  static const int fastAttempts = 3;
+  static const Duration fastRetryGap = Duration(seconds: 30);
+
+  /// Back-off gap once the fast attempts are exhausted. Retrying continues at
+  /// this interval until the SMS is delivered.
+  static const Duration slowRetryGap = Duration(minutes: 15);
+
+  /// Fired once when the fast attempts fail and the SOS drops into slow retry.
+  ///
+  /// DO NOT MODIFY LOGIC: because slow retry never gives up, the "SOS could NOT
+  /// be sent" message can no longer fire — so without this the rider would sit
+  /// in silence believing help is on the way. They must be told delivery is
+  /// still pending so they can Call 911 instead of waiting.
+  void Function(int attemptsMade)? onSosRetryBackoff;
+
+  /// UC-7 Exception 1 — queue and retry when no SMS could be dispatched.
+  ///
+  /// DO NOT MODIFY LOGIC: [fastAttempts] quick tries, then a [slowRetryGap]
+  /// retry that continues UNTIL DELIVERED. There is deliberately no give-up
+  /// path: a queued SOS that quietly expires is the worst outcome for this
+  /// feature. The timer is cancelled by [dispose] and by a successful send.
   void _queueRetry(
       String sosId, List<EmergencyContact> contacts, String message) {
     _queuedSosId = sosId;
     _queuedContacts = contacts;
     _queuedMessage = message;
-    _retriesLeft = 5;
+    // The initial send in triggerSos already counted as attempt 1.
+    _attemptsMade = 1;
     _retryTimer?.cancel();
-    _retryTimer = Timer.periodic(const Duration(seconds: 30), (t) async {
-      if (_retriesLeft-- <= 0) {
-        t.cancel();
-        // Out of attempts: record the failure and tell the rider, so they can
-        // fall back to Call 911 instead of waiting on help that never left.
-        await _markQueuedSos('failed', 0);
-        onQueuedSosResolved?.call(false, 0);
-        return;
-      }
-      var sent = 0;
-      for (final c in _queuedContacts) {
-        if (await _sendNativeSms(c.phoneNumber, _queuedMessage)) sent++;
-      }
-      if (sent > 0) {
-        t.cancel();
-        await _markQueuedSos('active', sent);
-        onQueuedSosResolved?.call(true, sent);
-      }
-    });
+    _scheduleRetry(fastRetryGap);
+  }
+
+  void _scheduleRetry(Duration gap) {
+    _retryTimer?.cancel();
+    // One-shot rather than periodic: the gap CHANGES once the fast attempts run
+    // out, and a periodic timer cannot switch its own interval.
+    _retryTimer = Timer(gap, _attemptRetry);
+  }
+
+  Future<void> _attemptRetry() async {
+    var sent = 0;
+    for (final c in _queuedContacts) {
+      if (await _sendNativeSms(c.phoneNumber, _queuedMessage)) sent++;
+    }
+    _attemptsMade++;
+
+    if (sent > 0) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+      await _markQueuedSos('active', sent);
+      onQueuedSosResolved?.call(true, sent);
+      return;
+    }
+
+    if (_attemptsMade == fastAttempts) {
+      // Fast attempts exhausted — tell the rider once, then back off.
+      onSosRetryBackoff?.call(_attemptsMade);
+    }
+    _scheduleRetry(
+        _attemptsMade < fastAttempts ? fastRetryGap : slowRetryGap);
   }
 
   /// DO NOT MODIFY LOGIC: stops the queued-SOS retry. The timer fires every
@@ -178,6 +214,10 @@ class SosService {
     _retryTimer?.cancel();
     _retryTimer = null;
     onQueuedSosResolved = null;
+    // The slow retry runs every 15 minutes indefinitely, so this callback would
+    // outlive the ViewModel by far longer than the old 30-second one. Clear it
+    // with the others or it notifies a disposed listener.
+    onSosRetryBackoff = null;
   }
 
   /// Storage failures are swallowed: losing the audit row must never stop the

@@ -63,29 +63,11 @@ class EmergencyView extends StatelessWidget {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Column(children: [
-            // Insufficient Load Warning (Activity Diagram / app_state):
-            // SOS uses Native Android SMS and needs prepaid load.
-            if (app.showSosLowLoadWarning)
-              Card(
-                color: NavAlertColors.surface,
-                child: ListTile(
-                  leading: const Icon(Icons.sim_card_alert,
-                      color: NavAlertColors.warning),
-                  title: const Text('Insufficient load warning',
-                      style: TextStyle(fontSize: 13)),
-                  subtitle: const Text(
-                      'SOS sends a native SMS — keep sufficient prepaid load '
-                      'so alerts can be delivered without internet.',
-                      style: TextStyle(
-                          fontSize: 11, color: NavAlertColors.textSecondary)),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => context
-                        .read<AppViewModel>()
-                        .dismissSosLowLoadWarning(),
-                  ),
-                ),
-              ),
+            // The insufficient-load warning used to render here. It now lives
+            // on the Home screen, where the Activity Diagram (p.92) and the
+            // "SOS Warning" mockup both put it: this screen is opened when the
+            // rider already needs SOS, which is too late to act on the news
+            // that their prepaid load may be short. See home_view.dart.
             const SizedBox(height: 16),
             // SOS press & hold (UC-7). TODO (UI Team): the button's size,
             // glow, ring, and typography are all restyleable — this is a
@@ -175,8 +157,19 @@ class EmergencyView extends StatelessWidget {
                     style: const TextStyle(
                         color: NavAlertColors.warning, fontSize: 12)),
               ),
+            // ╔════════════════════════════════════════════════════════════╗
+            // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
+            // ║ CALL 911 IS A SEPARATE, CONFIRMED TRIGGER.                 ║
+            // ║                                                            ║
+            // ║ UI TEAM: restyle the button, keep the confirm dialog. This ║
+            // ║ used to dial 911 on a SINGLE TAP with no confirmation, on  ║
+            // ║ a screen used by people in a panic, directly beneath a     ║
+            // ║ 190 px SOS target — a mis-tap placed a real emergency call.║
+            // ║ SOS SMS, the fake call, and 911 must each need their own   ║
+            // ║ deliberate action; never collapse them into one gesture.   ║
+            // ╚════════════════════════════════════════════════════════════╝
             TextButton.icon(
-              onPressed: () => context.read<EmergencyViewModel>().call911(),
+              onPressed: () => _confirmCall911(context),
               icon: const Icon(Icons.call, color: NavAlertColors.danger),
               label: const Text('Call 911',
                   style: TextStyle(color: NavAlertColors.danger)),
@@ -244,6 +237,40 @@ class EmergencyView extends StatelessWidget {
       ),
       ),
     );
+  }
+
+  /// Confirm before placing a REAL emergency call.
+  ///
+  /// DO NOT MODIFY LOGIC: 911 is a live emergency service. The dialog is the
+  /// separation between "I touched the screen" and "I called the police", and
+  /// it is what keeps this trigger distinct from the SOS hold beside it.
+  Future<void> _confirmCall911(BuildContext context) async {
+    final vm = context.read<EmergencyViewModel>();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Call 911?'),
+        content: const Text(
+          'This places a real call to emergency services.\n\n'
+          'To text your location to your saved contacts instead, press and '
+          'hold the SOS button for 3 seconds.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Call 911',
+                style: TextStyle(
+                    color: NavAlertColors.danger,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await vm.call911();
   }
 
   void _showResult(BuildContext context) {

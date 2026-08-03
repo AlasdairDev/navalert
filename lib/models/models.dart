@@ -241,6 +241,23 @@ class Trip {
   double distanceKm;
   String alarmSound;
   bool vibrationOnlyMode;
+
+  /// Whether the escalating destination alarm is armed for this trip.
+  ///
+  /// DO NOT MODIFY LOGIC: this defaults to TRUE and is deliberately NOT
+  /// persisted — it appears in neither [toMap] nor [Trip.fromMap], so no
+  /// database column exists for it and the 13-table schema is unchanged.
+  ///
+  /// The default is true so a Trip constructed anywhere (including the alarm
+  /// test-suite, which asserts stages fire) behaves exactly as before. The Trip
+  /// Settings sheet sets it to FALSE explicitly, which is what makes the alarm
+  /// opt-in for real riders. Do not flip this default to false to "simplify" —
+  /// that silently disarms the alarm for every caller that does not set it.
+  ///
+  /// In-memory only: a trip resumed after an app restart re-arms the alarm,
+  /// which is the safe direction to fail.
+  bool alarmEnabled;
+
   String status; // configured | active | arrived | overshot | cancelled
   double? etaMinutes;
   int? highestAlarmStage;
@@ -261,6 +278,7 @@ class Trip {
     this.distanceKm = 0,
     this.alarmSound = 'Digital Clock',
     this.vibrationOnlyMode = false,
+    this.alarmEnabled = true,
     this.status = 'configured',
     this.etaMinutes,
     this.highestAlarmStage,
