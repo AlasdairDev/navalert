@@ -112,6 +112,24 @@ class TripNotificationService {
           'Trip Monitoring',
           channelDescription:
               'Active trip status shown on the lock screen (Figure 25).',
+          // DO NOT set a custom `icon:` here without re-testing on a RELEASE
+          // build. The small icon falls back to the launcher icon, which is
+          // opaque, so Android's alpha-mask rendering shows it as a filled
+          // blob in the status bar — cosmetically wrong but harmless.
+          //
+          // A dedicated monochrome drawable was tried and REVERTED. The plugin
+          // resolves `icon:` by NAME at runtime (getIdentifier), which R8
+          // defeats in a minified release build: the id came back 0 and
+          // Android then dropped the notification silently — no Dart exception
+          // (showTrip returned normally and the trip started fine), just no
+          // lock-screen widget at all. Verified by isolating this single line:
+          // with it, notification 1001 was absent from `dumpsys notification`;
+          // without it, the notification posts correctly. Losing Figure 25
+          // outright is far worse than a blob, so the fallback stays.
+          //
+          // If you do want the monochrome icon: add the drawable, keep it from
+          // being shrunk/renamed (res/raw/keep.xml with tools:keep), and prove
+          // it on a `flutter build apk --release`, not a debug build.
           importance: Importance.low,
           priority: Priority.low,
           ongoing: true,

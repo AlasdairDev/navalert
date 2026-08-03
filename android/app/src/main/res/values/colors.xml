@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors NavAlertColors.background in lib/core/theme.dart. The native
+         launch window is drawn by Android BEFORE Flutter has rendered a single
+         frame, so it cannot read the Dart theme — this value has to be repeated
+         here. Keep the two in sync: any mismatch shows up as a colour flash at
+         the moment the Flutter UI takes over. -->
+    <color name="navalert_background">#FF241539</color>
+    <!-- Adaptive launcher icon background (Android 8+). -->
+    <color name="ic_launcher_background">#FF241539</color>
+</resources>

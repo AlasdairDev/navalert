@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- v21+ launch window. Was ?android:colorBackground, which resolves from the
+     SYSTEM theme — light on a device in light mode — so the splash flashed
+     white regardless of NavAlert's own dark theme. Pinned to the app colour so
+     the launch window matches the UI in either system mode. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="?android:colorBackground" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item android:drawable="@color/navalert_background" />
 </layer-list>
