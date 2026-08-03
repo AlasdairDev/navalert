@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cache/flutter_map_cache.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../services/route_engine.dart';
+import '../services/tile_cache_store.dart';
 
 /// Shared map configuration so Home, Pin-on-map and Route screens agree on
 /// region, tile quality and buffering.
@@ -42,24 +44,45 @@ class NavAlertMap {
   // pre-fetches or bulk-downloads; only tiles the rider actually looked at are
   // stored.
 
-  // Memory, not disk, and that is an upstream limit rather than a preference:
-  // dio_cache_interceptor_file_store is still pinned to
-  // dio_cache_interceptor ^3.x while flutter_map_cache 2.x requires ^4.0.0, so
-  // the two cannot resolve together. The alternative was hand-writing a
-  // CacheStore (8 methods, full CacheResponse serialisation, eviction and
-  // partial-write handling), which is real infrastructure and not worth
-  // inventing here. Tiles therefore survive for the life of the process but
-  // not across a restart.
+  // Backed by [TileCacheStore], which writes tiles to DISK so they outlive the
+  // process — the paper's offline requirement. A memory cache cannot satisfy
+  // it: a commuter who force-closes the app in a dead zone would lose every
+  // tile they had already loaded.
   //
-  // 32 MB holds a few hundred OSM tiles — a whole session of panning around
-  // Metro Manila — against the 7 MB default that would evict them almost as
-  // fast as they arrive. maxEntrySize stays well above the ~50 KB a tile
-  // actually weighs, and respects the store's `maxEntrySize * 5 <= maxSize`
-  // rule.
-  static final CacheStore _store = MemCacheStore(
-    maxSize: 32 * 1024 * 1024,
-    maxEntrySize: 1024 * 1024,
-  );
+  // No packaged store could do this here (see TileCacheStore's own notes on
+  // the dio_cache_interceptor 3.x/4.x split), so it is implemented in-repo.
+
+  static CacheStore? _resolvedStore;
+
+  /// Used only if the disk path cannot be resolved. The map must still render
+  /// when storage is unavailable — degraded to session-only, never broken.
+  static final CacheStore _memoryFallback =
+      MemCacheStore(maxSize: 32 * 1024 * 1024, maxEntrySize: 1024 * 1024);
+
+  static CacheStore get _store => _resolvedStore ?? _memoryFallback;
+
+  /// Resolves the on-disk tile cache. Called from `main()` BEFORE the first
+  /// frame, because [tiles] is synchronous and the provider it builds is
+  /// created once — if a map were built first it would be stuck with the
+  /// memory fallback for the rest of the session.
+  ///
+  /// The application-support directory, not the cache directory: Android
+  /// reclaims cache dirs under storage pressure, which would silently empty
+  /// the offline map exactly when a rider is relying on it. The size ceiling
+  /// is enforced by [TileCacheStore] instead, so this stays bounded.
+  static Future<void> initTileCache() async {
+    if (_resolvedStore != null) return;
+    try {
+      // Timeout for the same reason main() does not await the notification
+      // channel: a hung platform channel must not hold the first frame.
+      final dir = await getApplicationSupportDirectory()
+          .timeout(const Duration(seconds: 3));
+      _resolvedStore = TileCacheStore('${dir.path}/tile_cache');
+    } catch (e) {
+      debugPrint('NavAlert: tile disk cache unavailable, '
+          'falling back to memory — $e');
+    }
+  }
 
   /// Built once and reused. [tiles] is called from build methods, so creating
   /// a provider per call would spin up a fresh Dio and interceptor chain on
