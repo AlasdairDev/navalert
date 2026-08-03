@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/map_support.dart';
 import 'core/theme.dart';
 import 'services/trip_notification_service.dart';
 import 'viewmodels/app_viewmodel.dart';
@@ -15,7 +16,7 @@ import 'views/launch_view.dart';
 /// Metro Manila PUV Commuters.
 ///
 /// Capstone project — BSIT, Polytechnic University of the Philippines.
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   // Lock Screen Widget channel (Figure 25). Initialized in the background —
   // the first frame must never block on a plugin handshake (a hung
@@ -23,6 +24,13 @@ void main() {
   // TripNotificationService.init() is idempotent and is awaited again
   // inside showTrip() before any notification is posted.
   TripNotificationService.instance.init();
+  // AWAITED, unlike the notification channel above: NavAlertMap.tiles() is
+  // synchronous and builds its cached tile provider exactly once, so if a map
+  // screen were built before the disk path resolved, the whole session would
+  // silently fall back to a memory-only cache and the offline map would be
+  // empty after a restart. initTileCache has its own timeout so a hung
+  // platform channel still cannot hold the first frame.
+  await NavAlertMap.initTileCache();
   runApp(const NavAlertApp());
 }
 
