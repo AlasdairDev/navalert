@@ -170,20 +170,23 @@ class _HistoryViewState extends State<HistoryView> {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
+          // Figure 30 sets the place name in bold and drops the bracketed time
+          // to a smaller muted line under it. Both used to be one 12 px block
+          // split by a newline, so "PUP, Sta. Mesa" and "(Departure: 12:00 PM)"
+          // carried identical weight and the card had no entry point for the
+          // eye — the place is what a rider scans the list for.
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Icon(Icons.home, size: 18, color: NavAlertColors.accent),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(
-                    '${_shortPlace(t.originLabel)}\n(Departure: ${time(t.startedAt)})',
-                    style: const TextStyle(fontSize: 12))),
+                child: _endpoint(_shortPlace(t.originLabel),
+                    'Departure: ${time(t.startedAt)}')),
             const Icon(Icons.location_on,
                 size: 18, color: NavAlertColors.warning),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(
-                    '${_shortPlace(t.destinationLabel)}\n(Arrival: ${time(t.endedAt)})',
-                    style: const TextStyle(fontSize: 12))),
+                child: _endpoint(_shortPlace(t.destinationLabel),
+                    'Arrival: ${time(t.endedAt)}')),
           ]),
           const SizedBox(height: 8),
           Wrap(spacing: 6, children: [
@@ -264,6 +267,21 @@ class _HistoryViewState extends State<HistoryView> {
           content: Text('Could not delete — storage is unavailable.')));
     }
   }
+
+  /// One end of a trip: the place in bold over its bracketed time, muted.
+  static Widget _endpoint(String place, String time) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(place,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w700, height: 1.2)),
+          Text('($time)',
+              style: const TextStyle(
+                  fontSize: 11, color: NavAlertColors.textSecondary)),
+        ],
+      );
 
   Widget _chip(String text, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
