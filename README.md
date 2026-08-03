@@ -568,8 +568,9 @@ The adaptive alarm needs movement:
 
 1. **Extended controls (⋯) → Location → Routes**, pick two points in Metro
    Manila and *Play route* — or `adb emu geo fix <lng> <lat>` to jump the GPS.
-2. In NavAlert: search a destination → *Show Commute Guide* → *Enable Alarm*
-   → *Start Trip*.
+2. In NavAlert: search a destination → *Show Commute Guide* → *Start Trip* →
+   switch **Destination alarm** ON (it is optional and off by default, because
+   the commute guide — not the alarm — is what the trip starts) → *Start Trip*.
 3. Watch Stage 1 (vibration) → Stage 2 (sound) → Stage 3 (full-screen WAKE UP)
    fire as the position approaches; drive past to trigger the overshoot prompt.
 

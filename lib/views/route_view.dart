@@ -396,9 +396,17 @@ class _RouteViewState extends State<RouteView> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: [
+                  // Figures 21/22 draw the two endpoints as ONE connected stop
+                  // rail — a filled origin dot joined by a short vertical line
+                  // down to the destination dot — not two unrelated rows split
+                  // by a divider. The two glyphs are different sizes, so each
+                  // sits centred in a shared 16 dp gutter; without that they
+                  // did not even line up with each other. The divider moves
+                  // BELOW the destination, where the mockup rules off the whole
+                  // from→to block before the Mode chip.
                   Row(children: [
-                    const Icon(Icons.circle,
-                        size: 10, color: NavAlertColors.accent),
+                    _railGutter(const Icon(Icons.circle,
+                        size: 10, color: NavAlertColors.accent)),
                     const SizedBox(width: 10),
                     Expanded(
                       // Google-Maps style: primary name only, one line.
@@ -413,11 +421,16 @@ class _RouteViewState extends State<RouteView> {
                           style: const TextStyle(fontSize: 13)),
                     ),
                   ]),
-                  const Divider(height: 16),
+                  // Wrapped in a Row so the connector hugs the left gutter —
+                  // the enclosing Column centres its children by default.
                   Row(children: [
-                    const Icon(Icons.location_on,
-                        size: 14, color: NavAlertColors.warning),
-                    const SizedBox(width: 8),
+                    _railGutter(Container(
+                        width: 2, height: 16, color: NavAlertColors.surface)),
+                  ]),
+                  Row(children: [
+                    _railGutter(const Icon(Icons.location_on,
+                        size: 14, color: NavAlertColors.warning)),
+                    const SizedBox(width: 10),
                     Expanded(
                         child: Text(dest.name,
                             maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -427,6 +440,7 @@ class _RouteViewState extends State<RouteView> {
                       onPressed: _toggleFavorite,
                     ),
                   ]),
+                  const Divider(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: ActionChip(
@@ -744,64 +758,94 @@ class _RouteViewState extends State<RouteView> {
             final isRide = step.transportMode != 'walk' &&
                 step.fromStop != null &&
                 step.fromStop!.isNotEmpty;
+            // Figures 22 / Pages 15-16 lay every step out the same way: a
+            // round mode badge on the left, the instruction block in the
+            // middle, and the fare + travel time stacked at the TOP RIGHT —
+            // fare as a pill, time behind a small clock glyph. Both used to be
+            // one grey run-on line at the bottom of the subtitle, so the two
+            // figures a rider actually compares routes on were the least
+            // legible thing on the card. A ride leg then rules off its title
+            // block and lists the boarding/alighting stops beneath it.
             return Card(
-              child: ListTile(
-                dense: true,
-                leading: Icon(_modeIcon(step.transportMode),
-                    color: NavAlertColors.accent),
-                title: isRide
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Prominent boarding terminal.
-                          Row(children: [
-                            const Icon(Icons.directions_bus_filled,
-                                size: 14, color: NavAlertColors.accent),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text('Board at ${step.fromStop}',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                          ]),
-                          const SizedBox(height: 2),
-                          Text(step.instruction,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: NavAlertColors.textSecondary)),
-                        ],
-                      )
-                    : Text(step.instruction,
-                        style: const TextStyle(fontSize: 13)),
-                subtitle: Column(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var j = 0; j < stops.length; j++)
-                      Row(children: [
-                        Icon(j == 0 ? Icons.circle : Icons.location_on,
-                            size: 9,
-                            color: j == 0
-                                ? NavAlertColors.accent
-                                : NavAlertColors.warning),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(stops[j],
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  color: NavAlertColors.textSecondary)),
-                        ),
-                      ]),
-                    Text(
-                        '${step.durationMinutes.toStringAsFixed(0)} min'
-                        '${step.farePhp > 0 ? '  ·  ₱${step.farePhp.toStringAsFixed(2)}' : ''}',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: NavAlertColors.textSecondary)),
+                    _modeBadge(step.transportMode),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: isRide
+                                    ? Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Prominent boarding terminal.
+                                          Text('Board at ${step.fromStop}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight:
+                                                      FontWeight.w700)),
+                                          const SizedBox(height: 2),
+                                          Text(step.instruction,
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: NavAlertColors
+                                                      .textSecondary)),
+                                        ],
+                                      )
+                                    // A walk leg has no fare, so the mockup
+                                    // gives it no right-hand pill at all —
+                                    // just the instruction with its minutes
+                                    // tucked underneath.
+                                    : Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(step.instruction,
+                                              style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight:
+                                                      FontWeight.w600)),
+                                          if (step.durationMinutes > 0)
+                                            Text(
+                                                '${step.durationMinutes.toStringAsFixed(0)} min',
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: NavAlertColors
+                                                        .textSecondary)),
+                                        ],
+                                      ),
+                              ),
+                              // A ride leg always keeps its right-hand cluster,
+                              // even in the defensive case of a zero fare —
+                              // otherwise the leg would lose its travel time
+                              // too, since the walk branch above is what
+                              // normally carries it.
+                              if (step.farePhp > 0 ||
+                                  (isRide && step.durationMinutes > 0)) ...[
+                                const SizedBox(width: 8),
+                                _fareAndTime(
+                                    step.farePhp, step.durationMinutes),
+                              ],
+                            ],
+                          ),
+                          if (stops.isNotEmpty) ...[
+                            const Divider(height: 14),
+                            _stopRail(stops),
+                          ],
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -848,12 +892,102 @@ class _RouteViewState extends State<RouteView> {
     ]);
   }
 
-  IconData _modeIcon(String mode) => switch (mode) {
+  /// Centres a rail glyph in a fixed 16 dp gutter so the origin dot, the
+  /// connector line and the destination pin all share one vertical axis
+  /// despite being different sizes.
+  static Widget _railGutter(Widget child) =>
+      SizedBox(width: 16, child: Center(child: child));
+
+  /// The round mode badge every step in Pages 15/16 leads with. The mockup
+  /// draws a full vehicle illustration for ride legs; the app has no such
+  /// artwork, so the existing Material mode glyph is used inside the same
+  /// circular plate — layout from the mockup, iconography already in the app.
+  static Widget _modeBadge(String mode) => Container(
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: NavAlertColors.surface,
+        ),
+        child: Icon(_modeIconFor(mode), size: 18, color: NavAlertColors.accent),
+      );
+
+  static IconData _modeIconFor(String mode) => switch (mode) {
         'walk' => Icons.directions_walk,
         'bus' => Icons.directions_bus,
         'uv_express' => Icons.airport_shuttle,
         _ => Icons.directions_transit,
       };
+
+  /// Fare pill over a clock-glyph travel time — the top-right cluster on every
+  /// ride card in Pages 15/16. These are the two numbers a rider compares
+  /// routes on, so they are the only thing on the card set apart from the copy.
+  static Widget _fareAndTime(double farePhp, double minutes) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (farePhp > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                // Existing brand purple at low alpha — the same tint the live
+                // guide sheet already uses to mark its current leg.
+                color: NavAlertColors.primary.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('₱${farePhp.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+          if (minutes > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.schedule,
+                    size: 11, color: NavAlertColors.textSecondary),
+                const SizedBox(width: 3),
+                Text('${minutes.toStringAsFixed(0)} min',
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+              ]),
+            ),
+        ],
+      );
+
+  /// Board → alight rail: a filled dot for the boarding terminal, a hollow
+  /// ring for the drop-off, joined by the same connector line as the from→to
+  /// header above. The alight stop used to reuse the header's map pin, which
+  /// read as a second destination rather than the end of this one leg.
+  static Widget _stopRail(List<String> stops) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var j = 0; j < stops.length; j++) ...[
+            Row(children: [
+              _railGutter(Icon(
+                  j == 0 ? Icons.circle : Icons.radio_button_unchecked,
+                  size: 8,
+                  color: j == 0
+                      ? NavAlertColors.accent
+                      : NavAlertColors.warning)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(stops[j],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+              ),
+            ]),
+            if (j < stops.length - 1)
+              Row(children: [
+                _railGutter(Container(
+                    width: 1.5,
+                    height: 10,
+                    color: NavAlertColors.textSecondary
+                        .withValues(alpha: 0.55))),
+              ]),
+          ],
+        ],
+      );
 
   String _fmtDuration(double minutes) {
     final m = minutes.round();

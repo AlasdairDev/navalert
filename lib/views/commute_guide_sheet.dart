@@ -125,11 +125,22 @@ class CommuteGuideSheet extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Icon(_iconFor(step.transportMode),
-                size: 20,
-                color: isDone
-                    ? NavAlertColors.textSecondary
-                    : NavAlertColors.primary),
+            // Same round mode badge the planning guide on RouteView uses, so
+            // the live sheet and the sheet the rider chose the route on read
+            // as one component rather than two different lists.
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: NavAlertColors.surface,
+              ),
+              child: Icon(_iconFor(step.transportMode),
+                  size: 17,
+                  color: isDone
+                      ? NavAlertColors.textSecondary
+                      : NavAlertColors.primary),
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -154,20 +165,41 @@ class CommuteGuideSheet extends StatelessWidget {
                               : null,
                           decoration:
                               isDone ? TextDecoration.lineThrough : null)),
+                  // Clock glyph + fare pill, matching the planning guide on
+                  // RouteView. The pill sits on the `background` token rather
+                  // than the lighter tint used there, because the CURRENT leg's
+                  // card is itself tinted with primary — a pill of that same
+                  // colour would vanish on exactly the one row that matters.
                   if (step.farePhp > 0 || step.durationMinutes > 0)
                     Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        [
-                          if (step.durationMinutes > 0)
-                            '${step.durationMinutes.round()} min',
-                          if (step.farePhp > 0)
-                            '₱${step.farePhp.toStringAsFixed(2)}',
-                        ].join('  ·  '),
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: NavAlertColors.textSecondary),
-                      ),
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Row(children: [
+                        if (step.durationMinutes > 0) ...[
+                          const Icon(Icons.schedule,
+                              size: 11, color: NavAlertColors.textSecondary),
+                          const SizedBox(width: 3),
+                          Text('${step.durationMinutes.round()} min',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  color: NavAlertColors.textSecondary)),
+                        ],
+                        if (step.farePhp > 0) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: NavAlertColors.background,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                                '₱${step.farePhp.toStringAsFixed(2)}',
+                                style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ]),
                     ),
                   if (isCurrent)
                     Align(
