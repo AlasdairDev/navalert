@@ -35,6 +35,65 @@ class HomeView extends StatefulWidget {
   State<HomeView> createState() => _HomeViewState();
 }
 
+/// Vertical placement of the locate FAB, and the pill geometry it has to
+/// avoid. All values are dp measured UP from the top of the bottom navigation
+/// bar, matching the `bottom:` of the Positioned widgets they describe.
+///
+/// Pulled out of the State purely so the no-overlap rule can be asserted in a
+/// test — driving all four pill combinations through the real screen would
+/// need a live trip and a connected headset.
+class HomeFabLayout {
+  const HomeFabLayout._();
+
+  /// Both pills sit this far above the nav bar.
+  static const double pillBottom = 14;
+
+  /// ShellView's "View Active Trip" pill.
+  static const double tripPillHeight = 38;
+
+  /// The earphones pill: 11+11 padding around ~20 dp of content.
+  static const double earphonePillHeight = 42;
+
+  /// Where the earphones pill moves when the trip pill already owns the
+  /// bottom slot (see home_view's Positioned and shell.dart).
+  static const double earphonePillRaised = 60;
+
+  /// Breathing room between the FAB and whatever is under it.
+  static const double fabPillGap = 12;
+
+  /// Standard margin when nothing is beneath the FAB.
+  static const double restingBottom = 20;
+
+  /// Material FloatingActionButton diameter.
+  static const double fabSize = 56;
+
+  /// Top edge of the tallest pill currently on screen, or 0 when none is.
+  static double pillTopEdge({required bool tripActive, required bool earphones}) {
+    var top = 0.0;
+    if (tripActive) top = pillBottom + tripPillHeight;
+    if (earphones) {
+      final earphoneTop =
+          (tripActive ? earphonePillRaised : pillBottom) + earphonePillHeight;
+      if (earphoneTop > top) top = earphoneTop;
+    }
+    return top;
+  }
+
+  /// The FAB used to sit at a flat 73 dp — the mockup's measurement, chosen so
+  /// it never had to move when a pill appeared. On a real device that left it
+  /// stranded in mid-air, so it now rests at a normal margin and steps up only
+  /// when something is genuinely beneath it.
+  ///
+  /// The step-up is not cosmetic. Both pills are drawn AFTER this button — the
+  /// earphones pill later in HomeView's Stack, the trip pill in ShellView's
+  /// Stack above the whole IndexedStack — so anything they overlap is not
+  /// merely crowded, it is covered and untappable.
+  static double bottomFor({required bool tripActive, required bool earphones}) {
+    final top = pillTopEdge(tripActive: tripActive, earphones: earphones);
+    return top == 0 ? restingBottom : top + fabPillGap;
+  }
+}
+
 class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   final _mapController = MapController();
 
@@ -125,6 +184,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return 'Good Evening,';
   }
 
+  double _locateFabBottom(bool tripActive) =>
+      HomeFabLayout.bottomFor(tripActive: tripActive, earphones: _earphones);
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
@@ -133,6 +195,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     // trip, and watching it here would rebuild this screen — map included —
     // several times a second. Only the on/off transition matters.
     final tripActive = context.select<TripViewModel, bool>((t) => t.isActive);
+    final locateBottom = _locateFabBottom(tripActive);
 
     return Scaffold(
       body: Stack(
@@ -347,11 +410,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           Positioned(
             // Mockup: FAB spans x=265-317 of 360 dp, so 43 dp from the right.
             right: 43,
-            // Mockup: FAB occupies y=605-657 with the bottom nav starting at
-            // y=730 — a constant 73 dp above the nav, whether or not a pill is
-            // on screen. The pills live at 14-52, so they never collide and the
-            // button no longer needs to hop when one appears.
-            bottom: 73,
+            // Deliberately NOT the mockup's 73 dp. See _locateFabBottom: that
+            // measurement left the button stranded in mid-air on a real device,
+            // so it now sits at a normal 20 dp margin and rises only when a
+            // pill is genuinely underneath it.
+            bottom: locateBottom,
             child: FloatingActionButton(
               backgroundColor: Colors.white,
               // DO NOT MODIFY LOGIC: re-fetches GPS and re-centres the map
