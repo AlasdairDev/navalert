@@ -467,8 +467,15 @@ void main() {
       expectNoRenderErrors(t, 'Active Trip (monitoring)');
 
       // ── Drag the slider ──────────────────────────────────────────────
-      // This is the ONLY way off this screen (PopScope blocks Back), so a
-      // failure here strands the rider mid-trip.
+      // The trip is started with the destination alarm OFF (it is opt-in), so
+      // this lands on the GUIDE-FIRST monitoring layout: the commute guide
+      // fills the body, with "En Route", the readouts strip and Slide-to-Stop
+      // around it. Both layouts carry the same two anchors asserted above.
+      //
+      // Sliding is still the only way to END the trip. The back arrow added to
+      // this screen leaves the trip RUNNING (it just pops the route), and the
+      // system Back gesture is still blocked by the PopScope — so a failure
+      // here means the trip cannot be stopped at all.
       //
       // The control tracks the finger's ABSOLUTE localPosition inside the pill
       // and completes at 60% of travel, so the drag must start near the pill's
@@ -497,8 +504,9 @@ void main() {
       final stopped = await waitForAbsent(t, find.text('Slide to Stop'),
           timeout: const Duration(seconds: 20));
       expect(stopped, isTrue,
-          reason: 'SLIDE-TO-STOP FROZE — the trip could not be stopped, and '
-              'Back is blocked on this screen, so the rider is trapped');
+          reason: 'SLIDE-TO-STOP FROZE — the trip could not be ended. The back '
+              'arrow only leaves the screen with the trip still running, so '
+              'this gesture is the rider\'s only way to actually stop it');
       expect(find.byType(BottomNavigationBar), findsOneWidget,
           reason: 'Did not return to the shell after stopping the trip');
       expectNoRenderErrors(t, 'Shell (after trip)');
