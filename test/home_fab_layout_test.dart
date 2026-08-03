@@ -31,6 +31,17 @@ void main() {
     });
   });
 
+  group('horizontal placement', () {
+    test('uses the screen\'s standard 20 dp margin, not the mockup\'s 43', () {
+      // The header pads by 20 and the earphones pill is inset left/right 20,
+      // so this is what makes the FAB's right edge line up with them rather
+      // than sitting inboard of both.
+      expect(HomeFabLayout.restingRight, 20);
+      expect(HomeFabLayout.restingRight, lessThan(43));
+      expect(HomeFabLayout.restingRight, inInclusiveRange(16, 24));
+    });
+  });
+
   group('never overlaps a pill', () {
     for (final trip in [false, true]) {
       for (final ear in [false, true]) {
