@@ -13,15 +13,24 @@ import 'fake_call_view.dart';
 /// Figures 24–29 — Active Trip (Monitoring Mode), the three alarm
 /// stages, and Overshoot Detected.
 ///
+/// Monitoring is CONTEXTUAL — see [_Monitoring]. With the destination alarm
+/// armed it is Figure 24 as the mockups draw it; with the alarm off the commute
+/// guide takes the screen and the monitoring readouts shrink to a strip, because
+/// a rider who declined the alarm is using NavAlert as a navigation guide and
+/// the moon badge would be advertising a service that is switched off.
+///
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] the phase switch (vm.phase → which sub-view shows) · _SlideToStop
 ///         onCompleted (stop/dismiss — the anti-oversleep gesture) · Snooze/
 ///         Dismiss onPressed · SOS & Fake Call onPressed · overshoot Yes/No
-///         + "Open in GMaps" (vm.openRerouteInGoogleMaps) · PopScope guard.
-///         Stage 3 MUST stay a hard-to-dismiss full-screen alarm (R1).
+///         + "Open in GMaps" (vm.openRerouteInGoogleMaps) · PopScope guard ·
+///         the alarm arm/disarm chip. Stage 3 MUST stay a hard-to-dismiss
+///         full-screen alarm (R1), and the back arrow must stay OFF every
+///         alarm/overshoot phase — monitoring only.
 ///  [EDIT] all copy ("En Route", "Get some rest…", "WAKE UP", "Approaching
 ///         Stop"), the Monitoring moon badge, colors per stage (Stage 1 calm →
-///         Stage 3 red), distance/speed/ETA text, checklist items, slider look.
+///         Stage 3 red), distance/speed/ETA text, checklist items, slider look,
+///         the guide-first header and readout strip.
 ///  [WANT] pulsing/animated Stage-3 background, progress ring to destination,
 ///         haptic-synced visuals, richer arrived celebration.
 class ActiveTripView extends StatelessWidget {
@@ -79,8 +88,15 @@ class ActiveTripView extends StatelessWidget {
       // alarm stage or the overshoot prompt the screen must be the alert and
       // nothing else — a draggable panel over a Stage 3 wake-up would be both
       // a distraction and a mis-tap risk.
+      //
+      // And only when the alarm is ARMED. With it off, _Monitoring switches to
+      // its guide-first layout and renders the very same guide inline, filling
+      // the body — stacking the draggable sheet as well would put the guide on
+      // screen twice, the second copy sitting over the controls.
       child: Scaffold(
-        body: vm.phase == TripPhase.monitoring && !vm.guide.isEmpty
+        body: vm.phase == TripPhase.monitoring &&
+                !vm.guide.isEmpty &&
+                trip.alarmEnabled
             ? Stack(children: [
                 // Reserve the collapsed sheet's height so it can never sit on
                 // top of the SOS / Fake Call buttons.
@@ -100,26 +116,68 @@ class ActiveTripView extends StatelessWidget {
 // ---------------------------------------------------------------------
 // Figure 24 — Monitoring Mode
 // ---------------------------------------------------------------------
+/// Monitoring has TWO layouts, chosen by whether the destination alarm is
+/// armed. The phase→widget mapping in ActiveTripView is untouched: that switch
+/// still resolves the monitoring phase to this one widget, and the choice
+/// happens inside it.
+///
+///  * alarm ON  — Figure 24 exactly as the mockups draw it (Pages 13/20/21/22):
+///    En Route, the destination, "Get some rest. We got you.", the moon badge,
+///    the distance plate, Slide to Stop, SOS / Fake Call. The rider has handed
+///    the trip over and is expected to sleep, so the reassurance that something
+///    is watching IS the screen.
+///  * alarm OFF — guide-first. Nothing is watching for them, so the moon badge
+///    would be claiming a service that is switched off, and the steps are the
+///    only reason they are here. The guide expands to fill the screen and the
+///    monitoring readouts drop to a single strip above the controls.
+///
+/// No mockup draws the alarm-off case; the mockups only cover the alarm-on
+/// screen, which is why that path is left pixel-faithful to them.
 class _Monitoring extends StatelessWidget {
   const _Monitoring({required this.vm});
   final TripViewModel vm;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => vm.guide.isEmpty ||
+          vm.trip!.alarmEnabled
+      ? _alarmFirst(context)
+      : _guideFirst(context);
+
+  /// Shared night-commute wash behind both layouts.
+  static const _wash = BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [Color(0xFF3A1F63), NavAlertColors.background],
+    ),
+  );
+
+  String get _distanceText {
+    final km = vm.distanceM / 1000;
+    return km >= 1
+        ? '${km.toStringAsFixed(1)} km away'
+        : '${vm.distanceM.toStringAsFixed(0)} m away';
+  }
+
+  String get _speedAndEta =>
+      'speed ${vm.speedKmh.toStringAsFixed(0)} km/h'
+      '${vm.etaMinutes == null ? '' : '  ·  ETA ${vm.etaMinutes!.round()} min'}';
+
+  // ── Alarm ON — Figure 24, unchanged ────────────────────────────────────
+  Widget _alarmFirst(BuildContext context) {
     final km = vm.distanceM / 1000;
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF3A1F63), NavAlertColors.background],
-        ),
-      ),
+      decoration: _wash,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
           child: Column(children: [
-            const SizedBox(height: 24),
+            // The mockups have no back arrow because they draw this screen
+            // inside the shell, with the bottom navigation still reachable.
+            // This route covers the shell instead, so the arrow is what
+            // restores that same freedom to leave.
+            const Align(
+                alignment: Alignment.centerLeft, child: _BackToShellButton()),
             const Text('En Route',
                 style: TextStyle(color: NavAlertColors.textSecondary)),
             // Capped at two lines: at 26 px a long place name wrapped to four
@@ -165,29 +223,7 @@ class _Monitoring extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            // ╔════════════════════════════════════════════════════════════╗
-            // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
-            // ║ MID-TRIP ALARM ARM/DISARM. The alarm is opt-in per trip, so ║
-            // ║ this is the ONLY way to arm it once a trip has started.     ║
-            // ║                                                            ║
-            // ║ UI TEAM: restyle the chip freely — colours, icon, shape,    ║
-            // ║ copy. Keep it bound to vm.trip!.alarmEnabled and keep the   ║
-            // ║ onPressed wired to vm.setAlarmEnabled. Removing it strands  ║
-            // ║ a rider who started without the alarm and then wants it.    ║
-            // ╚════════════════════════════════════════════════════════════╝
-            ActionChip(
-              avatar: Icon(
-                  vm.trip!.alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
-                  size: 18,
-                  color: vm.trip!.alarmEnabled
-                      ? NavAlertColors.success
-                      : NavAlertColors.textSecondary),
-              label: Text(vm.trip!.alarmEnabled
-                  ? 'Alarm on — tap to turn off'
-                  : 'Alarm off — tap to turn on'),
-              backgroundColor: NavAlertColors.surface,
-              onPressed: () => vm.setAlarmEnabled(!vm.trip!.alarmEnabled),
-            ),
+            _AlarmToggleChip(vm: vm),
             const SizedBox(height: 12),
             Container(
               padding:
@@ -243,78 +279,293 @@ class _Monitoring extends StatelessWidget {
               if (context.mounted) Navigator.of(context).pop();
             }),
             const SizedBox(height: 14),
-            // ╔════════════════════════════════════════════════════════════╗
-            // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
-            // ║ SPAM-TAP DEBOUNCERS for the SOS and Fake Call buttons.     ║
-            // ║                                                            ║
-            // ║ UI TEAM: `em.sending` and `em.fakeCallActive` are the      ║
-            // ║ in-flight (isProcessing) flags. Restyle these buttons all  ║
-            // ║ you like — colours, icons, sizes, spacing, the label copy. ║
-            // ║ Do NOT replace the `onPressed: <flag> ? null : ...`        ║
-            // ║ pattern with a plain handler, and do NOT drop the Builder  ║
-            // ║ or its context.watch — that is what re-enables the button  ║
-            // ║ when the action finishes. Hard-wiring onPressed lets a     ║
-            // ║ panic-tapping rider fire duplicate SOS texts (real cost:   ║
-            // ║ their prepaid load) and stack fake-call screens.           ║
-            // ╚════════════════════════════════════════════════════════════╝
-            // The ViewModel guards (fireSos's `sending` flag, startFakeCall's
-            // `fakeCallActive` gate) already stop the work running twice, but an
-            // enabled-looking button that silently eats taps reads as "the app
-            // is broken" at the exact moment the rider needs it — so the state
-            // is now visible, not just enforced.
-            Builder(builder: (context) {
-              final em = context.watch<EmergencyViewModel>();
-              return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: NavAlertColors.danger),
-                      onPressed: em.sending
-                          ? null
-                          : () => context
-                              .read<EmergencyViewModel>()
-                              .fireSos(tripId: vm.trip!.tripId),
-                      icon: const Icon(Icons.warning_amber, size: 18),
-                      label: Text(em.sending ? 'Sending…' : 'SOS'),
-                    ),
-                    // DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:
-                    // SOS and Fake Call are DIFFERENT emergency actions and
-                    // must stay physically separated. They were 14 px apart,
-                    // which on a moving jeepney is close enough for one thumb
-                    // to catch both — the likeliest cause of "SOS and the
-                    // recording trigger at the same time". UI team: you may
-                    // restyle both buttons, but do not reduce this gap or put
-                    // them back side by side without another separator.
-                    const SizedBox(width: 40),
-                    ElevatedButton.icon(
-                      onPressed: em.fakeCallActive
-                          ? null
-                          : () async {
-                              final em = context.read<EmergencyViewModel>();
-                              // Push only if this tap started the call — see the
-                              // panic-tap guard in startFakeCall.
-                              final started = await em.startFakeCall(
-                                  callerName: context
-                                      .read<AppViewModel>()
-                                      .fakeCallConfig
-                                      .callerName);
-                              if (started && context.mounted) {
-                                Navigator.of(context).push(MaterialPageRoute(
-                                    fullscreenDialog: true,
-                                    builder: (_) => const FakeCallView()));
-                              }
-                            },
-                      icon: const Icon(Icons.phone_in_talk, size: 18),
-                      label: const Text('Fake Call'),
-                    ),
-                  ]);
-            }),
+            _EmergencyActionsRow(vm: vm),
           ]),
         ),
       ),
     );
   }
+
+  // ── Alarm OFF — guide-first ────────────────────────────────────────────
+  // Geometry follows the guide the mockups DO define (Pages 15/16): a header
+  // strip, then the step cards filling the body on the same 16 dp side margin
+  // and card rhythm, then the controls pinned at the foot. The leg cards are
+  // the very same CommuteGuideSheet cards, rendered inline instead of inside a
+  // collapsed sheet, so the planning guide, the sheet and this screen are one
+  // component throughout.
+  Widget _guideFirst(BuildContext context) {
+    return Container(
+      decoration: _wash,
+      child: SafeArea(
+        child: Column(children: [
+          // Header: back · destination · alarm toggle. The destination and the
+          // step counter replace the moon badge as the "where am I" anchor.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 12, 0),
+            child: Row(children: [
+              const _BackToShellButton(),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('En Route',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: NavAlertColors.textSecondary)),
+                    Text(vm.trip!.destinationLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _AlarmToggleChip(vm: vm, compact: true),
+            ]),
+          ),
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(children: [
+              const Icon(Icons.route,
+                  size: 15, color: NavAlertColors.accent),
+              const SizedBox(width: 6),
+              Text(CommuteGuideSheet.stepLabel(vm.guide),
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+          const SizedBox(height: 8),
+          // The steps ARE the screen — everything else is a strip around them.
+          const Expanded(child: CommuteGuideSheet(inline: true)),
+          // UC-1 Exception 2 — "Signal Lost" keeps its full card here too: with
+          // the alarm off the rider is navigating by these steps, and stale GPS
+          // is exactly what makes the step they are on wrong.
+          if (vm.signalLostAlarm)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Card(
+                color: const Color(0xFF4A2A00),
+                child: ListTile(
+                  dense: true,
+                  leading:
+                      const Icon(Icons.gps_off, color: NavAlertColors.warning),
+                  title: const Text('Signal Lost',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  subtitle: const Text(
+                      'GPS has been unavailable — stay alert for your stop.',
+                      style: TextStyle(fontSize: 11)),
+                  trailing: ElevatedButton(
+                    onPressed: vm.dismissSignalLostAlarm,
+                    child: const Text('Dismiss'),
+                  ),
+                ),
+              ),
+            )
+          else if (vm.error != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(vm.error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: NavAlertColors.warning, fontSize: 12)),
+            ),
+          // Monitoring demoted to one strip: still honest about distance and
+          // ETA, no longer the subject of the screen.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text(_distanceText,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w700)),
+              const Text('  ·  ',
+                  style: TextStyle(color: NavAlertColors.textSecondary)),
+              Flexible(
+                child: Text(_speedAndEta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12, color: NavAlertColors.textSecondary)),
+              ),
+            ]),
+          ),
+          _EmergencyActionsRow(vm: vm),
+          const SizedBox(height: 12),
+          // DO NOT MODIFY LOGIC: the anti-oversleep gesture — the only way to
+          // end monitoring. Keep onCompleted → stopTrip() + pop(). You may
+          // restyle the slider (see _SlideToStop below); do not lower its
+          // completion threshold (it guards against a stray-thumb dismiss).
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: _SlideToStop(onCompleted: () async {
+              await vm.stopTrip();
+              if (context.mounted) Navigator.of(context).pop();
+            }),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+/// ╔════════════════════════════════════════════════════════════╗
+/// ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
+/// ║ MID-TRIP ALARM ARM/DISARM. The alarm is opt-in per trip, so ║
+/// ║ this is the ONLY way to arm it once a trip has started.     ║
+/// ║                                                            ║
+/// ║ UI TEAM: restyle the chip freely — colours, icon, shape,    ║
+/// ║ copy. Keep it bound to vm.trip!.alarmEnabled and keep the   ║
+/// ║ onPressed wired to vm.setAlarmEnabled. Removing it strands  ║
+/// ║ a rider who started without the alarm and then wants it.    ║
+/// ╚════════════════════════════════════════════════════════════╝
+///
+/// Lifted out of _Monitoring unchanged so BOTH monitoring layouts (Figure 24
+/// when the alarm is on, guide-first when it is off) drive the one control.
+/// Duplicating it would be the surest way to let one copy lose its wiring —
+/// and in the guide-first layout this chip matters most, because it is the
+/// only route from "just following the steps" to an armed alarm.
+class _AlarmToggleChip extends StatelessWidget {
+  const _AlarmToggleChip({required this.vm, this.compact = false});
+  final TripViewModel vm;
+
+  /// Guide-first header form: icon + short label, no full sentence.
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = vm.trip!.alarmEnabled;
+    return ActionChip(
+      avatar: Icon(on ? Icons.alarm_on : Icons.alarm_off,
+          size: 18,
+          color: on ? NavAlertColors.success : NavAlertColors.textSecondary),
+      label: Text(
+          compact
+              ? (on ? 'Alarm on' : 'Alarm off')
+              : (on
+                  ? 'Alarm on — tap to turn off'
+                  : 'Alarm off — tap to turn on'),
+          style: compact ? const TextStyle(fontSize: 12) : null),
+      backgroundColor: NavAlertColors.surface,
+      onPressed: () => vm.setAlarmEnabled(!vm.trip!.alarmEnabled),
+    );
+  }
+}
+
+/// ╔════════════════════════════════════════════════════════════╗
+/// ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
+/// ║ SPAM-TAP DEBOUNCERS for the SOS and Fake Call buttons.     ║
+/// ║                                                            ║
+/// ║ UI TEAM: `em.sending` and `em.fakeCallActive` are the      ║
+/// ║ in-flight (isProcessing) flags. Restyle these buttons all  ║
+/// ║ you like — colours, icons, sizes, spacing, the label copy. ║
+/// ║ Do NOT replace the `onPressed: <flag> ? null : ...`        ║
+/// ║ pattern with a plain handler, and do NOT drop the Builder  ║
+/// ║ or its context.watch — that is what re-enables the button  ║
+/// ║ when the action finishes. Hard-wiring onPressed lets a     ║
+/// ║ panic-tapping rider fire duplicate SOS texts (real cost:   ║
+/// ║ their prepaid load) and stack fake-call screens.           ║
+/// ╚════════════════════════════════════════════════════════════╝
+///
+/// The ViewModel guards (fireSos's `sending` flag, startFakeCall's
+/// `fakeCallActive` gate) already stop the work running twice, but an
+/// enabled-looking button that silently eats taps reads as "the app is broken"
+/// at the exact moment the rider needs it — so the state is visible, not just
+/// enforced.
+///
+/// Lifted out of _Monitoring VERBATIM — same Builder, same context.watch, same
+/// `onPressed: <flag> ? null : ...` pattern, same 40 px separation — so both
+/// monitoring layouts share one copy of the wiring instead of two that can
+/// drift apart.
+class _EmergencyActionsRow extends StatelessWidget {
+  const _EmergencyActionsRow({required this.vm});
+  final TripViewModel vm;
+
+  @override
+  Widget build(BuildContext context) {
+    return Builder(builder: (context) {
+      final em = context.watch<EmergencyViewModel>();
+      return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+        ElevatedButton.icon(
+          style:
+              ElevatedButton.styleFrom(backgroundColor: NavAlertColors.danger),
+          onPressed: em.sending
+              ? null
+              : () => context
+                  .read<EmergencyViewModel>()
+                  .fireSos(tripId: vm.trip!.tripId),
+          icon: const Icon(Icons.warning_amber, size: 18),
+          label: Text(em.sending ? 'Sending…' : 'SOS'),
+        ),
+        // DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:
+        // SOS and Fake Call are DIFFERENT emergency actions and must stay
+        // physically separated. They were 14 px apart, which on a moving
+        // jeepney is close enough for one thumb to catch both — the likeliest
+        // cause of "SOS and the recording trigger at the same time". UI team:
+        // you may restyle both buttons, but do not reduce this gap or put them
+        // back side by side without another separator.
+        const SizedBox(width: 40),
+        ElevatedButton.icon(
+          onPressed: em.fakeCallActive
+              ? null
+              : () async {
+                  final em = context.read<EmergencyViewModel>();
+                  // Push only if this tap started the call — see the panic-tap
+                  // guard in startFakeCall.
+                  final started = await em.startFakeCall(
+                      callerName: context
+                          .read<AppViewModel>()
+                          .fakeCallConfig
+                          .callerName);
+                  if (started && context.mounted) {
+                    Navigator.of(context).push(MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => const FakeCallView()));
+                  }
+                },
+          icon: const Icon(Icons.phone_in_talk, size: 18),
+          label: const Text('Fake Call'),
+        ),
+      ]);
+    });
+  }
+}
+
+/// The back arrow the directive asks for, and the reason it is safe.
+///
+/// This is a PROGRAMMATIC Navigator.pop(), which is exactly what the PopScope
+/// guard above already exempts: that guard blocks the SYSTEM back gesture and
+/// the edge swipe, and its own comment records that it "does not affect
+/// programmatic Navigator.pop(), so Slide-to-Stop and the summary's Done/Close
+/// buttons still close this screen exactly as before". This button is one more
+/// of those deliberate exits, so the guard is untouched.
+///
+/// Leaving is NOT ending the trip. Monitoring lives in TripViewModel, not in
+/// this route: the GPS stream, the escalation timers and the alarm keep running
+/// — _fireStage plays the alarm from the ViewModel, so it sounds whether or not
+/// this screen is mounted — and the shell floats a "View Active Trip" pill to
+/// come straight back. Every Active Trip mockup draws the bottom navigation
+/// bar, so a rider who can reach their other tabs mid-trip is the designed
+/// behaviour, not a hole in it.
+///
+/// Deliberately only rendered on the MONITORING screen. An alarm stage or the
+/// overshoot prompt must stay a hard-to-leave alert (R1), and those phases
+/// never build this widget.
+class _BackToShellButton extends StatelessWidget {
+  const _BackToShellButton();
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+        icon: const Icon(Icons.arrow_back),
+        tooltip: 'Back — the trip keeps running',
+        onPressed: () {
+          final messenger = ScaffoldMessenger.of(context);
+          Navigator.of(context).pop();
+          messenger.showSnackBar(const SnackBar(
+              content: Text('Trip still running — tap "View Active Trip" to '
+                  'come back.')));
+        },
+      );
 }
 
 // ---------------------------------------------------------------------
