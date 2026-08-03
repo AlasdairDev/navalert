@@ -64,6 +64,17 @@ class HomeFabLayout {
   /// Standard margin when nothing is beneath the FAB.
   static const double restingBottom = 20;
 
+  /// Inset from the right edge.
+  ///
+  /// The mockup put this at 43 dp (it drew the FAB spanning x=265-317 of
+  /// 360 dp), which on a real screen pulls the button noticeably in towards
+  /// the centre. 20 dp is the margin the rest of this screen already uses —
+  /// the greeting/search header pads by 20, and the earphones pill is inset
+  /// left: 20, right: 20 — so the FAB's right edge now lines up with the pill
+  /// beneath it and with the search bar above it instead of floating inboard
+  /// of both.
+  static const double restingRight = 20;
+
   /// Material FloatingActionButton diameter.
   static const double fabSize = 56;
 
@@ -408,8 +419,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
           // Locate me button
           // TODO (UI Team): FAB position/size/icon/color are free to restyle.
           Positioned(
-            // Mockup: FAB spans x=265-317 of 360 dp, so 43 dp from the right.
-            right: 43,
+            // Deliberately NOT the mockup's 43 dp — see restingRight.
+            right: HomeFabLayout.restingRight,
             // Deliberately NOT the mockup's 73 dp. See _locateFabBottom: that
             // measurement left the button stranded in mid-air on a real device,
             // so it now sits at a normal 20 dp margin and rises only when a
