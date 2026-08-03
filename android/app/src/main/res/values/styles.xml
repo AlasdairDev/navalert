@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off -->
-    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <!-- Show a splash screen on the activity. Automatically removed when
-             the Flutter engine draws its first frame -->
+    <!-- Launch window, drawn while the process starts.
+         The parent is a DARK theme even though this is the system's LIGHT-mode
+         resource folder. NavAlert has a single look — the deep-purple night
+         commute — so following the system into a light launch window flashed
+         white before the app appeared. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
     </style>
-    <!-- Theme applied to the Android Window as soon as the process has started.
-         This theme determines the color of the Android Window while your
-         Flutter UI initializes, as well as behind your Flutter UI while its
-         running.
-
-         This Theme is only used starting with V2 of Flutter's Android embedding. -->
-    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowBackground">?android:colorBackground</item>
+    <!-- Applied once the process has started, and drawn BEHIND the Flutter UI
+         for the rest of the session. Pinned to the app colour for the same
+         reason: anything the Flutter surface does not cover for a frame
+         (rotation, resize, the moment before first paint) shows this, and
+         ?android:colorBackground resolves to white in light mode. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/navalert_background</item>
     </style>
 </resources>
