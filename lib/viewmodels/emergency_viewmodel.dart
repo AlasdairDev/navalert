@@ -19,6 +19,17 @@ class EmergencyViewModel extends ChangeNotifier {
     // A queued SOS resolves minutes later, long after fireSos() returned.
     // Report the outcome either way — especially the failure, so the rider
     // stops waiting on an SMS that was never delivered and can Call 911.
+    // DO NOT MODIFY LOGIC: the slow retry never gives up, so the "could NOT be
+    // sent" message below can no longer fire on its own. Without this the rider
+    // would be left in silence assuming the SOS went out. Say plainly that it
+    // has not, and point at Call 911.
+    _sos.onSosRetryBackoff = (attempts) {
+      statusMessage =
+          'SOS not delivered after $attempts attempts — no cellular signal. '
+          'NavAlert will keep retrying every 15 minutes, but use Call 911 if '
+          'you are in danger.';
+      notifyListeners();
+    };
     _sos.onQueuedSosResolved = (delivered, count) {
       statusMessage = delivered
           ? 'Signal restored — SOS sent to $count '

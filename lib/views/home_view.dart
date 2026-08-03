@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -6,8 +8,10 @@ import 'package:provider/provider.dart';
 
 import '../core/map_support.dart';
 import '../core/theme.dart';
+import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
+import '../viewmodels/trip_viewmodel.dart';
 import 'onboarding_flow.dart';
 import 'search_view.dart';
 
@@ -17,7 +21,9 @@ import 'search_view.dart';
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] FlutterMap + TileLayer (OSM tiles, paper API) · locate FAB's
 ///         onPressed refreshCurrentLocation() · search bar's onTap →
-///         SearchView · the incomplete-setup MaterialBanner logic.
+///         SearchView · the incomplete-setup MaterialBanner logic ·
+///         vm.startLiveTracking() (R2 — what makes the current-location dot
+///         follow the rider rather than sit on the boot-time fix).
 ///  [EDIT] greeting text/logic (_greeting), "Where are you headed?" copy,
 ///         search-bar pill shape/color, marker dot style/size, FAB icon,
 ///         header card blur/rounding, all paddings.
@@ -29,11 +35,104 @@ class HomeView extends StatefulWidget {
   State<HomeView> createState() => _HomeViewState();
 }
 
+/// Vertical placement of the locate FAB, and the pill geometry it has to
+/// avoid. All values are dp measured UP from the top of the bottom navigation
+/// bar, matching the `bottom:` of the Positioned widgets they describe.
+///
+/// Pulled out of the State purely so the no-overlap rule can be asserted in a
+/// test — driving all four pill combinations through the real screen would
+/// need a live trip and a connected headset.
+class HomeFabLayout {
+  const HomeFabLayout._();
+
+  /// Both pills sit this far above the nav bar.
+  static const double pillBottom = 14;
+
+  /// ShellView's "View Active Trip" pill.
+  static const double tripPillHeight = 38;
+
+  /// The earphones pill: 11+11 padding around ~20 dp of content.
+  static const double earphonePillHeight = 42;
+
+  /// Where the earphones pill moves when the trip pill already owns the
+  /// bottom slot (see home_view's Positioned and shell.dart).
+  static const double earphonePillRaised = 60;
+
+  /// Breathing room between the FAB and whatever is under it.
+  static const double fabPillGap = 12;
+
+  /// Standard margin when nothing is beneath the FAB.
+  static const double restingBottom = 20;
+
+  /// Inset from the right edge.
+  ///
+  /// The mockup put this at 43 dp (it drew the FAB spanning x=265-317 of
+  /// 360 dp), which on a real screen pulls the button noticeably in towards
+  /// the centre. 20 dp is the margin the rest of this screen already uses —
+  /// the greeting/search header pads by 20, and the earphones pill is inset
+  /// left: 20, right: 20 — so the FAB's right edge now lines up with the pill
+  /// beneath it and with the search bar above it instead of floating inboard
+  /// of both.
+  static const double restingRight = 20;
+
+  /// Material FloatingActionButton diameter.
+  static const double fabSize = 56;
+
+  /// Top edge of the tallest pill currently on screen, or 0 when none is.
+  static double pillTopEdge({required bool tripActive, required bool earphones}) {
+    var top = 0.0;
+    if (tripActive) top = pillBottom + tripPillHeight;
+    if (earphones) {
+      final earphoneTop =
+          (tripActive ? earphonePillRaised : pillBottom) + earphonePillHeight;
+      if (earphoneTop > top) top = earphoneTop;
+    }
+    return top;
+  }
+
+  /// The FAB used to sit at a flat 73 dp — the mockup's measurement, chosen so
+  /// it never had to move when a pill appeared. On a real device that left it
+  /// stranded in mid-air, so it now rests at a normal margin and steps up only
+  /// when something is genuinely beneath it.
+  ///
+  /// The step-up is not cosmetic. Both pills are drawn AFTER this button — the
+  /// earphones pill later in HomeView's Stack, the trip pill in ShellView's
+  /// Stack above the whole IndexedStack — so anything they overlap is not
+  /// merely crowded, it is covered and untappable.
+  static double bottomFor({required bool tripActive, required bool earphones}) {
+    final top = pillTopEdge(tripActive: tripActive, earphones: earphones);
+    return top == 0 ? restingBottom : top + fabPillGap;
+  }
+}
+
 class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   final _mapController = MapController();
 
   /// True while the locate-me FAB is acquiring a fix — see its onPressed.
   bool _locating = false;
+
+  /// GUI Page 8 — "Earphones connected" pill. True while the device reports a
+  /// wired/Bluetooth/USB headset, which is the state in which the paper's
+  /// "Bluetooth / ear-phone only detection" setting routes the destination
+  /// alarm quietly through the earphones instead of the loud PUV speaker.
+  /// Purely informational: the pill reflects the route, it never sets it.
+  bool _earphones = false;
+
+  /// Headset plug/unplug has no Dart-side event on this app's platform channel,
+  /// so the pill is refreshed on a slow poll. The underlying call is a single
+  /// AudioManager query — orders of magnitude cheaper than the GPS stream this
+  /// screen already runs — and setState fires only when the answer CHANGES, so
+  /// a steady state costs no rebuilds.
+  Timer? _earphonePoll;
+  static const _earphonePollInterval = Duration(seconds: 5);
+
+  Future<void> _refreshEarphones() async {
+    final connected = await SoundService.instance.isHeadsetConnected();
+    // The poll outlives no-longer-mounted states, and the value is only worth a
+    // rebuild when it actually flipped.
+    if (!mounted || connected == _earphones) return;
+    setState(() => _earphones = connected);
+  }
 
   // DO NOT MODIFY LOGIC: the mover is built eagerly in initState, NOT as a lazy
   // `late final` field initializer. When GPS never returns a fix the mover is
@@ -48,6 +147,11 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _mover = AnimatedMapMover(_mapController, this);
+    // Show the headset state immediately rather than after the first poll tick,
+    // so plugging in before opening the app still lights the pill at once.
+    _refreshEarphones();
+    _earphonePoll =
+        Timer.periodic(_earphonePollInterval, (_) => _refreshEarphones());
     // DO NOT MODIFY LOGIC: first-frame GPS acquisition + animated recenter.
     // This is the R2/UC-4 location bootstrap; the map has nothing to show
     // until refreshCurrentLocation() returns. Restyle the map/markers freely,
@@ -62,11 +166,24 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       if (mounted && vm.currentLat != null) {
         _mover.animateTo(LatLng(vm.currentLat!, vm.currentLng!), 16);
       }
+      // R2 — from here the dot FOLLOWS the rider instead of staying pinned to
+      // the boot-time snapshot. Started after the bootstrap above so the first
+      // paint still comes from the fast two-stage fix.
+      //
+      // Deliberately does NOT recentre the map: only the marker moves. The
+      // camera is the rider's to control — panning away to look at a street and
+      // being yanked back on the next GPS tick would make the map unusable, and
+      // the locate button already exists for "take me back to me". Started even
+      // if the bootstrap fix failed, because the stream can deliver one later.
+      if (mounted) vm.startLiveTracking();
     });
   }
 
   @override
   void dispose() {
+    // Without this the timer keeps firing against a dead State and every tick
+    // calls setState on it.
+    _earphonePoll?.cancel();
     _mover.dispose();
     super.dispose();
   }
@@ -78,10 +195,18 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
     return 'Good Evening,';
   }
 
+  double _locateFabBottom(bool tripActive) =>
+      HomeFabLayout.bottomFor(tripActive: tripActive, earphones: _earphones);
+
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
     final center = LatLng(vm.currentLat ?? 14.5979, vm.currentLng ?? 121.0108);
+    // `select`, NOT `watch`: TripViewModel notifies on every GPS tick during a
+    // trip, and watching it here would rebuild this screen — map included —
+    // several times a second. Only the on/off transition matters.
+    final tripActive = context.select<TripViewModel, bool>((t) => t.isActive);
+    final locateBottom = _locateFabBottom(tripActive);
 
     return Scaffold(
       body: Stack(
@@ -103,42 +228,78 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               // buffering). Restyle markers/overlays, but don't inline-replace
               // these — they keep the map crisp and inside the service area.
               NavAlertMap.tiles(context),
-              MarkerLayer(markers: [
-                // TODO (UI Team): the current-location dot style.
-                // Google-Maps-style blue is intentional and widely recognised;
-                // this 0xFF4285F4 is a deliberate keep, not theme purple.
-                Marker(
-                  point: center,
-                  width: 22,
-                  height: 22,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(0xFF4285F4),
-                      border: Border.all(color: Colors.white, width: 3),
-                      boxShadow: const [
-                        BoxShadow(color: Colors.black38, blurRadius: 4),
-                      ],
+              // DO NOT MODIFY LOGIC: the "you are here" dot renders ONLY for a
+              // real GPS fix. `center` falls back to PUP Sta. Mesa when there
+              // is no fix, and drawing the blue dot there presented a hardcoded
+              // location as the rider's own — visually identical to a working
+              // fix, on the very screen where they choose where they are going.
+              // A missing pin is honest; a confident wrong pin is not. The
+              // fallback banner below already explains the situation, and the
+              // map still CENTRES on `center` because it needs somewhere to
+              // look — only the "this is you" claim is withheld.
+              // Glides between fixes instead of teleporting. The live stream
+              // only emits once the rider has passed the 5 m distance filter,
+              // roughly every 2 s, so painting straight at each new coordinate
+              // moved the dot the whole gap in one frame. Only the MARKER is
+              // rebuilt per animation frame — the tile layer and the camera are
+              // untouched.
+              if (!vm.locationIsFallback && vm.currentLat != null)
+                LatLngGlide(
+                  target: center,
+                  builder: (context, position) => MarkerLayer(markers: [
+                    // TODO (UI Team): the current-location dot style.
+                    // Google-Maps-style blue is intentional and widely
+                    // recognised; 0xFF4285F4 is a deliberate keep, not theme
+                    // purple.
+                    Marker(
+                      point: position,
+                      width: 22,
+                      height: 22,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF4285F4),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black38, blurRadius: 4),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ]),
                 ),
-              ]),
             ],
           ),
-          // Greeting + search header
-          SafeArea(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-              decoration: BoxDecoration(
-                color: NavAlertColors.background.withValues(alpha: 0.94),
-                borderRadius: const BorderRadius.vertical(
-                    bottom: Radius.circular(24)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
+          // Greeting + search header.
+          //
+          // GUI Page 10 geometry (the mockups are 360x780 dp, this device is
+          // 360x800 dp, so mockup pixels are read as dp 1:1):
+          //   greeting top y=38 · search bar y=146-192 (h=46) · panel ends
+          //   y=210 · side margins 20.
+          //
+          // The SafeArea used to wrap this Container from the OUTSIDE, which
+          // pushed the whole panel BELOW the status bar and left a strip of
+          // bare map above it — the dead space at the top of the screen. In the
+          // mockup the dark header runs edge to edge from y=0. The inset now
+          // lives INSIDE the panel, so the background reaches the top of the
+          // screen while the text still clears the status bar.
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: NavAlertColors.background.withValues(alpha: 0.94),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(24)),
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                // 6 dp over the status-bar inset puts the greeting at roughly
+                // the mockup's y=38; 18 dp below matches its 192->210 gap.
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 18),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                   // TODO (UI Team): greeting + heading typography. Consider a
                   // theme text style instead of inline fontSize/weight.
                   Text(_greeting,
@@ -147,7 +308,9 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   const Text('Where are you headed?',
                       style: TextStyle(
                           fontSize: 22, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 12),
+                  // Mockup gap between the heading (ends y=130) and the search
+                  // bar (starts y=146).
+                  const SizedBox(height: 16),
                   GestureDetector(
                     // DO NOT MODIFY LOGIC: opens the destination search (UC-4).
                     // Restyle the pill below, but keep this onTap → SearchView.
@@ -203,42 +366,66 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   if (context.watch<AppViewModel>().showIncompleteSetupPrompt)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
+                      // GUI Page 7 leads with a bold "Incomplete Setup" heading
+                      // and then NAMES what is unfinished, rather than opening
+                      // mid-sentence. The old single line mentioned only
+                      // contacts, so a rider who had also skipped permissions
+                      // and the fake-call clip was told about one third of the
+                      // problem. Copy only — the prompt's own show/dismiss
+                      // wiring is unchanged.
                       child: MaterialBanner(
                         padding: const EdgeInsets.all(10),
                         backgroundColor: NavAlertColors.surface,
-                        content: const Text(
-                          'Setup incomplete — add emergency contacts so the '
-                          'SOS feature can protect you.',
-                          style: TextStyle(fontSize: 12),
+                        content: const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('Incomplete Setup',
+                                style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700)),
+                            SizedBox(height: 4),
+                            Text(
+                              'Some features are not ready: permissions, SOS '
+                              'contacts, and fake call simulation.',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ],
                         ),
                         leading: const Icon(Icons.warning_amber,
                             color: NavAlertColors.warning),
                         actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).push(
-                                MaterialPageRoute(
-                                    builder: (_) => const ContactsSetupView(
-                                        inOnboarding: false))),
-                            child: const Text('Add now'),
-                          ),
                           TextButton(
                             onPressed: () => context
                                 .read<AppViewModel>()
                                 .dismissIncompleteSetupPrompt(),
                             child: const Text('Dismiss'),
                           ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) => const ContactsSetupView(
+                                        inOnboarding: false))),
+                            child: const Text('Setup'),
+                          ),
                         ],
                       ),
                     ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
           // Locate me button
           // TODO (UI Team): FAB position/size/icon/color are free to restyle.
           Positioned(
-            right: 16,
-            bottom: 24,
+            // Deliberately NOT the mockup's 43 dp — see restingRight.
+            right: HomeFabLayout.restingRight,
+            // Deliberately NOT the mockup's 73 dp. See _locateFabBottom: that
+            // measurement left the button stranded in mid-air on a real device,
+            // so it now sits at a normal 20 dp margin and rises only when a
+            // pill is genuinely underneath it.
+            bottom: locateBottom,
             child: FloatingActionButton(
               backgroundColor: Colors.white,
               // DO NOT MODIFY LOGIC: re-fetches GPS and re-centres the map
@@ -277,6 +464,114 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               child: const Icon(Icons.my_location, color: Colors.black87),
             ),
           ),
+          // GUI Page 8 — "Earphones connected" pill, pinned just above the
+          // shell's bottom navigation. It appears only while a headset is
+          // actually attached, so it reports a real device state rather than
+          // decorating the screen.
+          //
+          // [EDIT] pill shape, icon and copy. Colours are the existing
+          // primaryButton / textPrimary tokens — no new palette.
+          if (_earphones)
+            Positioned(
+              left: 20,
+              right: 20,
+              // Mockup: the pill sits 14 dp above the bottom nav (y=678-716,
+              // nav at y=730) with the same 20 dp side margins as the search
+              // bar. Page 8 and Page 13.5 draw their pills in the SAME slot, so
+              // when a trip is running this one steps up over the shell's
+              // "View Active Trip" pill (38 high + 8 gap) instead of colliding.
+              bottom: tripActive ? 60 : 14,
+              child: IgnorePointer(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 18, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: NavAlertColors.primaryButton,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black38, blurRadius: 8),
+                    ],
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.headset,
+                          size: 18, color: NavAlertColors.textPrimary),
+                      SizedBox(width: 10),
+                      Text('Earphones connected',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontStyle: FontStyle.italic,
+                              color: NavAlertColors.textPrimary)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          // ── SOS Warning (GUI "SOS Warning", Activity Diagram p.92) ─────────
+          // The Activity Diagram fires this straight off "Launch App", and the
+          // mockup draws it on the main screen — not on the Emergency tab,
+          // where it used to live. That placement was the problem: the warning
+          // says the SOS SMS may not send, and a rider only opens Emergency
+          // when they ALREADY need it. Telling them their lifeline might be out
+          // of load at that moment is too late to act on. On Home it lands
+          // before the trip, while there is still time to top up.
+          //
+          // Last in the Stack so it draws over the map and the pill. Dismissal
+          // is persisted (app_state.sos_low_load_warning_dismissed), so this is
+          // a once-ever card, not a nag on every launch.
+          if (context.watch<AppViewModel>().showSosLowLoadWarning)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: NavAlertColors.card,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black54, blurRadius: 18),
+                    ],
+                  ),
+                  padding: const EdgeInsets.fromLTRB(24, 22, 24, 18),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.sim_card_alert,
+                          size: 34, color: NavAlertColors.warning),
+                      const SizedBox(height: 10),
+                      const Text('SOS Warning',
+                          style: TextStyle(
+                              fontSize: 20, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'Make sure your SIM card has sufficient prepaid load '
+                        'before your trip to ensure your SOS message can be '
+                        'sent.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: NavAlertColors.textSecondary),
+                      ),
+                      const SizedBox(height: 18),
+                      SizedBox(
+                        width: double.infinity,
+                        // DO NOT MODIFY LOGIC: this is the only way to clear the
+                        // card. dismissSosLowLoadWarning persists the flag; drop
+                        // the call and the warning returns on every launch with
+                        // no way to silence it.
+                        child: ElevatedButton(
+                          onPressed: () => context
+                              .read<AppViewModel>()
+                              .dismissSosLowLoadWarning(),
+                          child: const Text('Close'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
