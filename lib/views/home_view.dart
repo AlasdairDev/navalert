@@ -163,28 +163,37 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               // fallback banner below already explains the situation, and the
               // map still CENTRES on `center` because it needs somewhere to
               // look — only the "this is you" claim is withheld.
-              MarkerLayer(markers: [
-                if (!vm.locationIsFallback && vm.currentLat != null)
-                  // TODO (UI Team): the current-location dot style.
-                  // Google-Maps-style blue is intentional and widely
-                  // recognised; 0xFF4285F4 is a deliberate keep, not theme
-                  // purple.
-                  Marker(
-                    point: center,
-                    width: 22,
-                    height: 22,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: const Color(0xFF4285F4),
-                        border: Border.all(color: Colors.white, width: 3),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black38, blurRadius: 4),
-                        ],
+              // Glides between fixes instead of teleporting. The live stream
+              // only emits once the rider has passed the 5 m distance filter,
+              // roughly every 2 s, so painting straight at each new coordinate
+              // moved the dot the whole gap in one frame. Only the MARKER is
+              // rebuilt per animation frame — the tile layer and the camera are
+              // untouched.
+              if (!vm.locationIsFallback && vm.currentLat != null)
+                LatLngGlide(
+                  target: center,
+                  builder: (context, position) => MarkerLayer(markers: [
+                    // TODO (UI Team): the current-location dot style.
+                    // Google-Maps-style blue is intentional and widely
+                    // recognised; 0xFF4285F4 is a deliberate keep, not theme
+                    // purple.
+                    Marker(
+                      point: position,
+                      width: 22,
+                      height: 22,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF4285F4),
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: const [
+                            BoxShadow(color: Colors.black38, blurRadius: 4),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-              ]),
+                  ]),
+                ),
             ],
           ),
           // Greeting + search header.
