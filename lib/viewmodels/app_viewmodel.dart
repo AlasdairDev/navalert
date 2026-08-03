@@ -180,12 +180,38 @@ class AppViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Deletes a CUSTOM recording: the database row, the audio file on disk, and
+  /// the selection if it pointed here.
+  ///
+  /// DO NOT MODIFY LOGIC: all four guards below are load-bearing.
+  ///  * Presets are never deletable — they are bundled assets, not user files,
+  ///    and deleting the row would leave the app with no fallback clip at all.
+  ///  * The .m4a must be removed too, or every delete leaks a multi-megabyte
+  ///    file that nothing will ever reference again.
+  ///  * The selection must land on a recording that still EXISTS. Leaving
+  ///    fakeCallConfig.recordingId pointing at a deleted row makes the fake
+  ///    call — a safety feature — play nothing at the moment it is needed.
+  ///  * The config write is best-effort: a storage failure must not undo a
+  ///    deletion the rider already confirmed.
   Future<void> removeRecording(String id) async {
+    final target = recordings.where((r) => r.recordingId == id);
+    if (target.isEmpty || target.first.isPreset) return;
+    final path = target.first.filePath;
+
     await _db.deleteRecording(id);
     recordings = await _db.getRecordings();
+
+    try {
+      final f = File(path);
+      if (await f.exists()) await f.delete();
+    } catch (_) {/* row is gone either way — storage cleanup is secondary */}
+
     if (fakeCallConfig.recordingId == id) {
-      fakeCallConfig.recordingId = null;
-      await _db.saveFakeCallConfig(fakeCallConfig);
+      fakeCallConfig.recordingId =
+          recordings.isEmpty ? null : recordings.first.recordingId;
+      try {
+        await _db.saveFakeCallConfig(fakeCallConfig);
+      } catch (_) {/* not persisted — the in-memory selection is still valid */}
     }
     notifyListeners();
   }

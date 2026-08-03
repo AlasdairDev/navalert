@@ -21,9 +21,9 @@ import 'active_trip_view.dart';
 ///         destination pin · star _toggleFavorite · "Mode of Transport" →
 ///         _openModePriority sheet (bus/UV/jeepney switches + Done) ·
 ///         suggestion card onTap → home.selectSuggestion · "Show Commute
-///         Guide" gate on selectedSuggestion · "Enable Alarm" →
-///         _openTripSettings (sound + vibration-only + Start Trip →
-///         tripVm.startTrip → ActiveTripView).
+///         Guide" gate on selectedSuggestion · "Start Trip" →
+///         _openTripSettings (optional destination alarm + sound +
+///         vibration-only + Start Trip → tripVm.startTrip → ActiveTripView).
 ///  [EDIT] header card layout, tag chip colors/labels (_tag), suggestion
 ///         card styling, "SUGGESTED ROUTES FOUND" copy, step list rows,
 ///         polyline colors/width, pin styles, sheet cosmetics.
@@ -158,6 +158,7 @@ class _RouteViewState extends State<RouteView> {
         return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const _SheetHandle(),
             const Text('Mode Priority',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
             const SizedBox(height: 6),
@@ -203,6 +204,11 @@ class _RouteViewState extends State<RouteView> {
     if (trip == null) return;
     var sound = app.settings.alarmSound;
     var vibrationOnly = false;
+    // DO NOT MODIFY LOGIC: the destination alarm is OPT-IN. This local default
+    // of false is what makes it off-by-default for real riders — the Trip model
+    // itself defaults alarmEnabled to TRUE so that every other caller (and the
+    // alarm test-suite) is unaffected. Do not "align" the two defaults.
+    var alarmEnabled = false;
 
     showModalBottomSheet(
       context: context,
@@ -213,15 +219,51 @@ class _RouteViewState extends State<RouteView> {
         return Padding(
           padding: const EdgeInsets.all(20),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const _SheetHandle(),
             const Text('Trip Settings',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+            // Say what this sheet actually starts. The rider arrived here from
+            // "Start Trip" on the commute guide, so the destination and the
+            // fact that the GUIDE is what runs must be the first thing read —
+            // the three controls below are all alarm options, and leading with
+            // them made an optional add-on look like the subject of the screen.
+            const SizedBox(height: 4),
+            Text(
+                'Monitoring to ${trip.destinationLabel.split(',').first}. '
+                'Your step-by-step guide runs for the whole trip.',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 12, color: NavAlertColors.textSecondary)),
             const SizedBox(height: 14),
+            // The optional add-on comes FIRST among the alarm controls, because
+            // the two below it only mean anything once it is on.
             Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: DropdownButtonHideUnderline(
+              child: SwitchListTile(
+                secondary: Icon(
+                    alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
+                    color: NavAlertColors.accent),
+                title: const Text('Destination alarm'),
+                subtitle: Text(
+                    alarmEnabled
+                        ? 'You will be woken as you approach your stop.'
+                        : 'Optional — off. You can turn it on any time '
+                            'during the trip.',
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+                value: alarmEnabled,
+                onChanged: (v) => setSheet(() => alarmEnabled = v),
+              ),
+            ),
+            Card(
+              child: ListTile(
+                leading: Icon(Icons.music_note,
+                    color: alarmEnabled
+                        ? NavAlertColors.accent
+                        : NavAlertColors.textSecondary),
+                title: const Text('Alarm sound',
+                    style: TextStyle(fontSize: 13)),
+                trailing: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
-                    isExpanded: true,
                     // Guard the value like Settings does: a non-catalog sound
                     // (e.g. from an imported backup) must not crash the sheet
                     // with DropdownButton's "value not in items" assertion.
@@ -233,20 +275,34 @@ class _RouteViewState extends State<RouteView> {
                         .map((s) =>
                             DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setSheet(() => sound = v);
-                      SoundService.instance.previewAlarm(v);
-                    },
+                    // Picking a sound for an alarm that is switched off does
+                    // nothing, and previewing one implies the alarm is armed.
+                    // Disabled until the toggle above turns it on.
+                    onChanged: alarmEnabled
+                        ? (v) {
+                            if (v == null) return;
+                            setSheet(() => sound = v);
+                            SoundService.instance.previewAlarm(v);
+                          }
+                        : null,
                   ),
                 ),
               ),
             ),
             Card(
               child: CheckboxListTile(
-                title: const Text('Vibration Only Mode'),
+                secondary: Icon(Icons.vibration,
+                    color: alarmEnabled
+                        ? NavAlertColors.accent
+                        : NavAlertColors.textSecondary),
+                title: const Text('Vibration Only Mode',
+                    style: TextStyle(fontSize: 13)),
+                // Meaningless while the alarm is off — disabled rather than
+                // left tappable so the sheet cannot imply it does something.
                 value: vibrationOnly,
-                onChanged: (v) => setSheet(() => vibrationOnly = v ?? false),
+                onChanged: alarmEnabled
+                    ? (v) => setSheet(() => vibrationOnly = v ?? false)
+                    : null,
               ),
             ),
             const SizedBox(height: 12),
@@ -277,7 +333,8 @@ class _RouteViewState extends State<RouteView> {
                   // .startTrip() persists it (keeps the DB out of the View).
                   trip
                     ..alarmSound = sound
-                    ..vibrationOnlyMode = vibrationOnly;
+                    ..vibrationOnlyMode = vibrationOnly
+                    ..alarmEnabled = alarmEnabled;
                   Navigator.of(ctx).pop();
                   // A failure inside startTrip (the trip write, the GPS stream,
                   // the foreground service) must SAY so and re-arm the button.
@@ -339,9 +396,17 @@ class _RouteViewState extends State<RouteView> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: [
+                  // Figures 21/22 draw the two endpoints as ONE connected stop
+                  // rail — a filled origin dot joined by a short vertical line
+                  // down to the destination dot — not two unrelated rows split
+                  // by a divider. The two glyphs are different sizes, so each
+                  // sits centred in a shared 16 dp gutter; without that they
+                  // did not even line up with each other. The divider moves
+                  // BELOW the destination, where the mockup rules off the whole
+                  // from→to block before the Mode chip.
                   Row(children: [
-                    const Icon(Icons.circle,
-                        size: 10, color: NavAlertColors.accent),
+                    _railGutter(const Icon(Icons.circle,
+                        size: 10, color: NavAlertColors.accent)),
                     const SizedBox(width: 10),
                     Expanded(
                       // Google-Maps style: primary name only, one line.
@@ -356,11 +421,16 @@ class _RouteViewState extends State<RouteView> {
                           style: const TextStyle(fontSize: 13)),
                     ),
                   ]),
-                  const Divider(height: 16),
+                  // Wrapped in a Row so the connector hugs the left gutter —
+                  // the enclosing Column centres its children by default.
                   Row(children: [
-                    const Icon(Icons.location_on,
-                        size: 14, color: NavAlertColors.warning),
-                    const SizedBox(width: 8),
+                    _railGutter(Container(
+                        width: 2, height: 16, color: NavAlertColors.surface)),
+                  ]),
+                  Row(children: [
+                    _railGutter(const Icon(Icons.location_on,
+                        size: 14, color: NavAlertColors.warning)),
+                    const SizedBox(width: 10),
                     Expanded(
                         child: Text(dest.name,
                             maxLines: 1, overflow: TextOverflow.ellipsis)),
@@ -370,6 +440,7 @@ class _RouteViewState extends State<RouteView> {
                       onPressed: _toggleFavorite,
                     ),
                   ]),
+                  const Divider(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: ActionChip(
@@ -607,14 +678,50 @@ class _RouteViewState extends State<RouteView> {
       return const SizedBox.shrink();
     }
     final estimate = home.suggestionsAreEstimates;
+    // Figure 22 — the guide header is flanked by ‹ › chevrons that page
+    // between the suggested routes WITHOUT leaving the guide, so the rider can
+    // compare "Option A" and "Option B" step by step. The guide is the primary
+    // feature; dismissing it is the separate "Close" button below.
+    final index = home.suggestions
+        .indexWhere((x) => x.suggestionId == s.suggestionId);
+    final hasPrev = index > 0;
+    final hasNext = index >= 0 && index < home.suggestions.length - 1;
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         IconButton(
             icon: const Icon(Icons.chevron_left),
-            onPressed: () => setState(() => _showGuide = false)),
-        const Text('Step-by-Step Commute Guide',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+            tooltip: 'Previous route',
+            // DO NOT MODIFY LOGIC: paging re-selects the suggestion, which is
+            // what feeds the fare, the map polyline and the live guide legs.
+            // Keep the home.selectSuggestion call.
+            onPressed: hasPrev
+                ? () => home.selectSuggestion(home.suggestions[index - 1])
+                : null),
+        const Flexible(
+          child: Text('Step-by-Step Commute Guide',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w700)),
+        ),
+        IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next route',
+            onPressed: hasNext
+                ? () => home.selectSuggestion(home.suggestions[index + 1])
+                : null),
       ]),
+      // Which of the suggested routes this guide belongs to — the mockup pages
+      // between two options, so the rider must be able to tell them apart.
+      if (home.suggestions.length > 1 && index >= 0)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+              'Route ${index + 1} of ${home.suggestions.length}  ·  '
+              '${s.routeLabel}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 11, color: NavAlertColors.textSecondary)),
+        ),
       // No direct GTFS route was matched — the boarding points below are
       // approximate, so label the whole guide as an estimate to avoid sending
       // the rider looking for a specific named terminal that isn't real data.
@@ -651,64 +758,94 @@ class _RouteViewState extends State<RouteView> {
             final isRide = step.transportMode != 'walk' &&
                 step.fromStop != null &&
                 step.fromStop!.isNotEmpty;
+            // Figures 22 / Pages 15-16 lay every step out the same way: a
+            // round mode badge on the left, the instruction block in the
+            // middle, and the fare + travel time stacked at the TOP RIGHT —
+            // fare as a pill, time behind a small clock glyph. Both used to be
+            // one grey run-on line at the bottom of the subtitle, so the two
+            // figures a rider actually compares routes on were the least
+            // legible thing on the card. A ride leg then rules off its title
+            // block and lists the boarding/alighting stops beneath it.
             return Card(
-              child: ListTile(
-                dense: true,
-                leading: Icon(_modeIcon(step.transportMode),
-                    color: NavAlertColors.accent),
-                title: isRide
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Prominent boarding terminal.
-                          Row(children: [
-                            const Icon(Icons.directions_bus_filled,
-                                size: 14, color: NavAlertColors.accent),
-                            const SizedBox(width: 5),
-                            Expanded(
-                              child: Text('Board at ${step.fromStop}',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                          ]),
-                          const SizedBox(height: 2),
-                          Text(step.instruction,
-                              style: const TextStyle(
-                                  fontSize: 12,
-                                  color: NavAlertColors.textSecondary)),
-                        ],
-                      )
-                    : Text(step.instruction,
-                        style: const TextStyle(fontSize: 13)),
-                subtitle: Column(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (var j = 0; j < stops.length; j++)
-                      Row(children: [
-                        Icon(j == 0 ? Icons.circle : Icons.location_on,
-                            size: 9,
-                            color: j == 0
-                                ? NavAlertColors.accent
-                                : NavAlertColors.warning),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(stops[j],
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  color: NavAlertColors.textSecondary)),
-                        ),
-                      ]),
-                    Text(
-                        '${step.durationMinutes.toStringAsFixed(0)} min'
-                        '${step.farePhp > 0 ? '  ·  ₱${step.farePhp.toStringAsFixed(2)}' : ''}',
-                        style: const TextStyle(
-                            fontSize: 11,
-                            color: NavAlertColors.textSecondary)),
+                    _modeBadge(step.transportMode),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: isRide
+                                    ? Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          // Prominent boarding terminal.
+                                          Text('Board at ${step.fromStop}',
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight:
+                                                      FontWeight.w700)),
+                                          const SizedBox(height: 2),
+                                          Text(step.instruction,
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color: NavAlertColors
+                                                      .textSecondary)),
+                                        ],
+                                      )
+                                    // A walk leg has no fare, so the mockup
+                                    // gives it no right-hand pill at all —
+                                    // just the instruction with its minutes
+                                    // tucked underneath.
+                                    : Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(step.instruction,
+                                              style: const TextStyle(
+                                                  fontSize: 14,
+                                                  fontWeight:
+                                                      FontWeight.w600)),
+                                          if (step.durationMinutes > 0)
+                                            Text(
+                                                '${step.durationMinutes.toStringAsFixed(0)} min',
+                                                style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: NavAlertColors
+                                                        .textSecondary)),
+                                        ],
+                                      ),
+                              ),
+                              // A ride leg always keeps its right-hand cluster,
+                              // even in the defensive case of a zero fare —
+                              // otherwise the leg would lose its travel time
+                              // too, since the walk branch above is what
+                              // normally carries it.
+                              if (step.farePhp > 0 ||
+                                  (isRide && step.durationMinutes > 0)) ...[
+                                const SizedBox(width: 8),
+                                _fareAndTime(
+                                    step.farePhp, step.durationMinutes),
+                              ],
+                            ],
+                          ),
+                          if (stops.isNotEmpty) ...[
+                            const Divider(height: 14),
+                            _stopRail(stops),
+                          ],
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -716,28 +853,164 @@ class _RouteViewState extends State<RouteView> {
           },
         ),
       ),
-      const SizedBox(height: 8),
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        OutlinedButton(
+      const SizedBox(height: 10),
+      // ── Figure 22 footer ────────────────────────────────────────────────
+      // THE COMMUTE GUIDE IS THE PRIMARY FEATURE; the alarm is an optional
+      // add-on (Chapter 3, UC-4 alt-flow B "Commute Guide Only"). These two
+      // buttons are therefore equal-weight siblings, not one forced action:
+      //   Close      — outlined. Dismisses the sheet and lets the rider
+      //                navigate on their own using the steps above.
+      //   Start Trip — solid pill. Opens Trip Settings and begins MONITORING.
+      // Do not collapse this back into a single button.
+      //
+      // This button used to read "Enable Alarm", which misnamed the whole
+      // product: it made the alarm look like the thing you were starting, and
+      // a rider who only wanted the step-by-step guide had to press a button
+      // promising an alarm they did not want. What the tap actually begins is
+      // trip MONITORING, which is what carries the live guide; the destination
+      // alarm is one optional switch inside the sheet it opens, and it is off
+      // by default. Name the trip, not the add-on.
+      Row(children: [
+        Expanded(
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14)),
             onPressed: () => setState(() => _showGuide = false),
-            child: const Text('Close')),
+            child: const Text('Close'),
+          ),
+        ),
         const SizedBox(width: 12),
-        ElevatedButton(
-            onPressed: _openTripSettings, child: const Text('Enable Alarm')),
+        Expanded(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14)),
+            onPressed: _openTripSettings,
+            child: const Text('Start Trip'),
+          ),
+        ),
       ]),
     ]);
   }
 
-  IconData _modeIcon(String mode) => switch (mode) {
+  /// Centres a rail glyph in a fixed 16 dp gutter so the origin dot, the
+  /// connector line and the destination pin all share one vertical axis
+  /// despite being different sizes.
+  static Widget _railGutter(Widget child) =>
+      SizedBox(width: 16, child: Center(child: child));
+
+  /// The round mode badge every step in Pages 15/16 leads with. The mockup
+  /// draws a full vehicle illustration for ride legs; the app has no such
+  /// artwork, so the existing Material mode glyph is used inside the same
+  /// circular plate — layout from the mockup, iconography already in the app.
+  static Widget _modeBadge(String mode) => Container(
+        width: 36,
+        height: 36,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: NavAlertColors.surface,
+        ),
+        child: Icon(_modeIconFor(mode), size: 18, color: NavAlertColors.accent),
+      );
+
+  static IconData _modeIconFor(String mode) => switch (mode) {
         'walk' => Icons.directions_walk,
         'bus' => Icons.directions_bus,
         'uv_express' => Icons.airport_shuttle,
         _ => Icons.directions_transit,
       };
 
+  /// Fare pill over a clock-glyph travel time — the top-right cluster on every
+  /// ride card in Pages 15/16. These are the two numbers a rider compares
+  /// routes on, so they are the only thing on the card set apart from the copy.
+  static Widget _fareAndTime(double farePhp, double minutes) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (farePhp > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                // Existing brand purple at low alpha — the same tint the live
+                // guide sheet already uses to mark its current leg.
+                color: NavAlertColors.primary.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('₱${farePhp.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+          if (minutes > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.schedule,
+                    size: 11, color: NavAlertColors.textSecondary),
+                const SizedBox(width: 3),
+                Text('${minutes.toStringAsFixed(0)} min',
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+              ]),
+            ),
+        ],
+      );
+
+  /// Board → alight rail: a filled dot for the boarding terminal, a hollow
+  /// ring for the drop-off, joined by the same connector line as the from→to
+  /// header above. The alight stop used to reuse the header's map pin, which
+  /// read as a second destination rather than the end of this one leg.
+  static Widget _stopRail(List<String> stops) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var j = 0; j < stops.length; j++) ...[
+            Row(children: [
+              _railGutter(Icon(
+                  j == 0 ? Icons.circle : Icons.radio_button_unchecked,
+                  size: 8,
+                  color: j == 0
+                      ? NavAlertColors.accent
+                      : NavAlertColors.warning)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(stops[j],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 11, color: NavAlertColors.textSecondary)),
+              ),
+            ]),
+            if (j < stops.length - 1)
+              Row(children: [
+                _railGutter(Container(
+                    width: 1.5,
+                    height: 10,
+                    color: NavAlertColors.textSecondary
+                        .withValues(alpha: 0.55))),
+              ]),
+          ],
+        ],
+      );
+
   String _fmtDuration(double minutes) {
     final m = minutes.round();
     if (m < 60) return '$m min';
     return '${m ~/ 60} hr ${m % 60} min';
   }
+}
+
+/// The grab bar every bottom sheet in the mockups is topped with (Mode
+/// Priority Page 13, Trip Settings Page 13). Both sheets are draggable, and
+/// without it nothing on screen said so. Same 44x4 bar the live commute-guide
+/// sheet already uses, so the two read as one component.
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 44,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: NavAlertColors.textSecondary,
+          borderRadius: BorderRadius.circular(2),
+        ),
+      );
 }

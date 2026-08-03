@@ -227,7 +227,45 @@ class _SearchViewState extends State<SearchView> {
               // output (NCR-bounded). Restyle each ListTile freely, but keep
               // the builder over vm.results and the onTap → _select(r), which
               // sets the destination and kicks off route planning.
-              child: ListView.builder(
+              // The results area had no empty state at all: before the first
+              // search — which is how this screen always opens — it was simply
+              // a blank slab under the search field, with nothing to say the
+              // app was waiting on input rather than having failed. Same
+              // pre-search prompt the Add-Favorite search already carries, so
+              // the two search screens behave alike.
+              //
+              // Deliberately NOT a "nothing matched" message: the query is not
+              // even sent until 3 characters, and a real no-match is reported
+              // through vm.searchError above — keying off an empty list would
+              // tell a rider who has typed "SM" that their search found
+              // nothing when no search had run yet.
+              child: vm.results.isEmpty &&
+                      !vm.searching &&
+                      vm.searchError == null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.search,
+                                size: 48,
+                                color: NavAlertColors.textSecondary),
+                            SizedBox(height: 12),
+                            Text(
+                              'Search for where you are headed, or drop a pin '
+                              'on the map above.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                  color: NavAlertColors.textSecondary,
+                                  fontSize: 13,
+                                  height: 1.4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
                 itemCount: vm.results.length,
                 itemBuilder: (_, i) {
                   final r = vm.results[i];

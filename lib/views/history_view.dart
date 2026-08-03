@@ -89,8 +89,9 @@ class _HistoryViewState extends State<HistoryView> {
             Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: InputChip(
-                label: Text(
-                    'On ${vm.dateFilter!.toLocal().toString().substring(0, 10)}'),
+                // Same long-form date as the cards below it — the raw ISO
+                // "2026-04-20" read like debug output beside "April 20, 2026".
+                label: Text('On ${_longDate(vm.dateFilter)}'),
                 onDeleted: () => vm.setDateFilter(null),
               ),
             ),
@@ -137,6 +138,21 @@ class _HistoryViewState extends State<HistoryView> {
     );
   }
 
+  /// "April 20, 2026" — the long-form date shown beside the calendar glyph on
+  /// each history card in Figure 30. The previous `toLocal().substring(0, 16)`
+  /// rendered the raw ISO form ("2026-04-20 12:00"), which duplicated the
+  /// departure time already printed above and read like debug output.
+  static const _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  static String _longDate(DateTime? d) {
+    if (d == null) return '—';
+    final l = d.toLocal();
+    return '${_months[l.month - 1]} ${l.day}, ${l.year}';
+  }
+
   /// Google-Maps-style short place name: the first two comma components of a
   /// full Nominatim address ("University Avenue (PUP), 508" instead of the
   /// five-line province-and-postcode string). Same convention as the origin
@@ -154,20 +170,23 @@ class _HistoryViewState extends State<HistoryView> {
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
+          // Figure 30 sets the place name in bold and drops the bracketed time
+          // to a smaller muted line under it. Both used to be one 12 px block
+          // split by a newline, so "PUP, Sta. Mesa" and "(Departure: 12:00 PM)"
+          // carried identical weight and the card had no entry point for the
+          // eye — the place is what a rider scans the list for.
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Icon(Icons.home, size: 18, color: NavAlertColors.accent),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(
-                    '${_shortPlace(t.originLabel)}\n(Departure: ${time(t.startedAt)})',
-                    style: const TextStyle(fontSize: 12))),
+                child: _endpoint(_shortPlace(t.originLabel),
+                    'Departure: ${time(t.startedAt)}')),
             const Icon(Icons.location_on,
                 size: 18, color: NavAlertColors.warning),
             const SizedBox(width: 6),
             Expanded(
-                child: Text(
-                    '${_shortPlace(t.destinationLabel)}\n(Arrival: ${time(t.endedAt)})',
-                    style: const TextStyle(fontSize: 12))),
+                child: _endpoint(_shortPlace(t.destinationLabel),
+                    'Arrival: ${time(t.endedAt)}')),
           ]),
           const SizedBox(height: 8),
           Wrap(spacing: 6, children: [
@@ -186,10 +205,7 @@ class _HistoryViewState extends State<HistoryView> {
             const Icon(Icons.calendar_month,
                 size: 14, color: NavAlertColors.textSecondary),
             const SizedBox(width: 4),
-            Text(
-                t.startedAt == null
-                    ? '—'
-                    : '${t.startedAt!.toLocal()}'.substring(0, 16),
+            Text(_longDate(t.startedAt),
                 style: const TextStyle(
                     fontSize: 11, color: NavAlertColors.textSecondary)),
             const Spacer(),
@@ -251,6 +267,21 @@ class _HistoryViewState extends State<HistoryView> {
           content: Text('Could not delete — storage is unavailable.')));
     }
   }
+
+  /// One end of a trip: the place in bold over its bracketed time, muted.
+  static Widget _endpoint(String place, String time) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(place,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w700, height: 1.2)),
+          Text('($time)',
+              style: const TextStyle(
+                  fontSize: 11, color: NavAlertColors.textSecondary)),
+        ],
+      );
 
   Widget _chip(String text, Color color) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
