@@ -442,13 +442,20 @@ void main() {
       expectNoRenderErrors(t, 'Commute Guide');
 
       // ── Trip settings sheet → start ──────────────────────────────────
-      await t.tap(find.text('Enable Alarm'), warnIfMissed: false);
+      // The guide's primary action is "Start Trip", not "Enable Alarm": the
+      // commute guide is the feature being started, and the destination alarm
+      // is one optional switch inside the sheet this opens (off by default).
+      await t.tap(find.text('Start Trip'), warnIfMissed: false);
       final sheet = await waitFor(t, find.text('Trip Settings'),
           timeout: const Duration(seconds: 8));
       expect(sheet, isTrue, reason: 'Trip Settings sheet did not open');
       expectNoRenderErrors(t, 'Trip Settings');
 
-      await t.tap(find.text('Start Trip'), warnIfMissed: false);
+      // Both the guide footer and the sheet's confirm button now read "Start
+      // Trip", and the guide is still mounted behind the modal — so a bare
+      // find.text would match two widgets and throw. The sheet's route is
+      // pushed last, so its button is the last match in the tree.
+      await t.tap(find.text('Start Trip').last, warnIfMissed: false);
 
       // ── Monitoring screen ────────────────────────────────────────────
       final started = await waitFor(t, find.text('Slide to Stop'),
