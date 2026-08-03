@@ -73,6 +73,12 @@ comment naming exactly what it protects and what breaks without it. There are
 
 - ❌ Unwrap or delete a `PopScope` — the Back button then silently cancels a
   live trip or an emergency sequence.
+  *(Not a violation: the Active Trip screen's own back arrow. `PopScope`
+  intercepts the **system** back gesture only, never a programmatic
+  `Navigator.pop()` — which is why Slide-to-Stop and the summary buttons have
+  always closed that route. The arrow is one more of those deliberate exits and
+  it leaves the trip **running**; monitoring lives in `TripViewModel`, and the
+  shell's "View Active Trip" pill comes back to it.)*
 - ❌ Replace `onPressed: <flag> ? null : ...` with a plain handler — that is the
   debouncer; removing it lets a panicking rider send duplicate SOS texts
   (which costs them real prepaid load) and stack fake-call screens.
