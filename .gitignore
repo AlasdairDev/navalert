@@ -30,6 +30,12 @@ DoThistxt
 AutomationTools/
 repair_build.ps1
 
+# Chapter 3 GUI mockups (~15 MB of PNGs). Design reference the UI was built
+# against, kept locally but deliberately NOT pushed — they are artwork, not
+# source, and would bloat every clone. The screens they specify are documented
+# per-file in the `UI/UX MAP` header comments in lib/views/.
+GUI NavAlert/
+
 
 # Flutter/Dart/Pub related
 **/doc/api/
