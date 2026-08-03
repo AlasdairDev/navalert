@@ -21,7 +21,9 @@ import 'search_view.dart';
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] FlutterMap + TileLayer (OSM tiles, paper API) · locate FAB's
 ///         onPressed refreshCurrentLocation() · search bar's onTap →
-///         SearchView · the incomplete-setup MaterialBanner logic.
+///         SearchView · the incomplete-setup MaterialBanner logic ·
+///         vm.startLiveTracking() (R2 — what makes the current-location dot
+///         follow the rider rather than sit on the boot-time fix).
 ///  [EDIT] greeting text/logic (_greeting), "Where are you headed?" copy,
 ///         search-bar pill shape/color, marker dot style/size, FAB icon,
 ///         header card blur/rounding, all paddings.
@@ -94,6 +96,16 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
       if (mounted && vm.currentLat != null) {
         _mover.animateTo(LatLng(vm.currentLat!, vm.currentLng!), 16);
       }
+      // R2 — from here the dot FOLLOWS the rider instead of staying pinned to
+      // the boot-time snapshot. Started after the bootstrap above so the first
+      // paint still comes from the fast two-stage fix.
+      //
+      // Deliberately does NOT recentre the map: only the marker moves. The
+      // camera is the rider's to control — panning away to look at a street and
+      // being yanked back on the next GPS tick would make the map unusable, and
+      // the locate button already exists for "take me back to me". Started even
+      // if the bootstrap fix failed, because the stream can deliver one later.
+      if (mounted) vm.startLiveTracking();
     });
   }
 

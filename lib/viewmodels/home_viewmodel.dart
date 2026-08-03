@@ -15,11 +15,23 @@ import '../services/route_path_service.dart';
 /// Home / destination-search / commute-guide ViewModel
 /// (Use Case UC-4 — Search & Set Destination and View Commute Guide).
 class HomeViewModel extends ChangeNotifier {
+  HomeViewModel({
+    Stream<Position> Function(LocationSettings settings)? positionStreamFactory,
+  }) : _positionStreamFactory = positionStreamFactory;
+
   final _geocoder = GeocodingService();
   final _routeEngine = RouteEngine();
   final _routePath = RoutePathService();
   final _db = DatabaseService.instance;
   static const _uuid = Uuid();
+
+  /// Null in production, so live tracking uses the real
+  /// `Geolocator.getPositionStream`. A test supplies a mock stream to drive the
+  /// dot deterministically — same injection seam as [TripViewModel].
+  final Stream<Position> Function(LocationSettings settings)?
+      _positionStreamFactory;
+
+  StreamSubscription<Position>? _liveSub;
 
   // DO NOT MODIFY LOGIC: almost everything here is a long async round trip —
   // a GPS fix, a Nominatim lookup, the routing isolate — and each one calls
@@ -33,6 +45,12 @@ class HomeViewModel extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    // Without this the GPS stream keeps delivering fixes into a dead
+    // ChangeNotifier — the same "used after being disposed" fault the guard
+    // above exists for, except it would repeat for the life of the process and
+    // hold the location hardware awake with it.
+    _liveSub?.cancel();
+    _liveSub = null;
     super.dispose();
   }
 
@@ -173,6 +191,110 @@ class HomeViewModel extends ChangeNotifier {
       }
     }
     notifyListeners();
+    _reverseLookup();
+  }
+
+  // ─── R2 / UC-4: live location tracking ────────────────────────────────────
+  // [refreshCurrentLocation] above takes a SNAPSHOT. That is the right shape
+  // for the two moments it serves — the first-frame bootstrap and the locate
+  // button — but it was the only thing that ever wrote currentLat/currentLng,
+  // so the "you are here" dot was pinned to wherever the rider stood when the
+  // app booted and never moved again. On the screen whose whole job is showing
+  // them where they are, the marker went stale the moment they started walking.
+  //
+  // The stream below is what makes it follow them. It is deliberately gentler
+  // than the one TripViewModel runs: this is a browsing screen, not an armed
+  // trip, so it asks for `high` rather than `bestForNavigation`, filters out
+  // sub-5-metre jitter, and requests no foreground-service notification or
+  // wake lock. Trip monitoring keeps its own stream and its own settings —
+  // nothing here touches the alarm path.
+
+  /// Metres the rider must move before the reverse-geocoded street address is
+  /// looked up again. Without a gate the address would be re-resolved on every
+  /// fix, hammering Nominatim several times a second for a label that only
+  /// changes street to street.
+  static const double addressRefreshMetres = 200;
+
+  double? _lastGeocodedLat;
+  double? _lastGeocodedLng;
+
+  /// True while the blue dot is following a live GPS stream.
+  bool get isTrackingLive => _liveSub != null;
+
+  /// Begins moving the map's current-location marker with the device.
+  ///
+  /// Safe to call repeatedly — a second subscription would double every tick
+  /// and leak on dispose, so an existing one short-circuits.
+  void startLiveTracking() {
+    if (_liveSub != null) return;
+    const settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+    );
+    final factory = _positionStreamFactory;
+    final stream = factory != null
+        ? factory(settings)
+        : Geolocator.getPositionStream(
+            locationSettings: _liveSettings() ?? settings);
+    _liveSub = stream.listen(
+      _onLiveFix,
+      // Losing signal must not blank the map or crash the tab. The last real
+      // position stays painted — it is still the best answer available — and
+      // the subscription stays open so the dot resumes when GPS returns.
+      onError: (e) => debugPrint('NavAlert: live location stream error — $e'),
+      cancelOnError: false,
+    );
+  }
+
+  /// Detaches the stream and releases the location hardware.
+  Future<void> stopLiveTracking() async {
+    final sub = _liveSub;
+    _liveSub = null;
+    await sub?.cancel();
+  }
+
+  /// Android wants an explicit interval; elsewhere the plain settings apply.
+  /// No ForegroundNotificationConfig and no wake lock — unlike trip monitoring
+  /// this must not keep the device awake or post a persistent notification just
+  /// because the rider has Home open.
+  LocationSettings? _liveSettings() {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+    return AndroidSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 5,
+      intervalDuration: const Duration(seconds: 2),
+    );
+  }
+
+  void _onLiveFix(Position pos) {
+    currentLat = pos.latitude;
+    currentLng = pos.longitude;
+    // A measured fix has arrived, so the map is no longer showing a guess and
+    // the "using your last known location" banner must come down. Leaving the
+    // flag set would also keep search results from being ranked by distance —
+    // `search()` deliberately passes null coordinates while it is true.
+    locationIsFallback = false;
+    locationError = null;
+    notifyListeners();
+    _refreshAddressIfMoved();
+  }
+
+  /// Re-resolves the street address only once the rider has actually travelled
+  /// [addressRefreshMetres], so a live stream cannot turn into a geocoder flood.
+  void _refreshAddressIfMoved() {
+    final lat = currentLat;
+    final lng = currentLng;
+    if (lat == null || lng == null) return;
+    final lastLat = _lastGeocodedLat;
+    final lastLng = _lastGeocodedLng;
+    if (lastLat != null &&
+        lastLng != null &&
+        Geolocator.distanceBetween(lastLat, lastLng, lat, lng) <
+            addressRefreshMetres) {
+      return;
+    }
+    _lastGeocodedLat = lat;
+    _lastGeocodedLng = lng;
     _reverseLookup();
   }
 
