@@ -88,6 +88,19 @@ class TripViewModel extends ChangeNotifier {
 
   bool get isActive => phase != TripPhase.ended;
 
+  /// The rider's last real GPS fix, for the live trip map's blue dot and its
+  /// follow-camera. Read-only views onto the coordinates `_onFix` was already
+  /// recording to stamp alarm and overshoot rows — nothing new is tracked here.
+  ///
+  /// NULL until a fix has actually landed, deliberately. Falling back to the
+  /// trip's ORIGIN would be the tempting shortcut, but that is a planning
+  /// coordinate which may be minutes stale, and a map cannot distinguish it
+  /// from a working fix: it would draw "you are here" over a place the rider
+  /// has left. Same rule HomeView follows — a missing dot is honest, a
+  /// confident wrong dot is not.
+  double? get currentLat => _lastLat;
+  double? get currentLng => _lastLng;
+
   /// Live commute guide for this trip (empty when none was supplied, e.g. a
   /// favourites shortcut). Memory-only — see [GuideLeg].
   GuideProgress guide = GuideProgress(const []);

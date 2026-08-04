@@ -1,0 +1,308 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:navalert/core/theme.dart';
+import 'package:navalert/models/guide_leg.dart';
+import 'package:navalert/models/models.dart';
+import 'package:navalert/services/database_service.dart';
+import 'package:navalert/services/guide_progress.dart';
+import 'package:navalert/services/home_widget_service.dart';
+import 'package:navalert/services/sound_service.dart';
+import 'package:navalert/services/trip_notification_service.dart';
+import 'package:navalert/viewmodels/app_viewmodel.dart';
+import 'package:navalert/viewmodels/emergency_viewmodel.dart';
+import 'package:navalert/viewmodels/home_viewmodel.dart';
+import 'package:navalert/viewmodels/trip_viewmodel.dart';
+import 'package:navalert/views/active_trip_view.dart';
+import 'package:navalert/views/commute_guide_sheet.dart';
+import 'package:provider/provider.dart';
+
+/// The commute guide must LAYER over the live map, not replace it.
+///
+/// commute_sheet_layout_test proves the arithmetic; this suite proves the
+/// arithmetic is actually wired to the screen — that the map is really mounted
+/// underneath, that the sheet really rests where the geometry says, and that the
+/// safety controls really are outside its reach. Those are three different
+/// failures (a correct calculation fed to nothing looks identical to a broken
+/// one from the outside), so they are checked against the mounted widget tree
+/// rather than the numbers.
+///
+/// EXPECTED CONSOLE NOISE: this suite mounts the REAL map, so the real
+/// `CachedTileProvider` runs, and flutter_test's HttpClient answers every
+/// request with 400 — one `DioException [bad response]` per tile. That output
+/// is the tile layer failing to reach the network in a sandbox, not a failing
+/// assertion, and it is worth keeping: it is the proof that the shared
+/// NavAlertMap.tiles / TileCacheStore path is genuinely wired into this screen
+/// rather than stubbed out for the test.
+void main() {
+  const screenW = 360.0;
+  const screenH = 800.0;
+
+  Trip buildTrip() => Trip(
+        tripId: 'trip-overlay',
+        originLabel: 'PUP Sta. Mesa',
+        originLat: 14.5979,
+        originLng: 121.0108,
+        destinationLabel: 'SM North EDSA',
+        destinationLat: 14.6560,
+        destinationLng: 121.0300,
+        alarmSound: 'Digital Clock',
+        // The guide-first layout is the alarm-OFF case: the rider is using
+        // NavAlert to navigate, not as an alarm clock.
+        alarmEnabled: false,
+      );
+
+  List<GuideLeg> buildLegs() => [
+        for (var i = 1; i <= 4; i++)
+          GuideLeg(
+            step: RouteStep(
+              stepId: 'step-$i',
+              suggestionId: 'sug',
+              stepNumber: i,
+              transportMode: i.isEven ? 'bus' : 'walk',
+              instruction: 'Guide step number $i',
+              fromStop: i.isEven ? 'Terminal $i' : null,
+              durationMinutes: 10,
+              farePhp: i.isEven ? 15 : 0,
+            ),
+            endLat: 14.60 + i / 100,
+            endLng: 121.02,
+          ),
+      ];
+
+  late TripViewModel trip;
+
+  setUp(() {
+    // The monitoring STATE is assembled directly rather than by calling
+    // startTrip. This is a layout suite: it needs the screen the rider sees,
+    // not the machinery behind it — and startTrip additionally arms the 15 s
+    // Signal Lost watchdog, which flutter_test flags as a pending timer at the
+    // end of every test (that check runs before tearDown, so it cannot be
+    // cleaned up afterwards). trip_flow_test already drives the real
+    // startTrip path end to end.
+    trip = TripViewModel(
+      db: _FakeDb(),
+      sound: _FakeSound(),
+      lockWidget: _FakeLockWidget(),
+      homeWidget: _FakeHomeWidget(),
+    )
+      ..trip = buildTrip()
+      ..phase = TripPhase.monitoring
+      ..guide = GuideProgress(buildLegs())
+      ..distanceM = 4200
+      ..speedKmh = 18
+      ..etaMinutes = 14;
+  });
+
+  tearDown(() => trip.dispose());
+
+  Future<void> pumpGuide(WidgetTester t) async {
+    t.view.physicalSize = const Size(screenW, screenH);
+    t.view.devicePixelRatio = 1.0;
+    addTearDown(t.view.reset);
+
+    await t.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<TripViewModel>.value(value: trip),
+        ChangeNotifierProvider(create: (_) => HomeViewModel()),
+        ChangeNotifierProvider(create: (_) => AppViewModel()),
+        ChangeNotifierProvider(create: (_) => EmergencyViewModel()),
+      ],
+      child: MaterialApp(
+        theme: buildNavAlertTheme(),
+        home: const ActiveTripView(),
+      ),
+    ));
+    // Two settles: the footer is MEASURED, so the sheet only appears on the
+    // frame after its height is known.
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 400));
+  }
+
+  /// The sheet's top edge in screen coordinates.
+  double sheetTop(WidgetTester t) =>
+      t.getTopLeft(find.byType(DraggableScrollableSheet).last).dy;
+
+  /// The visible top edge of the sheet's own plate, which is what actually
+  /// covers the map — DraggableScrollableSheet itself fills the whole region.
+  double plateTop(WidgetTester t) => t
+      .getTopLeft(find.descendant(
+        of: find.byType(DraggableScrollableSheet),
+        matching: find.byType(CommuteGuideSheet),
+      ))
+      .dy;
+
+  testWidgets('the map is mounted underneath the guide', (t) async {
+    await pumpGuide(t);
+
+    // The whole point of the change. Before it, this screen had no map at all.
+    expect(find.byType(FlutterMap), findsOneWidget);
+    // And the guide is on screen at the same time — layered, not swapped.
+    expect(find.byType(CommuteGuideSheet), findsOneWidget);
+    expect(find.text('Guide step number 1'), findsOneWidget);
+  });
+
+  testWidgets('the map fills the screen behind the overlay', (t) async {
+    await pumpGuide(t);
+
+    final map = t.getRect(find.byType(FlutterMap));
+    expect(map.width, closeTo(screenW, 0.5));
+    expect(map.height, closeTo(screenH, 0.5),
+        reason: 'the map must be full-bleed behind the header and footer '
+            'plates, not letterboxed into the gap between them');
+  });
+
+  testWidgets('at rest the sheet leaves the top half of the map visible',
+      (t) async {
+    await pumpGuide(t);
+
+    expect(plateTop(t), greaterThanOrEqualTo(screenH * 0.5),
+        reason: 'the resting guide reaches above the halfway line — the map '
+            'is no longer readable at a glance');
+  });
+
+  testWidgets('dragged fully up, the sheet still leaves a top margin',
+      (t) async {
+    await pumpGuide(t);
+
+    await t.drag(find.byType(CommuteGuideSheet), const Offset(0, -screenH));
+    await t.pumpAndSettle();
+
+    final top = plateTop(t);
+    expect(top, greaterThan(0),
+        reason: 'the guide covered the entire screen — map context is 100% '
+            'lost, which is the failure this layout exists to prevent');
+    expect(top, greaterThanOrEqualTo(screenH * 0.15));
+  });
+
+  testWidgets('the sheet can never cover the safety controls', (t) async {
+    await pumpGuide(t);
+
+    final slider = t.getRect(find.text('Slide to Stop'));
+    final sos = t.getRect(find.text('SOS'));
+
+    // Fully extended is the worst case: if the sheet clears the controls here,
+    // it clears them everywhere.
+    await t.drag(find.byType(CommuteGuideSheet), const Offset(0, -screenH));
+    await t.pumpAndSettle();
+
+    final sheetBottom = t
+        .getRect(find.descendant(
+          of: find.byType(DraggableScrollableSheet),
+          matching: find.byType(CommuteGuideSheet),
+        ))
+        .bottom;
+
+    expect(sheetBottom, lessThanOrEqualTo(slider.top),
+        reason: 'the guide sits on Slide-to-Stop — the only control that ends '
+            'a trip, on a screen where Back is blocked by design');
+    expect(sheetBottom, lessThanOrEqualTo(sos.top),
+        reason: 'the guide sits on the SOS button');
+  });
+
+  testWidgets('the safety controls stay on screen at every drag height',
+      (t) async {
+    await pumpGuide(t);
+
+    for (final drag in [0.0, -300.0, -screenH, 300.0]) {
+      if (drag != 0) {
+        await t.drag(find.byType(CommuteGuideSheet), Offset(0, drag));
+        await t.pumpAndSettle();
+      }
+      expect(find.text('Slide to Stop'), findsOneWidget);
+      expect(find.text('SOS'), findsOneWidget);
+      expect(find.text('Fake Call'), findsOneWidget);
+    }
+  });
+
+  testWidgets('the trip context stays readable above the map', (t) async {
+    await pumpGuide(t);
+
+    // The header replaces the moon badge as the "where am I" anchor, and the
+    // readouts stay honest about distance even though the map now carries the
+    // navigation.
+    expect(find.text('En Route'), findsOneWidget);
+    expect(find.text('SM North EDSA'), findsOneWidget);
+    expect(find.text('Step 1 of 4'), findsOneWidget);
+    expect(find.textContaining('km away'), findsOneWidget);
+  });
+
+  testWidgets('sheetTop is the full region, so the plate is what covers',
+      (t) async {
+    await pumpGuide(t);
+    // Documents the distinction the assertions above rely on: the
+    // DraggableScrollableSheet widget expands to its whole region, and only its
+    // fractionally-sized child actually obscures the map.
+    expect(sheetTop(t), lessThan(plateTop(t)));
+  });
+
+  testWidgets('the unobstructed map band is the real measure, not the sheet',
+      (t) async {
+    await pumpGuide(t);
+
+    // The header plate covers map too. Checking only the sheet's top edge
+    // would score this layout as "half the map visible" while the top tenth of
+    // it sits under the trip-context header — so the band that is genuinely
+    // free of chrome is measured end to end.
+    final headerBottom = sheetTop(t);
+    final band = plateTop(t) - headerBottom;
+
+    expect(headerBottom, greaterThan(0));
+    expect(band / screenH, greaterThanOrEqualTo(0.35),
+        reason: 'less than a third of the screen is actually usable map at '
+            'rest — the overlay has stopped earning the space it takes');
+  });
+}
+
+// ── Stub collaborators ────────────────────────────────────────────────────
+// Same `implements` + noSuchMethod pattern as trip_flow_test: satisfy the
+// concrete singleton's type while overriding only what TripViewModel calls.
+
+class _FakeDb implements DatabaseService {
+  @override
+  Future<double?> averageAwakeSeconds({int lastN = 10}) async => null;
+  @override
+  Future<void> updateTrip(Trip t) async {}
+  @override
+  Future<void> insertAlarmEvent(AlarmEvent e) async {}
+  @override
+  dynamic noSuchMethod(Invocation i) => null;
+}
+
+class _FakeSound implements SoundService {
+  @override
+  Future<void> playAlarmStage(int stage, String soundName,
+      {bool vibrationOnly = false, bool highIntensity = false}) async {}
+  @override
+  Future<void> stopAll() async {}
+  @override
+  dynamic noSuchMethod(Invocation i) => null;
+}
+
+class _FakeLockWidget implements TripNotificationService {
+  @override
+  VoidCallback? onEndTrip;
+  @override
+  Future<void> showTrip(
+      {required String destination,
+      required double distanceM,
+      double? etaMinutes}) async {}
+  @override
+  Future<void> cancel() async {}
+  @override
+  dynamic noSuchMethod(Invocation i) => null;
+}
+
+class _FakeHomeWidget implements HomeWidgetService {
+  @override
+  Future<void> showTrip(
+      {required String destination,
+      required double distanceM,
+      double? etaMinutes,
+      required String status}) async {}
+  @override
+  Future<void> showIdle() async {}
+  @override
+  dynamic noSuchMethod(Invocation i) => null;
+}
+

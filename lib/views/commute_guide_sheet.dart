@@ -29,10 +29,21 @@ import '../viewmodels/trip_viewmodel.dart';
 ///  [WANT] per-leg ETA countdown, a map preview per leg, haptic tick when a
 ///         leg auto-advances.
 class CommuteGuideSheet extends StatelessWidget {
-  const CommuteGuideSheet({super.key, this.inline = false});
+  const CommuteGuideSheet({super.key, this.inline = false, this.controller});
 
   /// Render as an expanded inline list rather than a draggable bottom sheet.
   final bool inline;
+
+  /// The scroll controller to drive the [inline] list with. Ignored in sheet
+  /// mode, which owns its own.
+  ///
+  /// This is what lets the guide-first layout host these SAME cards inside a
+  /// `DraggableScrollableSheet` over the live map: that sheet hands its builder
+  /// a controller, and a scrollable which ignores it cannot drag the sheet —
+  /// the rider's finger would scroll the steps while the panel stayed put.
+  /// Passing it through keeps one copy of the leg cards rather than forking a
+  /// third variant, which is the whole premise of this file.
+  final ScrollController? controller;
 
   /// Fraction of screen height the sheet occupies when collapsed — just the
   /// drag handle and the step counter.
@@ -80,9 +91,21 @@ class CommuteGuideSheet extends StatelessWidget {
     // the caller has already given this the body of the screen. The step
     // counter moves into the caller's header, so it is not repeated here.
     if (inline) {
+      final hosted = controller != null;
       return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+        controller: controller,
+        // No bottom system inset here: in the guide-first layout this list is
+        // hosted in a sheet that stops ABOVE the safety footer, and the footer's
+        // own SafeArea already spends that inset. Adding it again would pad the
+        // last leg card away from a navigation bar it never reaches.
+        padding: EdgeInsets.fromLTRB(16, hosted ? 8 : 0, 16, 4),
         children: [
+          // Hosted in a draggable sheet over the map: the handle is what tells
+          // the rider the panel moves. It lives INSIDE the scrollable on
+          // purpose — that list is the surface DraggableScrollableSheet turns
+          // into a drag target, so a handle placed outside it would look
+          // draggable and do nothing.
+          if (hosted) _handle(),
           for (var i = 0; i < guide.legs.length; i++)
             _legCard(vm, i, i == guide.currentIndex, i < guide.currentIndex),
         ],
@@ -118,17 +141,7 @@ class CommuteGuideSheet extends StatelessWidget {
           padding: EdgeInsets.fromLTRB(
               16, 8, 16, 24 + MediaQuery.paddingOf(context).bottom),
           children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: NavAlertColors.textSecondary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
+            _handle(),
             Center(
               child: Text(
                 'Commute guide · ${stepLabel(guide).toLowerCase()}',
@@ -144,6 +157,21 @@ class CommuteGuideSheet extends StatelessWidget {
       ),
     );
   }
+
+  /// The grab bar, shared by the collapsed alarm-ON sheet and the guide-first
+  /// sheet floating over the map, so the two can never drift into looking like
+  /// different components.
+  static Widget _handle() => Center(
+        child: Container(
+          width: 44,
+          height: 4,
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: NavAlertColors.textSecondary,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      );
 
   Widget _legCard(TripViewModel vm, int i, bool isCurrent, bool isDone) {
     final leg = vm.guide.legs[i];
