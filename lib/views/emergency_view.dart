@@ -11,16 +11,51 @@ import 'fake_call_view.dart';
 ///
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] SOS GestureDetector onTapDown/Up beginSosHold/cancelSosHold
-///         (the 3-second hold = accidental-trigger guard, R8) · progress
-///         ring value (em.holdProgress) · "Call 911" onPressed · recording
-///         ListTile onTap → startFakeCall → FakeCallView · load-warning
-///         dismiss. Keep SOS red and obviously the biggest tap target.
+///         (the 3-second hold = accidental-trigger guard, R8) · the ring
+///         animation running for EmergencyViewModel.sosHoldDuration ·
+///         "Call 911" onPressed · recording ListTile onTap → startFakeCall →
+///         FakeCallView · load-warning dismiss. Keep SOS red and obviously the
+///         biggest tap target.
 ///  [EDIT] SOS button size/glow, "Press & Hold to Activate" copy, hold-hint
 ///         text, "Activate Fake Call" heading, recording row styling,
 ///         load-warning card look, Call 911 button style.
-///  [WANT] countdown animation during hold, haptic on hold, contact avatars.
-class EmergencyView extends StatelessWidget {
+///  [WANT] haptic on hold, contact avatars.
+class EmergencyView extends StatefulWidget {
   const EmergencyView({super.key});
+
+  @override
+  State<EmergencyView> createState() => _EmergencyViewState();
+}
+
+class _EmergencyViewState extends State<EmergencyView>
+    with SingleTickerProviderStateMixin {
+  /// Drives the hold ring at display refresh rate.
+  ///
+  /// This replaced a `holdProgress` value that a 100 ms timer in the ViewModel
+  /// advanced in ten discrete jumps — the ring visibly stuttered, and every
+  /// step rebuilt the whole screen. Its duration is taken from
+  /// [EmergencyViewModel.sosHoldDuration], the same constant the firing timer
+  /// uses, so the ring cannot finish early or late relative to the real guard.
+  late final AnimationController _ring = AnimationController(
+    vsync: this,
+    duration: EmergencyViewModel.sosHoldDuration,
+  );
+
+  @override
+  void dispose() {
+    _ring.dispose();
+    super.dispose();
+  }
+
+  /// Runs the ring forward with the hold, and stops it on release. Paired with
+  /// the ViewModel calls in the gesture handlers below — the ViewModel still
+  /// owns whether the SOS actually fires; this only paints the countdown.
+  ///
+  /// `forward(from: 0)` restarts cleanly every hold, so no separate reset is
+  /// needed, and the ring is painted only while `holdingSos` is true — which is
+  /// why a completed run does not leave a full ring sitting on screen.
+  void _startRing() => _ring.forward(from: 0);
+  void _stopRing() => _ring.stop();
 
   @override
   Widget build(BuildContext context) {
@@ -93,27 +128,41 @@ class EmergencyView extends StatelessWidget {
               // re-arming and pretending a second send began.
               onTapDown: em.sending
                   ? null
-                  : (_) => context.read<EmergencyViewModel>().beginSosHold(
-                      onFired: () => _showResult(context)),
-              onTapUp: (_) =>
-                  context.read<EmergencyViewModel>().cancelSosHold(),
-              onTapCancel: () =>
-                  context.read<EmergencyViewModel>().cancelSosHold(),
+                  : (_) {
+                      _startRing();
+                      context.read<EmergencyViewModel>().beginSosHold(
+                          onFired: () => _showResult(context));
+                    },
+              onTapUp: (_) {
+                _stopRing();
+                context.read<EmergencyViewModel>().cancelSosHold();
+              },
+              onTapCancel: () {
+                _stopRing();
+                context.read<EmergencyViewModel>().cancelSosHold();
+              },
               child: Stack(alignment: Alignment.center, children: [
                 SizedBox(
                   width: 190,
                   height: 190,
-                  child: CircularProgressIndicator(
-                    // DO NOT MODIFY LOGIC: `value` shows hold progress. Restyle
-                    // stroke/colors, but keep it bound to em.holdProgress.
-                    value: em.holdingSos ? em.holdProgress : 0,
-                    strokeWidth: 8,
-                    // USE THEME: white ring on danger red is deliberate; if you
-                    // change it keep the SOS unmistakably red (NavAlertColors.
-                    // danger carries the "emergency" meaning — don't recolor it).
-                    color: Colors.white,
-                    backgroundColor:
-                        NavAlertColors.danger.withValues(alpha: 0.3),
+                  // DO NOT MODIFY LOGIC: the ring must run for exactly
+                  // EmergencyViewModel.sosHoldDuration — it is the rider's only
+                  // feedback on how much longer the accidental-trigger guard
+                  // needs. AnimatedBuilder rebuilds ONLY the indicator, not the
+                  // screen, which is what makes 60 fps affordable here.
+                  child: AnimatedBuilder(
+                    animation: _ring,
+                    builder: (context, _) => CircularProgressIndicator(
+                      value: em.holdingSos ? _ring.value : 0,
+                      strokeWidth: 8,
+                      // USE THEME: white ring on danger red is deliberate; if
+                      // you change it keep the SOS unmistakably red
+                      // (NavAlertColors.danger carries the "emergency" meaning
+                      // — don't recolor it).
+                      color: Colors.white,
+                      backgroundColor:
+                          NavAlertColors.danger.withValues(alpha: 0.3),
+                    ),
                   ),
                 ),
                 Container(
@@ -129,18 +178,46 @@ class EmergencyView extends StatelessWidget {
                           blurRadius: 44),
                     ],
                   ),
-                  child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(em.sending ? 'SENDING…' : 'SOS',
-                            style: const TextStyle(
-                                fontSize: 34,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white)),
-                        const Text('Press & Hold to Activate',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.white70)),
-                      ]),
+                  // The label block is CENTRED in the circle and never wraps.
+                  // "SENDING…" is nearly three times the width of "SOS" at the
+                  // same 34 px, so at a fixed size it wrapped inside the 170 px
+                  // plate and dropped the ellipsis onto a line of its own.
+                  // FittedBox scales that one word down to fit instead, and
+                  // maxLines/softWrap make wrapping impossible rather than
+                  // merely unlikely.
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(em.sending ? 'SENDING…' : 'SOS',
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.white)),
+                            ),
+                            // Only while idle. Leaving "Press & Hold to
+                            // Activate" under "SENDING…" told the rider to do
+                            // the thing they had just finished doing, and
+                            // pushed the two-line block off-centre.
+                            if (!em.sending) ...[
+                              const SizedBox(height: 4),
+                              const Text('Press & Hold to Activate',
+                                  maxLines: 1,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      fontSize: 11, color: Colors.white70)),
+                            ],
+                          ]),
+                    ),
+                  ),
                 ),
               ]),
             ),
@@ -280,10 +357,19 @@ class EmergencyView extends StatelessWidget {
     // context throws, and that throw would surface as an unhandled async error
     // on the SOS path — the one path that must never fault.
     if (!context.mounted) return;
-    final msg = context.read<EmergencyViewModel>().statusMessage;
-    if (msg != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
-    }
+    final em = context.read<EmergencyViewModel>();
+    final msg = em.statusMessage;
+    if (msg == null) return;
+    // A failure has to LOOK like one. The outcome comes from `statusIsError`
+    // rather than from sniffing the copy, so rewording a message can never
+    // silently turn a red failure into a neutral one.
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+        content: Text(msg),
+        backgroundColor: em.statusIsError ? NavAlertColors.danger : null,
+        duration: Duration(seconds: em.statusIsError ? 8 : 4),
+      ));
   }
 
   /// dd/MM/yy — the compact form shown under custom recordings in Figure 32.

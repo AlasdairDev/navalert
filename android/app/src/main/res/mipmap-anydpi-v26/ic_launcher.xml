@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Adaptive launcher icon, used on Android 8+ (the app's minimum is 8.0, so
      this is the icon almost every real device will show). The PNGs in
-     mipmap-*dpi remain as the legacy fallback. -->
+     mipmap-*dpi remain as the legacy fallback.
+
+     Generated from "ALARMA APP ICON.png" (2000x2000), kept in assets/icons/.
+
+     WHY THE FOREGROUND IS A BITMAP CROP AND NOT THE ARTWORK IN FULL:
+     only the central 72x72dp of a 108x108dp adaptive layer is ever shown — the
+     outer 18dp on each side is reserved for masking and parallax. Dropping the
+     source in full-bleed would crop the emblem's wings on a circle mask (the
+     emblem spans 76% of the design, the safe zone only 66.7%), and the
+     artwork's own rounded border would be double-rounded by the launcher mask
+     on top of it. The foreground is instead a square crop taken from INSIDE
+     that border, scaled so the emblem lands at ~60% of the layer — clear of the
+     safe-zone edge, while the crop still covers the whole visible area so no
+     seam can appear at the boundary. -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@color/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>
