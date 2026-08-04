@@ -100,6 +100,47 @@ void main() {
     });
   });
 
+  group('every native failure code has a human mapping', () {
+    // The exact set MainActivity.kt can emit. If a code is added there without
+    // a case in describeFailure it falls through to the raw native string —
+    // which is developer text, in an emergency, on a screen the rider is
+    // panicking at. This is the contract between the two files.
+    const nativeCodes = [
+      'PERMISSION_DENIED',
+      'INVALID_NUMBER',
+      'INVALID_ARGS',
+      'NO_SERVICE',
+      'RADIO_OFF',
+      'NULL_PDU',
+      'GENERIC_FAILURE',
+      'TIMEOUT',
+      'MissingPluginException',
+    ];
+
+    test('each maps to distinct, non-technical prose', () {
+      final seen = <String>{};
+      for (final code in nativeCodes) {
+        final msg = SosService.describeFailure(code, 'raw native detail');
+        expect(msg, isNot(equals(code)),
+            reason: '$code fell through to the raw code');
+        expect(msg, isNot(equals('raw native detail')),
+            reason: '$code fell through to the raw native message');
+        expect(msg, isNot('Unknown error'), reason: '$code is unmapped');
+        expect(seen.add(msg), isTrue,
+            reason: '$code shares wording with another cause, so the rider '
+                'cannot tell which fault they are looking at');
+      }
+    });
+
+    test('a failure code is recorded alongside the prose', () {
+      // The UI branches on the CODE (to raise the restricted-settings
+      // walkthrough) and displays the PROSE. Both start clear.
+      final sos = SosService();
+      expect(sos.lastFailureCode, isNull);
+      expect(sos.lastFailureReason, isNull);
+    });
+  });
+
   group('accidental-trigger guard (R8)', () {
     test('the hold is three seconds', () {
       expect(EmergencyViewModel.sosHoldDuration, const Duration(seconds: 3));
