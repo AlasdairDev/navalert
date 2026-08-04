@@ -4,7 +4,7 @@
 ![Flutter](https://img.shields.io/badge/Flutter-3.x-02569B)
 ![Dart](https://img.shields.io/badge/Dart-3.5-0175C2)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM-7C6BC4)
-![Tests](https://img.shields.io/badge/tests-206%20passing-success)
+![Tests](https://img.shields.io/badge/tests-262%20passing-success)
 ![Offline](https://img.shields.io/badge/maps-offline%20capable-B39DDB)
 
 > **NavAlert: An Integrated Route Optimization, Fare Estimation, Adaptive
@@ -44,12 +44,15 @@ How that shows up concretely:
   step-by-step guide runs for the whole trip." The destination alarm is one
   switch below it, **off by default**, with the alarm sound and vibration
   controls disabled until it is turned on.
-- **The Active Trip screen is contextual.** With the alarm **off**, the commute
-  guide fills the screen and the monitoring readouts drop to a single strip —
-  because nothing is watching for the rider, and a large "Monitoring" badge
-  would be advertising a service that is switched off. With the alarm **on**,
-  the screen becomes the reassurance layout of Figure 24 (moon badge, "Get some
-  rest. We got you.") and the guide demotes to a draggable sheet.
+- **The Active Trip screen is contextual.** With the alarm **off** the rider is
+  navigating, so the screen becomes a **live map with the guide floating over
+  it** — steps in a draggable sheet, the map tracking the rider above it, and
+  the monitoring readouts demoted to a strip. Nothing is watching for them, so a
+  large "Monitoring" badge would be advertising a service that is switched off.
+  With the alarm **on**, the screen becomes the reassurance layout of Figure 24
+  (moon badge, "Get some rest. We got you.") and the guide collapses to a
+  handle — that rider has handed the trip over and is expected to sleep, so a
+  map would be answering a question they are not asking.
 - **The alarm can be armed mid-trip** from a chip on the monitoring screen, so
   starting without it is never a dead end.
 
@@ -65,14 +68,15 @@ How that shows up concretely:
 | Android native integration (SMS, volume shortcuts, widgets) | ✅ Complete |
 | Local persistence (SQLCipher schema) | ✅ Complete |
 | Offline map tile cache | ✅ Complete |
+| Live trip map + camera tracking | ✅ Complete |
 | UI / UX visual polish | ✅ Complete |
-| Automated tests | ✅ **206 / 206 passing** |
+| Automated tests | ✅ **262 / 262 passing** |
 
 Verify at any time:
 
 ```powershell
 flutter analyze   # expect: No issues found
-flutter test      # expect: 206/206 passing
+flutter test      # expect: 262/262 passing
 ```
 
 ---
@@ -203,9 +207,41 @@ foreground service) solves it:
   between fixes over 400 ms so the marker travels the gap instead of teleporting
   across it; a fix landing mid-glide re-aims from the current painted position
   rather than snapping backwards. Only the marker moves — the camera stays put,
-  because yanking the map back every tick would make it unusable.
+  because yanking the map back every tick would make an unusable browsing
+  screen. (The **trip** map is the opposite case; see below.)
 
-### 5. Adaptive three-stage alarm (R1–R4) — the optional layer
+### 5. The commute guide over a live, tracking map
+
+The guide-first Active Trip layout used to be an opaque list on a gradient wash.
+It answered "what do I do next" and nothing else — a rider following
+turn-by-turn directions could read the instruction but had no way to see where
+they actually *were*, which is the one question a navigation tool has to answer.
+
+The guide now floats over a full-bleed map as a `DraggableScrollableSheet`:
+
+| Concern | Approach |
+|---|---|
+| **Layering** | Three layers: map, a transparent overlay column, the sheet. The safety footer (SOS · Fake Call · Slide-to-Stop) is a **sibling below** the sheet's region, not a layer over it — so the sheet is *structurally* incapable of reaching the safety controls however far it is dragged. Stronger than height arithmetic, which can be got wrong. |
+| **Visibility budget** | `commute_sheet_layout.dart` resolves the sheet's fractions from the screen, the region and the **measured** footer height. The sheet plus footer may never cover more than half the screen; ≥22% stays map even fully extended. A tall footer (the "Signal Lost" card adds ~90 dp) shrinks the guide rather than eating the map. |
+| **Camera tracking** | The camera follows the rider, offset so the dot sits centred in the band of map left *visible above the sheet* rather than behind it. The offset is resolved into a camera centre **once** per move — re-applying it per animation tick compounds, walking the camera off the rider within a few fixes. |
+| **Escapable follow** | A fix lands every 1–2 s, so an unconditional follow makes looking ahead impossible. A manual pan releases the camera and a recenter button restores it. `MapController.move` reports `hasGesture == false`, so the follow cannot switch *itself* off. |
+| **Degenerate geometry** | Every fraction is clamped and re-ordered so `min ≤ initial ≤ max` holds by construction. `DraggableScrollableSheet` asserts that ordering, and the assertion would fire on the one screen a rider cannot leave except by Slide-to-Stop. |
+
+Both the geometry and the follow-state are pure Dart (no Flutter, no plugins),
+so they are unit-tested headlessly — on a device these rules are only observable
+by watching a moving map on a moving jeepney; as arithmetic they are provable.
+The layering itself is checked against the *mounted* widget tree, because a
+correct calculation wired to nothing looks identical from the outside.
+
+> **Measured on a 360×800 screen** (`commute_guide_overlay_test`): unobstructed
+> map 318 px (39.8%), guide at rest 229 px (28.6%), safety footer 170 px
+> (21.3%), and 177 px (22.1%) still map at full extension. The resting sheet is
+> slightly under the 30–40% originally specified, and cannot be otherwise here:
+> with a 170 px footer, a 30% sheet would obscure 410 px — just over half — and
+> break the half-map rule. The map wins, and the sheet takes every pixel the
+> budget leaves.
+
+### 6. Adaptive three-stage alarm (R1–R4) — the optional layer
 
 A GPS stream feeds an engine that sizes the trigger radius from the vehicle's
 *live* speed and the rider's learned historic reaction time. Stages escalate on
@@ -214,7 +250,7 @@ hard-to-dismiss full-screen alert. A watchdog raises a fallback alarm after 90 s
 of GPS loss, and a consecutive-fix latch detects overshoot and offers a Google
 Maps return route.
 
-### 6. Privacy & persistence
+### 7. Privacy & persistence
 
 SQLite encrypted at rest with **SQLCipher**, the key held in the Android
 Keystore. All personal data — trips, contacts, behavioural profile, favourites
@@ -251,6 +287,7 @@ Package id: `ph.edu.pup.navalert`.
 | **R5 Offline-first** | `tile_cache_store.dart` (disk map tiles), SQLite (`database_service.dart`), offline GPS alarms, native SMS |
 | R1 Multi-stage escalating alarm | `sound_service.dart`, `active_trip_view.dart` (Stages 1–3, slide-to-dismiss) |
 | R2 Continuous GPS monitoring | `trip_viewmodel.dart` (geolocator stream + Android foreground service); live Home marker via `home_viewmodel.dart` + `LatLngGlide` |
+| **R6 Live trip map + camera tracking** | `trip_map.dart` (map, route polyline, tracking blue dot, recenter) + `commute_sheet_layout.dart` (sheet geometry + follow state); guide overlays it via `active_trip_view.dart` |
 | R3 Speed-based adaptive trigger distance | `adaptive_alarm_engine.dart` (rolling avg speed × reaction window, 5 km cap) |
 | R4 Behavioural learning | reaction time (`awake_seconds`) per trip widens the trigger distance **and** raises alarm loudness/vibration |
 | **R7 Fake call** | `fake_call_view.dart`, custom recordings via `record`; triple Volume-Down via `MediaButtonService` |
@@ -277,13 +314,16 @@ navalert/
 │   ├── main.dart                       # entry point + provider wiring + tile-cache init
 │   ├── core/
 │   │   ├── theme.dart                  # 11 colour tokens + ThemeData (the style hub)
-│   │   └── map_support.dart            # shared TileLayer, NCR geofence, LatLngGlide, camera mover
+│   │   └── map_support.dart            # shared TileLayer, NCR geofence, LatLngGlide,
+│   │                                   #   camera mover (with bottom-padding offset)
 │   ├── models/
 │   ├── views/                          # all 20 screens (Figures 14–33)
 │   │   ├── shell.dart                  #   bottom-nav shell + volume-key wiring
 │   │   ├── home_view.dart              #   map + search + live location marker
 │   │   ├── route_view.dart             #   route map · mode priority · trip config
 │   │   ├── commute_guide_sheet.dart    #   live step-by-step guide (sheet + inline modes)
+│   │   ├── trip_map.dart               #   ⭐ live trip map · route line · tracking blue dot
+│   │   ├── commute_sheet_layout.dart   #   ⭐ sheet geometry + camera follow state (pure Dart)
 │   │   ├── active_trip_view.dart       #   monitoring (contextual) · alarm stages · overshoot
 │   │   ├── emergency_view.dart         #   SOS hold · Call 911 · fake-call recordings
 │   │   └── …                           #   search · favorites · history · settings · onboarding
@@ -309,7 +349,7 @@ navalert/
 │       ├── MediaButtonService.kt       #   ⭐ screen-off volume shortcuts (R7/R8)
 │       └── NavAlertWidgetProvider.kt   #   home-screen App Widget
 │
-├── test/                               # 16 suites, 206 tests
+├── test/                               # 19 suites, 262 tests
 ├── integration_test/                   # on-device full-app sweep
 ├── assets/                             # sounds · GTFS feed · images
 └── tool/                               # gen_gtfs.py · gen_sounds.dart
@@ -380,10 +420,10 @@ adb emu geo fix 121.0108 14.5979
 
 ```powershell
 flutter analyze   # No issues found
-flutter test      # 206/206 passing
+flutter test      # 262/262 passing
 ```
 
-**16 suites** covering the alarm engine (speed→radius, escalation thresholds,
+**19 suites** covering the alarm engine (speed→radius, escalation thresholds,
 behavioural learning, overshoot latch), the fare matrix and NCR bounds, the
 Dijkstra router against the **real production GTFS feed**, the full
 `TripViewModel` state machine driven from a mock GPS stream on a virtual clock,
@@ -392,8 +432,22 @@ live-location tracking, marker interpolation, FAB/pill collision geometry, and
 the disk tile cache (round-trip, persistence across a new store, eviction
 bounds, truncated files, orphaned temp files, hostile keys).
 
-They do **not** cover the view layer's rendering. Those are verified by running
-the app on a device and by the on-device sweep in `integration_test/`:
+The trip-map overlay adds three suites, split by what each can actually prove:
+
+| Suite | Proves |
+|---|---|
+| `commute_sheet_layout_test.dart` | The **arithmetic** — resting height, the half-map budget, the top margin at full extension, and that `min ≤ initial ≤ max` survives every screen size, footer height and degenerate input. |
+| `trip_camera_tracker_test.dart` | The **follow state** — engaged by default, released by a gesture, *not* released by a programmatic move, restored by recenter, and the offset's sign and magnitude. |
+| `commute_guide_overlay_test.dart` | That the arithmetic is **wired to the screen** — mounts the real Active Trip view and measures it: map present and full-bleed, sheet resting below the halfway line, safety controls never covered, last step scrollable clear of the seam. |
+
+That third suite exists because a correct calculation fed to nothing looks
+identical, from the outside, to a broken one. It mounts the **real** map, so the
+real `CachedTileProvider` runs and flutter_test's sandboxed HTTP client logs one
+`DioException` per tile — expected output, and itself evidence that the shared
+tile/cache path is genuinely wired in rather than stubbed for the test.
+
+They do **not** cover pixel-level rendering. That is verified by running the app
+on a device and by the on-device sweep in `integration_test/`:
 
 ```powershell
 flutter test integration_test\full_app_sweep_test.dart

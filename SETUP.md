@@ -141,6 +141,13 @@ Flutter's Gradle plugin copies the artifact under its own hardcoded
 Use `--release` for anything you hand to someone else — debug builds render
 maps noticeably slower and look janky in a demo.
 
+> **Signing.** The release build is signed with the **debug** key — the Flutter
+> template default in `android/app/build.gradle.kts` was deliberately kept. This
+> is fine for the academic defense: the APK installs and runs normally. It is
+> **not** Play Store publishable, and it is why swapping between builds signed
+> by different machines throws `INSTALL_FAILED_UPDATE_INCOMPATIBLE` (see Path A).
+> Adding a production keystore is a `signingConfigs` block whenever it is needed.
+
 ---
 
 ## Direct dependencies (21)
@@ -185,7 +192,7 @@ what the app is built on.
 
 ```powershell
 flutter analyze     # expect: No issues found
-flutter test        # expect: 206 passing
+flutter test        # expect: 262 passing
 ```
 
 If either regresses, your change touched logic rather than styling — revert and
@@ -212,6 +219,8 @@ flutter test integration_test\full_app_sweep_test.dart
 | **Build fails with `classes.dex ... used by another process`** | A stale Gradle daemon is holding the file (Windows). Run `cd android; .\gradlew.bat --stop`, delete `build\app\intermediates\dex\release\minifyReleaseWithR8`, and rebuild. Not a code error. |
 | `Could not resolve all files for configuration` | You're offline or behind a proxy; Gradle needs internet on first build. |
 | Map is blank on **first** load | Tiles need internet the first time. Once loaded they are cached to disk and render offline afterwards, including after a force-close. |
+| **Map goes grey mid-session on an emulator**, having worked minutes earlier | Emulator DNS flaking, not a code fault. Check `adb logcat -s flutter:*` for `Failed host lookup: 'tile.openstreetmap.org' (errno = 7)`. Restart the AVD with `emulator -avd Pixel_6_2 -dns-server 8.8.8.8`. The polyline and markers keep rendering, which is what makes it look like a tile-layer bug. |
+| Active Trip map shows no blue dot and no recenter button | Neither renders until a **real** GPS fix lands — the trip's origin is a planning coordinate that may be minutes stale, and drawing it would claim "you are here" wrongly. Feed a fix with `adb emu geo fix 121.0108 14.5979`. |
 | App builds but no GPS on emulator | `adb emu geo fix 121.0108 14.5979` (longitude first), or use the emulator's ⋯ menu → Location → Set. |
 | Emulator shows the app but the blue dot is missing | The dot only renders for a **real** fix. If the app is falling back to a default position it deliberately hides the dot rather than show a confident wrong one — grant Location and set a geo fix. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Uninstall the existing NavAlert first (different signing key). |
