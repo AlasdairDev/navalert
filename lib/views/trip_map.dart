@@ -92,6 +92,20 @@ class _TripMapViewState extends State<TripMapView>
   Timer? _obscuredDebounce;
   static const _obscuredSettle = Duration(milliseconds: 140);
 
+  /// Re-arms follow after the rider stops touching the map.
+  ///
+  /// DO NOT MODIFY LOGIC: without this, ONE stray contact permanently strands
+  /// the camera. Releasing follow on any gesture is right — the rider must be
+  /// able to look ahead — but a finger that grazes the map while reaching for
+  /// the guide sheet releases it just as effectively, and then the blue dot
+  /// simply slides off screen as they travel and never comes back. That is a
+  /// navigation screen quietly ceasing to navigate, and the small recenter
+  /// button is easy to miss. Deliberate panning still wins: every new gesture
+  /// restarts this timer, so the camera only returns once they have actually
+  /// stopped.
+  Timer? _followRearm;
+  static const _followRearmDelay = Duration(seconds: 12);
+
   @override
   void initState() {
     super.initState();
@@ -112,6 +126,7 @@ class _TripMapViewState extends State<TripMapView>
 
   @override
   void dispose() {
+    _followRearm?.cancel();
     _obscuredDebounce?.cancel();
     widget.obscuredBottom.removeListener(_onObscuredChanged);
     _mover.dispose();
@@ -163,6 +178,7 @@ class _TripMapViewState extends State<TripMapView>
   }
 
   void _recenter() {
+    _followRearm?.cancel();
     setState(_tracker.recenter);
     _cameraAt = null;
     _followRider();
@@ -195,7 +211,15 @@ class _TripMapViewState extends State<TripMapView>
           // uses) reports hasGesture false, so tracking cannot switch itself
           // off. See TripCameraTracker.
           onPositionChanged: (_, hasGesture) {
-            if (!hasGesture || !_tracker.following) return;
+            if (!hasGesture) return;
+            // Restart the idle window on EVERY gesture, including ones that
+            // arrive while follow is already released — otherwise a rider
+            // panning steadily around the map gets yanked back mid-drag.
+            _followRearm?.cancel();
+            _followRearm = Timer(_followRearmDelay, () {
+              if (mounted && !_tracker.following) _recenter();
+            });
+            if (!_tracker.following) return;
             setState(() => _tracker.onPositionChanged(hasGesture: true));
           },
         ),
