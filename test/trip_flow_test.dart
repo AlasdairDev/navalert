@@ -489,16 +489,23 @@ void main() {
   // privately (_lastLat/_lastLng, used to stamp alarm and overshoot rows); these
   // getters only publish what the monitoring loop was recording anyway.
   group('live position for the trip map', () {
-    test('is null until a fix has actually landed', () async {
+    test('is never the trip origin, whatever else happens', () async {
       final vm = newVm();
-      await vm.startTrip(buildTrip());
+      final trip = buildTrip();
+      await vm.startTrip(trip);
 
-      // The trip has an ORIGIN, and returning it here would be the tempting
-      // shortcut — but the origin is a planning coordinate that can be minutes
-      // old, and the map would present it as "you are here". Same rule HomeView
-      // states: a missing dot is honest, a confident wrong dot is not.
-      expect(vm.currentLat, isNull);
-      expect(vm.currentLng, isNull);
+      // The origin is the tempting shortcut for filling the map's blue dot in
+      // before the first fix arrives — and it is the one value that must never
+      // be used. It is a PLANNING coordinate: it can be minutes old and the
+      // rider may have walked well away from it by the time they board, so
+      // drawing it says "you are here" about a place they have left.
+      //
+      // startTrip may seed the dot from the OS's cached fix (an actual GPS
+      // reading, which the origin is not) — that is why this asserts the
+      // origin is excluded rather than asserting null. With no platform in a
+      // test the seed simply fails and the value stays null.
+      expect(vm.currentLat, isNot(closeTo(trip.originLat, 1e-9)));
+      expect(vm.currentLng, isNot(closeTo(trip.originLng, 1e-9)));
 
       await vm.stopTrip();
       vm.dispose();
