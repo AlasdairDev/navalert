@@ -1,9 +1,19 @@
 package ph.edu.pup.navalert
 
+import android.Manifest
+import android.app.Activity
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.telephony.SmsManager
 import android.view.WindowManager
+import java.util.concurrent.atomic.AtomicInteger
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -89,21 +99,33 @@ class MainActivity : FlutterActivity() {
                     val phone = call.argument<String>("phone")
                     val message = call.argument<String>("message")
                     if (phone.isNullOrBlank() || message.isNullOrBlank()) {
-                        result.success(false)
+                        result.error(
+                            "INVALID_ARGS",
+                            "Contact number or message was empty.",
+                            null
+                        )
                         return@setMethodCallHandler
                     }
-                    try {
-                        @Suppress("DEPRECATION")
-                        val sms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-                            getSystemService(SmsManager::class.java)
-                        else
-                            SmsManager.getDefault()
-                        val parts = sms.divideMessage(message)
-                        sms.sendMultipartTextMessage(phone, null, parts, null, null)
-                        result.success(true)
-                    } catch (e: Exception) {
-                        result.success(false)
+                    // DO NOT MODIFY LOGIC: report WHY a send failed, never a bare
+                    // `false`. This handler used to `catch (e: Exception) {
+                    // result.success(false) }`, discarding the exception — so a
+                    // SecurityException from a missing SEND_SMS grant reached Dart
+                    // as an ordinary "not sent", and the rider was told "SOS queued
+                    // — will retry when a cellular signal is available." That is a
+                    // confident wrong diagnosis: it would fail identically on every
+                    // retry, forever, while they waited for a signal that was never
+                    // the problem. Each failure mode now carries its own code.
+                    if (checkSelfPermission(Manifest.permission.SEND_SMS)
+                        != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        result.error(
+                            "PERMISSION_DENIED",
+                            "SEND_SMS permission is not granted.",
+                            null
+                        )
+                        return@setMethodCallHandler
                     }
+                    sendSmsTracked(phone, message, result)
                 } else {
                     result.notImplemented()
                 }
@@ -238,5 +260,144 @@ class MainActivity : FlutterActivity() {
         engineAlive = false
         keysChannel = null
         super.onDestroy()
+    }
+
+    // ── SOS SMS with real delivery tracking (R8) ────────────────────────────
+
+    /** Distinguishes concurrent sends, so one contact's result cannot resolve another's. */
+    private val smsRequestCounter = AtomicInteger(0)
+
+    /**
+     * How long to wait for the radio to report back before giving up.
+     *
+     * Generous on purpose: the common failures (no service, radio off) come
+     * back almost immediately, so this only catches the pathological case where
+     * the broadcast never arrives at all. Reporting "we don't know" beats
+     * leaving the SOS button stuck reading "SENDING…" forever.
+     */
+    private val smsResultTimeoutMs = 30_000L
+
+    /**
+     * Sends one SMS and answers Flutter with what the NETWORK said, not with
+     * whether the call threw.
+     *
+     * DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:
+     * `sendMultipartTextMessage` used to be called with a null `sentIntents`,
+     * and the handler answered `success(true)` the moment it returned without
+     * throwing. That is only a handoff to the radio: with no prepaid load or no
+     * signal the message is accepted synchronously and dies asynchronously,
+     * with nothing listening — so the app told the rider "Emergency SMS Sent"
+     * for a message that never left the phone. On this feature a false success
+     * is worse than a failure, because the rider stops trying to get help.
+     *
+     * Every part of a multipart message must be confirmed; the FIRST failing
+     * part decides the reported outcome. `reply` is idempotent because Flutter
+     * throws if a result is delivered twice, and here three different things
+     * race to deliver it: the broadcast, the timeout, and a synchronous throw.
+     */
+    private fun sendSmsTracked(phone: String, message: String, result: MethodChannel.Result) {
+        @Suppress("DEPRECATION")
+        val sms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            getSystemService(SmsManager::class.java)
+        else
+            SmsManager.getDefault()
+
+        val parts = sms.divideMessage(message)
+        val total = if (parts.isEmpty()) 1 else parts.size
+        val token = smsRequestCounter.incrementAndGet()
+        val action = "$packageName.SMS_SENT.$token"
+        val handler = Handler(Looper.getMainLooper())
+
+        var replied = false
+        var received = 0
+        var firstFailure: Int? = null
+        var receiver: BroadcastReceiver? = null
+        var onTimeout: Runnable? = null
+
+        fun reply(code: String?, msg: String?) {
+            if (replied) return
+            replied = true
+            onTimeout?.let { handler.removeCallbacks(it) }
+            receiver?.let {
+                // Already gone if the activity was torn down mid-send.
+                try { unregisterReceiver(it) } catch (_: IllegalArgumentException) {}
+            }
+            if (code == null) result.success(true) else result.error(code, msg, null)
+        }
+
+        receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                received++
+                if (resultCode != Activity.RESULT_OK && firstFailure == null) {
+                    firstFailure = resultCode
+                }
+                if (received >= total) {
+                    val failure = firstFailure
+                    if (failure == null) reply(null, null)
+                    else reply(smsErrorCode(failure), smsErrorMessage(failure))
+                }
+            }
+        }
+
+        val filter = IntentFilter(action)
+        // API 34 refuses an unflagged runtime receiver. This one is fed only by
+        // our own PendingIntent, so it must not be exported.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("UnspecifiedRegisterReceiverFlag")
+            registerReceiver(receiver, filter)
+        }
+
+        onTimeout = Runnable {
+            reply("TIMEOUT", "The network did not confirm the message in time.")
+        }
+        handler.postDelayed(onTimeout, smsResultTimeoutMs)
+
+        val sentIntents = ArrayList<PendingIntent>(total)
+        for (i in 0 until total) {
+            val intent = Intent(action).setPackage(packageName)
+            sentIntents.add(
+                PendingIntent.getBroadcast(
+                    this,
+                    // Unique per part AND per request, or Android reuses one
+                    // PendingIntent and only the last part ever reports back.
+                    token * 64 + i,
+                    intent,
+                    // FLAG_IMMUTABLE is required from API 31; the system carries
+                    // the outcome in the result CODE, not in the intent, so
+                    // nothing here needs to be mutable.
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            )
+        }
+
+        try {
+            sms.sendMultipartTextMessage(phone, null, parts, sentIntents, null)
+        } catch (e: SecurityException) {
+            reply("PERMISSION_DENIED", e.message ?: "SEND_SMS permission was refused.")
+        } catch (e: IllegalArgumentException) {
+            reply("INVALID_NUMBER", e.message ?: "The contact number was rejected.")
+        } catch (e: Exception) {
+            reply(e.javaClass.simpleName, e.message ?: "Native SMS send failed.")
+        }
+    }
+
+    /** Stable codes for [SosService.describeFailure] on the Dart side. */
+    private fun smsErrorCode(resultCode: Int): String = when (resultCode) {
+        SmsManager.RESULT_ERROR_NO_SERVICE -> "NO_SERVICE"
+        SmsManager.RESULT_ERROR_RADIO_OFF -> "RADIO_OFF"
+        SmsManager.RESULT_ERROR_NULL_PDU -> "NULL_PDU"
+        SmsManager.RESULT_ERROR_GENERIC_FAILURE -> "GENERIC_FAILURE"
+        else -> "SEND_FAILED_$resultCode"
+    }
+
+    private fun smsErrorMessage(resultCode: Int): String = when (resultCode) {
+        SmsManager.RESULT_ERROR_NO_SERVICE -> "No cellular service."
+        SmsManager.RESULT_ERROR_RADIO_OFF -> "The phone radio is off."
+        SmsManager.RESULT_ERROR_NULL_PDU -> "The message could not be encoded."
+        SmsManager.RESULT_ERROR_GENERIC_FAILURE ->
+            "The network rejected the message (often no prepaid load)."
+        else -> "The network reported error $resultCode."
     }
 }
