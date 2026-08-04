@@ -67,15 +67,55 @@ class EmergencyViewModel extends ChangeNotifier {
   // ---- recorder ----
   bool recording = false;
 
+  /// True when SEND_SMS cannot be granted from the in-app prompt any more, so
+  /// the rider has to be walked to system Settings instead.
+  ///
+  /// On a SIDELOADED build this is the normal state, not an edge case. Android
+  /// 13+ marks SMS a "restricted setting" for apps installed outside a store,
+  /// and silently refuses the grant with "App was denied access to SMS" — the
+  /// in-app request returns denied no matter how many times it is asked, so
+  /// prompting again is useless and the rider needs the Settings route.
+  bool smsPermanentlyDenied = false;
+
   /// Proactively secures the SEND_SMS permission BEFORE any emergency, so
   /// the SOS button is always armed and the permission dialog never appears
   /// mid-crisis on the safety-critical path (R8). Called when the rider
   /// first opens the Emergency tab. No-op once granted.
   Future<void> ensureSmsReady() async {
-    if (!await Permission.sms.isGranted) {
-      await Permission.sms.request();
+    if (await Permission.sms.isGranted) {
+      if (smsPermanentlyDenied) {
+        smsPermanentlyDenied = false;
+        notifyListeners();
+      }
+      return;
+    }
+    final status = await Permission.sms.request();
+    final blocked = status.isPermanentlyDenied || status.isRestricted;
+    if (blocked != smsPermanentlyDenied) {
+      smsPermanentlyDenied = blocked;
+      notifyListeners();
     }
   }
+
+  /// Re-checks the permission after the rider has been sent to Settings, so the
+  /// prompt clears itself the moment they actually fix it.
+  Future<void> refreshSmsPermission() async {
+    final granted = await Permission.sms.isGranted;
+    if (granted && smsPermanentlyDenied) {
+      smsPermanentlyDenied = false;
+      notifyListeners();
+    }
+  }
+
+  /// Opens NavAlert's own page in system Settings — the only route to the
+  /// restricted-settings menu.
+  Future<void> openSmsSettings() => openAppSettings();
+
+  /// True when the last SOS failed specifically because the permission is
+  /// missing, which is what should raise the restricted-settings walkthrough
+  /// rather than a SnackBar the rider can do nothing about.
+  bool get lastFailureWasPermission =>
+      _sos.lastFailureCode == 'PERMISSION_DENIED';
 
   /// DO NOT MODIFY LOGIC: the [sosHoldDuration] hold IS the accidental-trigger
   /// guard (R8) — a stray touch must never fire real SMS to every contact.
