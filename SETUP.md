@@ -2,7 +2,7 @@
 
 **For groupmates and the UI team.** Two paths below: pick the one that matches
 what you need. You do **not** need to download any dependency by hand — Flutter
-fetches all 137 packages for you from the two files already in this repo.
+fetches all 141 packages for you from the two files already in this repo.
 
 ---
 
@@ -11,7 +11,7 @@ fetches all 137 packages for you from the two files already in this repo.
 **You don't need Flutter, Android Studio, or any of this repo.** Just install
 the APK.
 
-1. Get `navalert-release.apk` (78 MB) from the group Drive folder.
+1. Get `NavAlert-release.apk` (79 MB) from the group Drive folder.
 2. Copy it to your Android phone (Android 8.0 / API 26 or newer).
 3. Open it with the Files app and tap **Install**.
 4. Android will warn about "unknown sources" — allow it for Files/Chrome, then
@@ -28,9 +28,24 @@ Every other permission is optional and the app still runs if you deny them.
 > ⚠️ Real SMS is sent when you trigger SOS with contacts saved. Don't demo SOS
 > with real contacts unless you mean it. It also needs prepaid load.
 
+### Testing the hardware features
+
+Four features **cannot be verified on an emulator** and need a real handset —
+an AVD has no audio sink, no carrier, and cannot deliver volume-key events to
+the app's media session. If you are testing on a physical phone, these are the
+ones worth your time:
+
+- **SOS SMS** — does the message arrive, with correct coordinates?
+- **Fake call audio** — is the ringtone and the voice clip actually audible?
+- **Volume shortcuts** — Volume-Up ×3 (SOS) and Volume-Down ×3 (fake call),
+  **with the screen off and the phone in a pocket**.
+- **A real commute** — does the alarm wake you, and does the guide advance?
+
+See the full step-by-step checklist in the group chat / hand-off notes.
+
 ---
 
-## Path B — "I need to edit the code" (UI team)
+## Path B — "I need to edit the code"
 
 ### 1. Install the toolchain
 
@@ -64,10 +79,10 @@ reports Android licences, run `flutter doctor --android-licenses` and accept all
 ```powershell
 git clone https://github.com/AlasdairDev/navalert.git
 cd navalert
-git checkout ui-handoff-baseline
 ```
 
-`ui-handoff-baseline` is the locked, verified starting point for UI work.
+`main` is the current, verified branch — everything is merged there. (The old
+`ui-handoff-baseline` branch is kept for history only; do not start from it.)
 
 ### 3. Install dependencies — this is the "dependencies file" step
 
@@ -76,7 +91,7 @@ flutter pub get
 ```
 
 That single command reads `pubspec.yaml` + `pubspec.lock` and downloads **all
-137 packages**. There is nothing to download manually and nothing to commit.
+141 packages**. There is nothing to download manually and nothing to commit.
 
 > **Do NOT run `flutter pub upgrade`.** `pubspec.lock` pins the exact package
 > versions this project was built and tested against. Upgrading silently moves
@@ -96,13 +111,32 @@ Press `r` in the terminal to hot-reload after a change, `R` for a full restart,
 No emulator yet? `flutter emulators --launch Pixel_6_2`, or create one in
 Android Studio → Device Manager (API 26+).
 
+**Give the emulator a location**, or the map has nothing to centre on:
+
+```powershell
+adb emu geo fix 121.0108 14.5979      # PUP Sta. Mesa — longitude FIRST
+```
+
+Anything outside Metro Manila is outside the routing service area, and the app
+will say so rather than showing an empty guide.
+
 ### 5. Build a shareable APK
 
 ```powershell
 flutter build apk --release
 ```
 
-Output: `build\app\outputs\flutter-apk\app-release.apk`
+This produces **two copies of the same signed APK**:
+
+| Path | Filename |
+|---|---|
+| `build\app\outputs\apk\release\` | **`NavAlert-release.apk`** ← share this one |
+| `build\app\outputs\flutter-apk\` | `app-release.apk` |
+
+They are byte-identical. `flutter build` prints only the second path because
+Flutter's Gradle plugin copies the artifact under its own hardcoded
+`app-<buildmode>.apk` name; the branded name comes from `base.archivesName` in
+`android/app/build.gradle.kts` and applies to Gradle's own output.
 
 Use `--release` for anything you hand to someone else — debug builds render
 maps noticeably slower and look janky in a demo.
@@ -119,10 +153,12 @@ what the app is built on.
 | `provider` | ^6.1.2 | MVVM state management |
 | `sqflite_sqlcipher` | ^3.1.0+1 | SQLite encrypted with SQLCipher AES-256 |
 | `flutter_secure_storage` | ^9.2.2 | DB key in the Android Keystore |
-| `path` / `path_provider` | ^1.9.0 / ^2.1.4 | Filesystem paths |
+| `path` | ^1.9.0 | Filesystem paths |
+| `path_provider` | ^2.1.4 | App directories (incl. the offline tile cache) |
 | `http` | ^1.2.2 | Nominatim geocoding calls |
 | `flutter_map` | ^7.0.2 | OpenStreetMap tile rendering |
-| `flutter_map_cancellable_tile_provider` | ^3.0.2 | Cancels off-screen tile loads |
+| `flutter_map_cache` | ^2.1.0 | Cancellable + cached tile provider |
+| `dio_cache_interceptor` | ^4.0.7 | Cache plumbing behind `TileCacheStore` |
 | `latlong2` | ^0.9.1 | Coordinate maths |
 | `geolocator` | ^13.0.1 | GPS stream, speed, background service |
 | `url_launcher` | ^6.3.0 | Google Maps reroute intent |
@@ -139,19 +175,30 @@ what the app is built on.
 **Dev dependencies:** `flutter_test`, `integration_test`, `flutter_lints ^4.0.0`,
 `fake_async ^1.3.1`.
 
+> `flutter_map_cancellable_tile_provider` was **removed**. `flutter_map_cache`
+> supersedes it — it reports `supportsCancelLoading`, so request cancellation is
+> kept, with disk caching added on top rather than traded for it.
+
 ---
 
-## Before you commit (UI team)
+## Before you commit
 
 ```powershell
 flutter analyze     # expect: No issues found
-flutter test        # expect: 165 passing
+flutter test        # expect: 206 passing
 ```
 
 If either regresses, your change touched logic rather than styling — revert and
-restyle instead. See the **UI TEAM — HAND-OFF RULES** section in
+restyle instead. See the **UI hand-off rules** section in
 [README.md](README.md), and respect every
-`// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block.
+`// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block (there are 13,
+across 6 files).
+
+An on-device sweep also exists, if you have a device or emulator attached:
+
+```powershell
+flutter test integration_test\full_app_sweep_test.dart
+```
 
 ---
 
@@ -162,10 +209,13 @@ restyle instead. See the **UI TEAM — HAND-OFF RULES** section in
 | `flutter: command not found` | Flutter's `bin` folder isn't on your PATH. Re-check the install guide, then reopen your terminal. |
 | `flutter doctor` flags Android licences | `flutter doctor --android-licenses`, accept all. |
 | Gradle build fails after pulling changes | `flutter clean` then `flutter pub get`. First build after a clean is slow (10+ min) — that's normal. |
+| **Build fails with `classes.dex ... used by another process`** | A stale Gradle daemon is holding the file (Windows). Run `cd android; .\gradlew.bat --stop`, delete `build\app\intermediates\dex\release\minifyReleaseWithR8`, and rebuild. Not a code error. |
 | `Could not resolve all files for configuration` | You're offline or behind a proxy; Gradle needs internet on first build. |
-| App installs but the map is blank | Map tiles need internet. Only the alarm and SOS work offline. |
-| App builds but no GPS on emulator | Set a location in the emulator's ⋯ menu → Location, then press Set. |
+| Map is blank on **first** load | Tiles need internet the first time. Once loaded they are cached to disk and render offline afterwards, including after a force-close. |
+| App builds but no GPS on emulator | `adb emu geo fix 121.0108 14.5979` (longitude first), or use the emulator's ⋯ menu → Location → Set. |
+| Emulator shows the app but the blue dot is missing | The dot only renders for a **real** fix. If the app is falling back to a default position it deliberately hides the dot rather than show a confident wrong one — grant Location and set a geo fix. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Uninstall the existing NavAlert first (different signing key). |
+| Want a clean first-run state | `adb shell pm clear ph.edu.pup.navalert` — wipes the database, settings and tile cache, and revokes permissions, exactly like a fresh install. |
 | Java version warnings during build | This machine builds with JDK 1.8; JDK 17 is recommended if you hit Gradle/Java errors. Point Android Studio at JDK 17 under Settings → Build Tools → Gradle. |
 
 Still stuck? Run `flutter doctor -v` and send the full output to the group — it
