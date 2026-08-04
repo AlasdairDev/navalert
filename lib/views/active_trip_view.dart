@@ -473,8 +473,20 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
             builder: (context, controller) => Container(
               decoration: const BoxDecoration(
                 color: NavAlertColors.surface,
+                // Rounded at the TOP only. This is the top of the sheet+footer
+                // unit; its bottom edge is flush against the footer, so a
+                // rounded bottom would cut two notches of map into the seam.
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 12)],
+                // Offset upward, not centred. An un-offset shadow bleeds DOWN
+                // across the joint with the footer and draws a dark line
+                // between two plates that are supposed to read as one panel.
+                // Lifting it only against the map is the whole job here.
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black45,
+                      blurRadius: 12,
+                      offset: Offset(0, -4)),
+                ],
               ),
               // The SAME leg cards the planning guide and the alarm-ON sheet
               // draw — one component, three surfaces.
@@ -542,10 +554,14 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
   // sheet's budget always reflects the footer actually on screen.
   Widget _footer(BuildContext context, TripViewModel vm) => Container(
         width: double.infinity,
-        decoration: BoxDecoration(
-          color: NavAlertColors.background.withValues(alpha: 0.92),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        ),
+        // SQUARE top, and the same surface as the sheet above it. The footer is
+        // permanently flush beneath the sheet — they are adjacent siblings, at
+        // every drag height — so rounding this edge cut two notches of map into
+        // the seam and the different fill drew a hard line across it. Together
+        // those made one panel look like two floating on top of each other.
+        // Matching the sheet turns the pair into a single plate whose lower
+        // section happens to hold the safety controls.
+        decoration: const BoxDecoration(color: NavAlertColors.surface),
         child: SafeArea(
           top: false,
           child: Column(mainAxisSize: MainAxisSize.min, children: [

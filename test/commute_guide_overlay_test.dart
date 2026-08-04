@@ -252,6 +252,36 @@ void main() {
         reason: 'less than a third of the screen is actually usable map at '
             'rest — the overlay has stopped earning the space it takes');
   });
+
+  testWidgets('the last step can be scrolled clear of the footer seam',
+      (t) async {
+    await pumpGuide(t);
+
+    // Expand the sheet, then keep dragging so the list itself scrolls to its
+    // end. A DraggableScrollableSheet consumes the drag until it is fully
+    // extended, so the second drag is the one that moves the list.
+    await t.drag(find.byType(CommuteGuideSheet), const Offset(0, -screenH));
+    await t.pumpAndSettle();
+    await t.drag(find.byType(CommuteGuideSheet), const Offset(0, -screenH));
+    await t.pumpAndSettle();
+
+    final plate = t.getRect(find.descendant(
+        of: find.byType(DraggableScrollableSheet),
+        matching: find.byType(CommuteGuideSheet)));
+    final lastCard = t.getRect(find
+        .ancestor(
+            of: find.text('Guide step number 4'), matching: find.byType(Card))
+        .first);
+
+    // The sheet's bottom edge is a hard clip against the safety footer. A card
+    // that ends flush with it is guillotined mid-content, and because the
+    // footer is a different colour the slice reads as the text sliding UNDER
+    // the footer rather than as the end of a scroll.
+    expect(lastCard.bottom, lessThanOrEqualTo(plate.bottom - 16),
+        reason: 'the final step cannot be scrolled clear of the seam — it '
+            'stays cut off against the footer no matter how far the rider '
+            'scrolls');
+  });
 }
 
 // ── Stub collaborators ────────────────────────────────────────────────────
