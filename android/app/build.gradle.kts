@@ -5,10 +5,16 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Name the built artifacts "navalert-*.apk" instead of the generic
+// Name the built artifacts "NavAlert-*.apk" instead of the generic
 // "app-release.apk", so the file is identifiable once it has been copied
 // onto a phone or shared with the team.
-base.archivesName.set("navalert")
+//
+// This governs Gradle's own output — build/app/outputs/apk/release/. Flutter
+// then COPIES that artifact into build/app/outputs/flutter-apk/ under its own
+// hardcoded "app-<buildmode>.apk" convention, which archivesName cannot
+// influence; the two files are byte-identical (verified by md5). Share the
+// branded one from apk/release/.
+base.archivesName.set("NavAlert")
 
 android {
     namespace = "ph.edu.pup.navalert"
