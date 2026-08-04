@@ -89,6 +89,9 @@ class SosService {
         'Time: ${stamp.toLocal().toString().substring(0, 16)}';
 
     var sent = 0;
+    // Cleared per trigger so a stale reason from an earlier SOS can never be
+    // reported against this one.
+    lastFailureReason = null;
     for (final c in contacts.take(3)) {
       if (await _sendNativeSms(c.phoneNumber, message)) sent++;
     }
@@ -239,14 +242,70 @@ class SosService {
     } catch (_) {}
   }
 
+  /// Why the most recent send attempt failed, in words the rider can act on.
+  /// Null when the last attempt succeeded or none has run.
+  ///
+  /// DO NOT MODIFY LOGIC: this exists because "it did not send" and "it did not
+  /// send BECAUSE the permission is missing" call for opposite responses from
+  /// the rider — wait, versus fix it now / Call 911. Collapsing every failure
+  /// into `false` (as this did) left the UI announcing "queued, will retry when
+  /// a cellular signal is available" for faults that no amount of waiting fixes.
+  String? lastFailureReason;
+
+  /// Maps a native failure code to something a commuter can act on. The raw
+  /// codes come from MainActivity.kt's `sendSms` handler — the first group are
+  /// refusals before the message ever reached the radio, the second are what
+  /// the NETWORK reported back through the sent-intent broadcast.
+  static String describeFailure(String? code, String? message) {
+    switch (code) {
+      // ── refused locally ───────────────────────────────────────────────
+      case 'PERMISSION_DENIED':
+        return 'Permission Denied — allow SMS in App Info › Permissions';
+      case 'INVALID_NUMBER':
+        return 'Invalid contact number';
+      case 'INVALID_ARGS':
+        return 'Contact number or message was empty';
+      case 'MissingPluginException':
+        return 'SMS bridge unavailable on this build';
+      // ── reported by the network ───────────────────────────────────────
+      case 'NO_SERVICE':
+        return 'No cellular service — move to an area with signal';
+      case 'RADIO_OFF':
+        return 'Phone radio is off — turn off Airplane Mode';
+      case 'GENERIC_FAILURE':
+        // The catch-all the radio returns for a rejected send. Insufficient
+        // prepaid load is by far the most common cause in the field, and it is
+        // the one the rider can actually do something about.
+        return 'Network rejected the message — check your prepaid load';
+      case 'NULL_PDU':
+        return 'The message could not be encoded';
+      case 'TIMEOUT':
+        return 'No delivery confirmation from the network';
+      default:
+        final detail = (message == null || message.isEmpty) ? code : message;
+        return detail == null || detail.isEmpty ? 'Unknown error' : detail;
+    }
+  }
+
+  /// True only once the NETWORK has confirmed the message left the phone.
+  ///
+  /// The native side blocks on a sent-intent broadcast rather than returning as
+  /// soon as SmsManager accepts the request, so this can take a second or two —
+  /// and, in the pathological case where the radio never reports, up to the
+  /// native 30 s timeout. That latency buys the one thing this feature cannot
+  /// do without: a "sent" that means sent.
   Future<bool> _sendNativeSms(String phone, String message) async {
     try {
       final ok = await _channel.invokeMethod<bool>(
           'sendSms', {'phone': phone, 'message': message});
-      return ok ?? false;
-    } on PlatformException {
+      if (ok ?? false) return true;
+      lastFailureReason = 'The SMS was not accepted by the device';
+      return false;
+    } on PlatformException catch (e) {
+      lastFailureReason = describeFailure(e.code, e.message);
       return false;
     } on MissingPluginException {
+      lastFailureReason = describeFailure('MissingPluginException', null);
       return false;
     }
   }
