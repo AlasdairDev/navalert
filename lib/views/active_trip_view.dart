@@ -1,14 +1,18 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
+import '../viewmodels/home_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import 'commute_guide_sheet.dart';
+import 'commute_sheet_layout.dart';
 import 'fake_call_view.dart';
+import 'trip_map.dart';
 
 /// Figures 24–29 — Active Trip (Monitoring Mode), the three alarm
 /// stages, and Overshoot Detected.
@@ -152,16 +156,9 @@ class _Monitoring extends StatelessWidget {
     ),
   );
 
-  String get _distanceText {
-    final km = vm.distanceM / 1000;
-    return km >= 1
-        ? '${km.toStringAsFixed(1)} km away'
-        : '${vm.distanceM.toStringAsFixed(0)} m away';
-  }
-
-  String get _speedAndEta =>
-      'speed ${vm.speedKmh.toStringAsFixed(0)} km/h'
-      '${vm.etaMinutes == null ? '' : '  ·  ETA ${vm.etaMinutes!.round()} min'}';
+  // The distance / speed / ETA strings now live in [_MonitoringText], because
+  // the guide-first layout is its own widget and can no longer reach an
+  // instance getter here.
 
   // ── Alarm ON — Figure 24, unchanged ────────────────────────────────────
   Widget _alarmFirst(BuildContext context) {
@@ -287,126 +284,361 @@ class _Monitoring extends StatelessWidget {
   }
 
   // ── Alarm OFF — guide-first ────────────────────────────────────────────
-  // Geometry follows the guide the mockups DO define (Pages 15/16): a header
-  // strip, then the step cards filling the body on the same 16 dp side margin
-  // and card rhythm, then the controls pinned at the foot. The leg cards are
-  // the very same CommuteGuideSheet cards, rendered inline instead of inside a
-  // collapsed sheet, so the planning guide, the sheet and this screen are one
-  // component throughout.
-  Widget _guideFirst(BuildContext context) {
-    return Container(
-      decoration: _wash,
-      child: SafeArea(
+  // The steps used to BE the screen: an opaque list on the gradient wash. That
+  // answered "what do I do next" and nothing else — a rider following
+  // turn-by-turn directions could read the instruction but had no way to see
+  // where they actually were, which is the one question a navigation tool has
+  // to answer. The guide now floats over a live map instead. See
+  // [_GuideFirstMonitor].
+  Widget _guideFirst(BuildContext context) => _GuideFirstMonitor(vm: vm);
+}
+
+// ---------------------------------------------------------------------
+// Guide-first monitoring — the commute guide over a live, tracking map
+// ---------------------------------------------------------------------
+/// Three layers, bottom to top:
+///
+///  1. [TripMapView] — full-bleed map, camera following the rider.
+///  2. a transparent Column: header plate, the sheet's region, footer plate.
+///  3. the guide itself, a `DraggableScrollableSheet` inside that region.
+///
+/// The footer is a SIBLING BELOW the sheet's region rather than a layer over
+/// it, which is the whole reason this shape was chosen: the sheet is then
+/// structurally incapable of reaching the SOS / Fake Call / Slide-to-Stop
+/// controls, however far it is dragged. That is a stronger guarantee than the
+/// height arithmetic it replaces on this path — and the arithmetic itself is
+/// untouched and still live for the alarm-ON sheet.
+///
+/// Every element keeps the copy, colours, fonts and order it had as a plain
+/// column; only the layering is new. The two additions are the background
+/// plates behind the header and footer, without which purple-on-white text over
+/// OSM tiles is unreadable — the same device HomeView's header already uses.
+///
+/// UI/UX MAP (see legend in core/theme.dart):
+///  [NEED] the footer staying OUTSIDE the sheet · the obscured-height notifier
+///         feeding the camera · _SlideToStop / _EmergencyActionsRow /
+///         _AlarmToggleChip wiring, all unchanged.
+///  [EDIT] plate colours and alpha, corner radii, the header's arrangement,
+///         the sheet's resting height (see CommuteSheetLayout).
+///  [WANT] collapse the header to a single line when the sheet is dragged up,
+///         a "next step in 200 m" callout pinned over the map.
+class _GuideFirstMonitor extends StatefulWidget {
+  const _GuideFirstMonitor({required this.vm});
+  final TripViewModel vm;
+
+  @override
+  State<_GuideFirstMonitor> createState() => _GuideFirstMonitorState();
+}
+
+class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
+  /// Measures the safety footer. Its height is not a constant: the "Signal
+  /// Lost" card adds ~90 dp to it mid-trip, and the sheet's budget has to
+  /// account for that or the guide would push down over the map.
+  final _footerKey = GlobalKey();
+
+  /// Logical pixels of map hidden at the bottom (sheet + footer). Drives the
+  /// camera offset so the rider stays centred in what is actually visible.
+  /// A notifier, not setState: this changes on every frame of a sheet drag, and
+  /// rebuilding the map subtree that often would thrash the tile layer.
+  final _obscured = ValueNotifier<double>(0);
+
+  double _footerHeight = 0;
+
+  /// The footer height the obscured-height notifier was last seeded for. See
+  /// the seed guard in [_sheetRegion].
+  double? _seededFooter;
+
+  @override
+  void dispose() {
+    _obscured.dispose();
+    super.dispose();
+  }
+
+  void _measureFooter() {
+    final box = _footerKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    // The epsilon is what stops this being an infinite setState loop: a
+    // re-measure that reports the same height must not schedule another frame.
+    if ((box.size.height - _footerHeight).abs() < 0.5) return;
+    setState(() => _footerHeight = box.size.height);
+  }
+
+  /// DO NOT MODIFY LOGIC: deferred to after the frame, deliberately.
+  /// `DraggableScrollableNotification` is dispatched from inside layout, and
+  /// writing the notifier there rebuilds the recenter button mid-build —
+  /// "setState() or markNeedsBuild() called during build". One frame of latency
+  /// is irrelevant; the camera move is debounced downstream anyway.
+  void _setObscured(double v) {
+    if ((v - _obscured.value).abs() < 0.5) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && (v - _obscured.value).abs() >= 0.5) _obscured.value = v;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Guarded by the epsilon in _measureFooter, so this settles after one extra
+    // frame instead of looping.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _measureFooter();
+    });
+
+    final vm = widget.vm;
+    final trip = vm.trip!;
+    final screenH = MediaQuery.sizeOf(context).height;
+    // `read`, not `watch`: this widget already rebuilds on every GPS tick via
+    // the TripViewModel above it, and the planned path does not change during a
+    // trip — subscribing would only add rebuilds.
+    final routePath = context.read<HomeViewModel>().routePath;
+    final rider = vm.currentLat != null && vm.currentLng != null
+        ? LatLng(vm.currentLat!, vm.currentLng!)
+        : null;
+
+    return Stack(children: [
+      Positioned.fill(
+        child: TripMapView(
+          origin: LatLng(trip.originLat, trip.originLng),
+          destination: LatLng(trip.destinationLat, trip.destinationLng),
+          rider: rider,
+          routePath: routePath,
+          obscuredBottom: _obscured,
+        ),
+      ),
+      // Positioned.fill, not a bare Column: a non-positioned Stack child is
+      // laid out with LOOSE constraints, and this Column's Expanded needs a
+      // bounded height to divide. Being explicit also stops the overlay
+      // silently collapsing to its children's intrinsic height if the Stack's
+      // fit is ever changed.
+      Positioned.fill(
         child: Column(children: [
-          // Header: back · destination · alarm toggle. The destination and the
-          // step counter replace the moon badge as the "where am I" anchor.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 12, 0),
-            child: Row(children: [
-              const _BackToShellButton(),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('En Route',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: NavAlertColors.textSecondary)),
-                    Text(vm.trip!.destinationLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _AlarmToggleChip(vm: vm, compact: true),
-            ]),
-          ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(children: [
-              const Icon(Icons.route,
-                  size: 15, color: NavAlertColors.accent),
-              const SizedBox(width: 6),
-              Text(CommuteGuideSheet.stepLabel(vm.guide),
-                  style: const TextStyle(
-                      fontSize: 13, fontWeight: FontWeight.w700)),
-            ]),
-          ),
-          const SizedBox(height: 8),
-          // The steps ARE the screen — everything else is a strip around them.
-          const Expanded(child: CommuteGuideSheet(inline: true)),
-          // UC-1 Exception 2 — "Signal Lost" keeps its full card here too: with
-          // the alarm off the rider is navigating by these steps, and stale GPS
-          // is exactly what makes the step they are on wrong.
-          if (vm.signalLostAlarm)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Card(
-                color: const Color(0xFF4A2A00),
-                child: ListTile(
-                  dense: true,
-                  leading:
-                      const Icon(Icons.gps_off, color: NavAlertColors.warning),
-                  title: const Text('Signal Lost',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  subtitle: const Text(
-                      'GPS has been unavailable — stay alert for your stop.',
-                      style: TextStyle(fontSize: 11)),
-                  trailing: ElevatedButton(
-                    onPressed: vm.dismissSignalLostAlarm,
-                    child: const Text('Dismiss'),
-                  ),
-                ),
-              ),
-            )
-          else if (vm.error != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-              child: Text(vm.error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                      color: NavAlertColors.warning, fontSize: 12)),
-            ),
-          // Monitoring demoted to one strip: still honest about distance and
-          // ETA, no longer the subject of the screen.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Text(_distanceText,
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w700)),
-              const Text('  ·  ',
-                  style: TextStyle(color: NavAlertColors.textSecondary)),
-              Flexible(
-                child: Text(_speedAndEta,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 12, color: NavAlertColors.textSecondary)),
-              ),
-            ]),
-          ),
-          _EmergencyActionsRow(vm: vm),
-          const SizedBox(height: 12),
-          // DO NOT MODIFY LOGIC: the anti-oversleep gesture — the only way to
-          // end monitoring. Keep onCompleted → stopTrip() + pop(). You may
-          // restyle the slider (see _SlideToStop below); do not lower its
-          // completion threshold (it guards against a stray-thumb dismiss).
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-            child: _SlideToStop(onCompleted: () async {
-              await vm.stopTrip();
-              if (context.mounted) Navigator.of(context).pop();
-            }),
-          ),
+          _header(context, vm),
+          // Transparent — the map shows through here, and the sheet hangs from
+          // this region's bottom edge.
+          Expanded(child: _sheetRegion(context, screenH)),
+          KeyedSubtree(key: _footerKey, child: _footer(context, vm)),
         ]),
       ),
-    );
+    ]);
   }
+
+  // ── The guide, floating ────────────────────────────────────────────────
+  Widget _sheetRegion(BuildContext context, double screenH) =>
+      LayoutBuilder(builder: (context, constraints) {
+        final region = constraints.maxHeight;
+        // Held back one frame until the footer has been measured. Rendering the
+        // sheet against a footer height of zero would open it at the wrong
+        // resting height, and initialChildSize is only honoured on first build
+        // — the sheet would stay wrong for the rest of the trip.
+        if (_footerHeight <= 0) return const SizedBox.shrink();
+
+        final f = CommuteSheetLayout.resolve(
+          screenHeight: screenH,
+          regionHeight: region,
+          footerHeight: _footerHeight,
+        );
+        // DO NOT MODIFY LOGIC: seeded ONCE per footer height, not on every
+        // build. This method re-runs on every GPS tick, and an unconditional
+        // seed would slam the obscured height back to the RESTING value each
+        // time — so a rider who dragged the guide open would watch the camera
+        // offset snap back a second later, every second. Re-seeding when the
+        // footer changes is correct and necessary: that is exactly when the
+        // sheet is re-keyed below and returns to its resting height.
+        if (_seededFooter != _footerHeight) {
+          _seededFooter = _footerHeight;
+          _setObscured(f.initial * region + _footerHeight);
+        }
+
+        return NotificationListener<DraggableScrollableNotification>(
+          onNotification: (n) {
+            _setObscured(n.extent * region + _footerHeight);
+            // False: this is an observation, not a consumption — anything else
+            // listening for sheet extents still gets to see it.
+            return false;
+          },
+          child: DraggableScrollableSheet(
+            // Re-keyed when the footer changes height (the Signal Lost card
+            // arriving or clearing), because initialChildSize is read once at
+            // construction. Without this the sheet keeps a resting height
+            // computed for a footer that no longer exists, and starts covering
+            // the map half it was sized to protect.
+            key: ValueKey(_footerHeight.round()),
+            initialChildSize: f.initial,
+            minChildSize: f.min,
+            maxChildSize: f.max,
+            // Same rule as the alarm-ON sheet: without snapping the panel rests
+            // at whatever fraction the finger left it at, so a lazy flick parks
+            // the guide at a height that was never budgeted against the map.
+            snap: true,
+            snapSizes: f.snapSizes,
+            builder: (context, controller) => Container(
+              decoration: const BoxDecoration(
+                color: NavAlertColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 12)],
+              ),
+              // The SAME leg cards the planning guide and the alarm-ON sheet
+              // draw — one component, three surfaces.
+              child: CommuteGuideSheet(inline: true, controller: controller),
+            ),
+          ),
+        );
+      });
+
+  // ── Header plate ───────────────────────────────────────────────────────
+  // Back · destination · alarm toggle, then the step counter. Unchanged from
+  // the column layout except for the plate behind it.
+  Widget _header(BuildContext context, TripViewModel vm) => Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: NavAlertColors.background.withValues(alpha: 0.92),
+          borderRadius:
+              const BorderRadius.vertical(bottom: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          bottom: false,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 12, 0),
+              child: Row(children: [
+                const _BackToShellButton(),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('En Route',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: NavAlertColors.textSecondary)),
+                      Text(vm.trip!.destinationLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _AlarmToggleChip(vm: vm, compact: true),
+              ]),
+            ),
+            const SizedBox(height: 6),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+              child: Row(children: [
+                const Icon(Icons.route, size: 15, color: NavAlertColors.accent),
+                const SizedBox(width: 6),
+                Text(CommuteGuideSheet.stepLabel(vm.guide),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700)),
+              ]),
+            ),
+          ]),
+        ),
+      );
+
+  // ── Footer plate — the safety controls ─────────────────────────────────
+  // Everything that sat below the guide before, in the same order, with the
+  // same styling. It is measured (see _footerKey) rather than assumed, so the
+  // sheet's budget always reflects the footer actually on screen.
+  Widget _footer(BuildContext context, TripViewModel vm) => Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: NavAlertColors.background.withValues(alpha: 0.92),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const SizedBox(height: 8),
+            // UC-1 Exception 2 — "Signal Lost" keeps its full card here too:
+            // with the alarm off the rider is navigating by these steps, and
+            // stale GPS is exactly what makes the step they are on wrong.
+            if (vm.signalLostAlarm)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Card(
+                  color: const Color(0xFF4A2A00),
+                  child: ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.gps_off,
+                        color: NavAlertColors.warning),
+                    title: const Text('Signal Lost',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    subtitle: const Text(
+                        'GPS has been unavailable — stay alert for your stop.',
+                        style: TextStyle(fontSize: 11)),
+                    trailing: ElevatedButton(
+                      onPressed: vm.dismissSignalLostAlarm,
+                      child: const Text('Dismiss'),
+                    ),
+                  ),
+                ),
+              )
+            else if (vm.error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                child: Text(vm.error!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                        color: NavAlertColors.warning, fontSize: 12)),
+              ),
+            // Monitoring demoted to one strip: still honest about distance and
+            // ETA, no longer the subject of the screen.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child:
+                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text(_MonitoringText.distance(vm),
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w700)),
+                const Text('  ·  ',
+                    style: TextStyle(color: NavAlertColors.textSecondary)),
+                Flexible(
+                  child: Text(_MonitoringText.speedAndEta(vm),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 12, color: NavAlertColors.textSecondary)),
+                ),
+              ]),
+            ),
+            _EmergencyActionsRow(vm: vm),
+            const SizedBox(height: 12),
+            // DO NOT MODIFY LOGIC: the anti-oversleep gesture — the only way to
+            // end monitoring. Keep onCompleted → stopTrip() + pop(). You may
+            // restyle the slider (see _SlideToStop below); do not lower its
+            // completion threshold (it guards against a stray-thumb dismiss).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              child: _SlideToStop(onCompleted: () async {
+                await vm.stopTrip();
+                if (context.mounted) Navigator.of(context).pop();
+              }),
+            ),
+          ]),
+        ),
+      );
+}
+
+/// The distance / speed / ETA strings, in one place.
+///
+/// _Monitoring built these as instance getters, which the guide-first layout
+/// can no longer reach now that it is its own widget. Lifting them out keeps
+/// ONE copy of the formatting rather than letting the alarm-ON screen and the
+/// guide footer round the same numbers differently.
+class _MonitoringText {
+  const _MonitoringText._();
+
+  static String distance(TripViewModel vm) {
+    final km = vm.distanceM / 1000;
+    return km >= 1
+        ? '${km.toStringAsFixed(1)} km away'
+        : '${vm.distanceM.toStringAsFixed(0)} m away';
+  }
+
+  static String speedAndEta(TripViewModel vm) =>
+      'speed ${vm.speedKmh.toStringAsFixed(0)} km/h'
+      '${vm.etaMinutes == null ? '' : '  ·  ETA ${vm.etaMinutes!.round()} min'}';
 }
 
 /// ╔════════════════════════════════════════════════════════════╗

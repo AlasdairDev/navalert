@@ -1,3 +1,5 @@
+import 'dart:math' show Point;
+
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -233,8 +235,20 @@ class AnimatedMapMover {
   final MapController controller;
   final AnimationController _anim;
 
-  void animateTo(LatLng dest, double destZoom) {
+  /// Eases the camera so [dest] ends up [offset] logical pixels from the centre
+  /// of the map widget. The default of [Offset.zero] is the original behaviour,
+  /// so Home is unaffected; the trip map passes a negative dy to lift the rider
+  /// clear of the commute-guide sheet covering the bottom of the screen.
+  void animateTo(LatLng dest, double destZoom, {Offset offset = Offset.zero}) {
     final cam = controller.camera;
+    // DO NOT MODIFY LOGIC: the offset is resolved into a camera CENTRE once,
+    // here, and the tween below then runs on plain centres. Passing `offset:`
+    // to `move()` on every tick instead looks equivalent and is not: each tick
+    // would re-apply the shift relative to wherever the camera already sits, so
+    // the first frame jumps by the offset and every subsequent GPS fix shifts
+    // the map another screen-half further — the camera walks off the rider
+    // within a few fixes.
+    final target = _centreFor(cam, dest, destZoom, offset);
     final startLat = cam.center.latitude;
     final startLng = cam.center.longitude;
     final startZoom = cam.zoom;
@@ -244,8 +258,8 @@ class AnimatedMapMover {
       final t = curve.value;
       controller.move(
         LatLng(
-          startLat + (dest.latitude - startLat) * t,
-          startLng + (dest.longitude - startLng) * t,
+          startLat + (target.latitude - startLat) * t,
+          startLng + (target.longitude - startLng) * t,
         ),
         startZoom + (destZoom - startZoom) * t,
       );
@@ -256,6 +270,20 @@ class AnimatedMapMover {
       ..reset()
       ..addListener(tick)
       ..forward();
+  }
+
+  /// The camera centre that puts [dest] at [offset] from the widget centre.
+  ///
+  /// flutter_map documents `Offset(100, 100)` as moving the intended centre
+  /// 100 px down and right, which leaves the actual centre 100 px up and left —
+  /// so in projected pixel space the centre is the target MINUS the offset.
+  /// Projection is done at [zoom], not the live camera zoom, because that is
+  /// the zoom the offset has to be correct at when the move lands.
+  static LatLng _centreFor(
+      MapCamera cam, LatLng dest, double zoom, Offset offset) {
+    if (offset == Offset.zero) return dest;
+    final p = cam.project(dest, zoom);
+    return cam.unproject(Point(p.x - offset.dx, p.y - offset.dy), zoom);
   }
 
   void dispose() => _anim.dispose();

@@ -483,6 +483,65 @@ void main() {
       vm.dispose();
     });
   });
+
+  // The trip map draws the rider's blue dot and pans the camera to follow it,
+  // so the live position has to leave the ViewModel. It was already tracked
+  // privately (_lastLat/_lastLng, used to stamp alarm and overshoot rows); these
+  // getters only publish what the monitoring loop was recording anyway.
+  group('live position for the trip map', () {
+    test('is null until a fix has actually landed', () async {
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+
+      // The trip has an ORIGIN, and returning it here would be the tempting
+      // shortcut — but the origin is a planning coordinate that can be minutes
+      // old, and the map would present it as "you are here". Same rule HomeView
+      // states: a missing dot is honest, a confident wrong dot is not.
+      expect(vm.currentLat, isNull);
+      expect(vm.currentLng, isNull);
+
+      await vm.stopTrip();
+      vm.dispose();
+    });
+
+    test('follows every fix the stream delivers', () async {
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+
+      gps.add(fixAt(1500));
+      await pumpEventQueue();
+      expect(vm.currentLat, closeTo(destLat + 1500 / metresPerDegLat, 1e-9));
+      expect(vm.currentLng, closeTo(destLng, 1e-9));
+
+      // The rider moves — the dot must move with them, which is the whole
+      // premise of camera tracking.
+      gps.add(fixAt(800));
+      await pumpEventQueue();
+      expect(vm.currentLat, closeTo(destLat + 800 / metresPerDegLat, 1e-9));
+
+      await vm.stopTrip();
+      vm.dispose();
+    });
+
+    test('keeps the last known position when the signal drops', () async {
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+
+      gps.add(fixAt(1500));
+      await pumpEventQueue();
+      gps.addError(Exception('GPS dropped'));
+      await pumpEventQueue();
+
+      // Blanking the dot on a dropped fix would erase the rider from a map
+      // they are still navigating by. The last real position is still the best
+      // answer available.
+      expect(vm.currentLat, closeTo(destLat + 1500 / metresPerDegLat, 1e-9));
+      expect(vm.currentLng, closeTo(destLng, 1e-9));
+
+      await vm.stopTrip();
+      vm.dispose();
+    });
+  });
 }
 
 // ── Stub collaborators ────────────────────────────────────────────────────
