@@ -108,7 +108,16 @@ class TripNotificationService {
       body,
       const NotificationDetails(
         android: AndroidNotificationDetails(
-          'navalert_trip',
+          // DO NOT MODIFY LOGIC: the "_v2" suffix is load-bearing, not tidying.
+          // A NotificationChannel's importance is FIXED once the channel exists
+          // on the device — Android deliberately ignores later changes so a
+          // user's own setting is never overridden. The original channel was
+          // created at IMPORTANCE_LOW, which Android 12+ files under "Silent",
+          // and most devices hide silent notifications from the lock screen by
+          // default. Raising `importance` alone would therefore have changed
+          // NOTHING on any phone that had already run NavAlert; only a new
+          // channel id makes the new importance take effect.
+          'navalert_trip_v2',
           'Trip Monitoring',
           channelDescription:
               'Active trip status shown on the lock screen (Figure 25).',
@@ -130,8 +139,15 @@ class TripNotificationService {
           // If you do want the monochrome icon: add the drawable, keep it from
           // being shrunk/renamed (res/raw/keep.xml with tools:keep), and prove
           // it on a `flutter build apk --release`, not a debug build.
-          importance: Importance.low,
-          priority: Priority.low,
+          // DEFAULT, not LOW: Android 12+ buckets LOW as "Silent", and most
+          // devices hide the Silent section from the lock screen — which is the
+          // one place Figure 25 has to be readable, because the rider is asleep.
+          // Not HIGH: that adds a heads-up banner, and this notification is
+          // rewritten on every GPS fix. `onlyAlertOnce` below keeps the sound to
+          // the first post, so the trip starts with one chime rather than a
+          // buzz every few seconds for the whole commute.
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
           ongoing: true,
           autoCancel: false,
           onlyAlertOnce: true,

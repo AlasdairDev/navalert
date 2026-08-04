@@ -343,17 +343,30 @@ class MediaButtonService : Service() {
     private fun startForegroundNotification() {
         val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // IMPORTANCE_LOW is deliberate and stays. This notification is
+            // permanent — it exists only to keep the volume-shortcut service
+            // alive — so raising it to DEFAULT would chime every time the
+            // service starts and file a never-dismissable notice among the
+            // rider's real alerts. What it DID lack is lock-screen visibility:
+            // without it Android falls back to VISIBILITY_PRIVATE on a secured
+            // lock screen and hides the content behind "Contents hidden".
             mgr.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL, "Safety shortcuts", NotificationManager.IMPORTANCE_LOW
-                ).apply { description = "Keeps the volume-button SOS shortcut active." }
+                ).apply {
+                    description = "Keeps the volume-button SOS shortcut active."
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
             )
             // High importance so the full-screen intent actually fires when a
             // shortcut is triggered with the screen off.
             mgr.createNotificationChannel(
                 NotificationChannel(
                     FS_CHANNEL, "Emergency trigger", NotificationManager.IMPORTANCE_HIGH
-                ).apply { description = "Launches SOS / fake call from the volume shortcut." }
+                ).apply {
+                    description = "Launches SOS / fake call from the volume shortcut."
+                    lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                }
             )
         }
         val notif: Notification = Notification.Builder(this, CHANNEL)
@@ -361,6 +374,10 @@ class MediaButtonService : Service() {
             .setContentText("Volume-Up ×3 for SOS · Volume-Down ×3 for a fake call")
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setOngoing(true)
+            // Set on the builder as well as the channel: the channel governs
+            // devices from Android 8 up, the builder covers the notification
+            // itself and is what older/OEM lock screens actually read.
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

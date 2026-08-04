@@ -153,6 +153,7 @@ class TripViewModel extends ChangeNotifier {
     // test can fast-forward the "Signal Lost" gap without waiting 90 real
     // seconds. Must pair with the clock.now() read in the watchdog below.
     _lastFixAt = clock.now();
+    _seedLastKnownPosition();
     // The factory is null in production, so this is exactly the same stream as
     // before; a test supplies a mock stream to drive the flow deterministically.
     final factory = _positionStreamFactory;
@@ -165,6 +166,39 @@ class TripViewModel extends ChangeNotifier {
       notifyListeners();
     });
     _startSignalWatchdog();
+  }
+
+  /// Fills the blue dot in from the OS's cached fix so the trip map is not
+  /// dotless while the first real fix is acquired.
+  ///
+  /// A cold GPS in a jeepney can take 30 s or more to produce its first
+  /// reading, and for that whole window the map had nothing to draw — which
+  /// looks exactly like a missing location layer rather than a device still
+  /// searching for satellites.
+  ///
+  /// DO NOT MODIFY LOGIC: this seeds from `getLastKnownPosition`, an actual
+  /// GPS reading, and NOT from the trip's origin. The origin is a planning
+  /// coordinate that can be minutes old and may be nowhere near the rider by
+  /// the time they board; drawing it would state "you are here" about a place
+  /// they have left. A cached fix can be stale too, so it is only ever used to
+  /// fill the gap — the first real fix overwrites it, and it is never allowed
+  /// to overwrite one (see the null guard).
+  ///
+  /// Deliberately not awaited: startTrip is on the path between "Start Trip"
+  /// and the monitoring screen, and a plugin call must not delay the alarm
+  /// arming. Fire-and-forget, and silent on failure.
+  void _seedLastKnownPosition() {
+    Geolocator.getLastKnownPosition().then((pos) {
+      if (pos == null || !isActive) return;
+      // A real fix has already landed — never step on it.
+      if (_lastLat != null || _lastLng != null) return;
+      _lastLat = pos.latitude;
+      _lastLng = pos.longitude;
+      notifyListeners();
+    }).catchError((Object e) {
+      debugPrint('NavAlert: no cached position to seed the map with — $e');
+      return null;
+    });
   }
 
   LocationSettings? _mobileSettings() {
