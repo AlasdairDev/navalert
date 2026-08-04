@@ -86,13 +86,34 @@ written in — and converted to the parent-relative fractions
 `DraggableScrollableSheet` actually consumes.
 
 ```dart
-restingScreenFraction = 0.36   // sheet + footer ≤ ~38% of screen at rest
-minMapVisibleFraction = 0.22   // ≥22% of screen stays map at full extension
+restingSheetScreenFraction = 0.34   // what the resting sheet WANTS
+maxObscuredScreenFraction  = 0.50   // sheet + footer ceiling (binding)
+minMapVisibleFraction      = 0.22   // map surviving full extension
 ```
 
-At rest the sheet plus footer occupy the bottom ~38% of the screen, leaving the top
-half of the map clear. Dragged to full extension the sheet still stops short of the
-top, so map context is never 100% lost.
+**As built, measured on 360x800** (`commute_guide_overlay_test`):
+
+| Band | Extent | % screen |
+|---|---|---|
+| Header plate | 0 → 83 | 10.4% |
+| Unobstructed map | 83 → 401 | 39.8% |
+| Guide sheet at rest | 401 → 630 | 28.6% |
+| Safety footer | 630 → 800 | 21.3% |
+
+Sheet + footer = 49.9%. At full extension the sheet top sits at 177 px, so 22.1% of
+the screen is still map.
+
+**The 30–40% resting band is not met: the sheet rests at 28.6%.** It cannot be, on
+this device. The safety footer is 170 px (21.3%), so a 30% sheet would put the
+obscured total at 51.3% and break the half-map rule. The requirement states the map
+half as a requirement and the band as an example ("e.g."), so the map wins and the
+sheet takes every pixel the budget leaves — which is what the geometry test now
+asserts, rather than a band that only held against an invented footer height.
+
+Recovering the band needs the footer to lose ~40 px. The only real candidate is the
+distance/speed/ETA readout (~42 px), which would move into the header row. That was
+left alone deliberately: it drops or crowds a live readout to buy 1.4 percentage
+points, and it is a content decision rather than a layout one.
 
 Every conversion clamps into `(0, 1]` and enforces `min ≤ initial ≤ max`, including
 on a degenerate screen or an unusually tall footer — the Signal Lost card inflates the
@@ -187,6 +208,14 @@ Headless, matching the suite's convention (only `marker_glide_test` uses
 
 **`test/trip_flow_test.dart`** — the new `currentLat`/`currentLng` getters exercised
 through the existing mock-GPS harness, including the no-fix-yet null case.
+
+**`test/commute_guide_overlay_test.dart`** — added during implementation, because the
+three suites above prove arithmetic and a correct calculation wired to nothing looks
+identical from the outside. Mounts the real screen and measures it: the map is
+present and full-bleed, the sheet rests below the halfway line, the fully-dragged
+sheet still leaves a top margin, the sheet's bottom never passes Slide-to-Stop or
+SOS, and the unobstructed band between header and sheet stays ≥35% of the screen.
+Mutation-tested (resting 0.34 → 0.90) to confirm the assertions can fail.
 
 Then `flutter analyze` and the full suite.
 
