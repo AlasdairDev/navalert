@@ -94,11 +94,17 @@ class CommuteGuideSheet extends StatelessWidget {
       final hosted = controller != null;
       return ListView(
         controller: controller,
-        // No bottom system inset here: in the guide-first layout this list is
-        // hosted in a sheet that stops ABOVE the safety footer, and the footer's
-        // own SafeArea already spends that inset. Adding it again would pad the
-        // last leg card away from a navigation bar it never reaches.
-        padding: EdgeInsets.fromLTRB(16, hosted ? 8 : 0, 16, 4),
+        // The bottom gutter is load-bearing when hosted. The sheet's lower edge
+        // is a HARD CLIP against the safety footer, so with the old 4 dp a leg
+        // card was guillotined exactly at the seam — and because the footer is
+        // its own plate, the slice read as the step text sliding UNDER the
+        // footer rather than as the end of a scroll. 24 dp also lets the FINAL
+        // step be scrolled fully clear of the seam, which 4 dp could not.
+        //
+        // Still no bottom system inset: the sheet stops above the footer, whose
+        // own SafeArea already spends that inset. Adding it here would pad the
+        // last card away from a navigation bar it never reaches.
+        padding: EdgeInsets.fromLTRB(16, hosted ? 8 : 0, 16, hosted ? 24 : 4),
         children: [
           // Hosted in a draggable sheet over the map: the handle is what tells
           // the rider the panel moves. It lives INSIDE the scrollable on
