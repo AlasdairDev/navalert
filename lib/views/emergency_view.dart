@@ -234,6 +234,34 @@ class _EmergencyViewState extends State<EmergencyView>
                     style: const TextStyle(
                         color: NavAlertColors.warning, fontSize: 12)),
               ),
+            // Standing warning while SMS is blocked by Android's restricted
+            // settings. A banner, not a dialog: this screen is a tab inside an
+            // IndexedStack and is built while other tabs are visible, so
+            // anything modal raised from here would surface over them. It also
+            // has to be seen BEFORE an emergency — discovering the SOS cannot
+            // send at the moment it is needed is the failure this prevents.
+            if (em.smsPermanentlyDenied)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Card(
+                  color: const Color(0xFF4A2A00),
+                  child: ListTile(
+                    leading: const Icon(Icons.sms_failed,
+                        color: NavAlertColors.warning),
+                    title: const Text('SOS cannot send SMS',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 14)),
+                    subtitle: const Text(
+                        'Android blocked SMS access for directly-installed '
+                        'apps. Tap Fix to allow it.',
+                        style: TextStyle(fontSize: 11)),
+                    trailing: ElevatedButton(
+                      onPressed: () => _showRestrictedSmsDialog(context),
+                      child: const Text('Fix'),
+                    ),
+                  ),
+                ),
+              ),
             // ╔════════════════════════════════════════════════════════════╗
             // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:           ║
             // ║ CALL 911 IS A SEPARATE, CONFIRMED TRIGGER.                 ║
@@ -360,6 +388,13 @@ class _EmergencyViewState extends State<EmergencyView>
     final em = context.read<EmergencyViewModel>();
     final msg = em.statusMessage;
     if (msg == null) return;
+    // A permission fault is the one failure a SnackBar cannot help with: there
+    // is nothing to retry and nothing to wait for. Walk the rider to the fix
+    // instead — see [_showRestrictedSmsDialog].
+    if (em.lastFailureWasPermission) {
+      _showRestrictedSmsDialog(context);
+      return;
+    }
     // A failure has to LOOK like one. The outcome comes from `statusIsError`
     // rather than from sniffing the copy, so rewording a message can never
     // silently turn a red failure into a neutral one.
@@ -370,6 +405,53 @@ class _EmergencyViewState extends State<EmergencyView>
         backgroundColor: em.statusIsError ? NavAlertColors.danger : null,
         duration: Duration(seconds: em.statusIsError ? 8 : 4),
       ));
+  }
+
+  /// Android 13+ "restricted settings" walkthrough.
+  ///
+  /// A sideloaded app cannot be granted SMS from an in-app prompt at all:
+  /// Android marks SEND_SMS a restricted setting for anything installed outside
+  /// a store, blocks it with "App was denied access to SMS", and returns denied
+  /// however many times it is asked. Re-prompting is therefore useless, and
+  /// silence is worse — the rider believes SOS is armed when it cannot send.
+  /// The only route is the app's own Settings page, and the menu is genuinely
+  /// hard to find, so the steps are spelled out rather than hinted at.
+  ///
+  /// DO NOT MODIFY LOGIC: raise this from an EXPLICIT event (a failed SOS, or
+  /// the banner's button) — never from build(). EmergencyView is a tab inside
+  /// ShellView's IndexedStack, so it is built while other tabs are on screen; a
+  /// dialog scheduled from build() would pop up over Home.
+  static Future<void> _showRestrictedSmsDialog(BuildContext context) async {
+    final em = context.read<EmergencyViewModel>();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: const Icon(Icons.sms_failed, color: NavAlertColors.warning),
+        title: const Text('SMS access is blocked'),
+        content: const Text(
+          'Because this app was downloaded directly, Android restricted its '
+          'SMS access.\n\n'
+          "Please tap 'Settings', then tap the three dots (⋮) in the top right "
+          "corner, and select 'Allow restricted settings'.",
+          style: TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Not now'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await em.openSmsSettings();
+            },
+            child: const Text('Settings'),
+          ),
+        ],
+      ),
+    );
+    // They may have fixed it while they were away — clear the warning if so.
+    await em.refreshSmsPermission();
   }
 
   /// dd/MM/yy — the compact form shown under custom recordings in Figure 32.

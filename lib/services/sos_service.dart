@@ -92,6 +92,7 @@ class SosService {
     // Cleared per trigger so a stale reason from an earlier SOS can never be
     // reported against this one.
     lastFailureReason = null;
+    lastFailureCode = null;
     for (final c in contacts.take(3)) {
       if (await _sendNativeSms(c.phoneNumber, message)) sent++;
     }
@@ -252,6 +253,11 @@ class SosService {
   /// a cellular signal is available" for faults that no amount of waiting fixes.
   String? lastFailureReason;
 
+  /// The raw native code behind [lastFailureReason] (e.g. `PERMISSION_DENIED`,
+  /// `NO_SERVICE`). Kept alongside the prose so callers can branch on the CAUSE
+  /// without pattern-matching display copy that is free to be reworded.
+  String? lastFailureCode;
+
   /// Maps a native failure code to something a commuter can act on. The raw
   /// codes come from MainActivity.kt's `sendSms` handler — the first group are
   /// refusals before the message ever reached the radio, the second are what
@@ -299,12 +305,15 @@ class SosService {
       final ok = await _channel.invokeMethod<bool>(
           'sendSms', {'phone': phone, 'message': message});
       if (ok ?? false) return true;
+      lastFailureCode = 'NOT_ACCEPTED';
       lastFailureReason = 'The SMS was not accepted by the device';
       return false;
     } on PlatformException catch (e) {
+      lastFailureCode = e.code;
       lastFailureReason = describeFailure(e.code, e.message);
       return false;
     } on MissingPluginException {
+      lastFailureCode = 'MissingPluginException';
       lastFailureReason = describeFailure('MissingPluginException', null);
       return false;
     }
