@@ -1,231 +1,241 @@
-# NavAlert — Setup & Install Guide
+# NavAlert — Setup & Defense Preparation
 
-**For groupmates and the UI team.** Two paths below: pick the one that matches
-what you need. You do **not** need to download any dependency by hand — Flutter
-fetches all 141 packages for you from the two files already in this repo.
+Installation and verification guide for developers and Capstone panelists
+testing **v1.0.0** on physical hardware.
 
----
-
-## Path A — "I just want to run the app on my phone"
-
-**You don't need Flutter, Android Studio, or any of this repo.** Just install
-the APK.
-
-1. Get `NavAlert-release.apk` (79 MB) from the group Drive folder.
-2. Copy it to your Android phone (Android 8.0 / API 26 or newer).
-3. Open it with the Files app and tap **Install**.
-4. Android will warn about "unknown sources" — allow it for Files/Chrome, then
-   tap Install again. This is normal for an app not from the Play Store.
-
-**If install fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`:** you already have
-an older NavAlert signed with a different key. **Uninstall the old one first**,
-then install again.
-
-**First launch:** the app asks for Location, Notifications, SMS and Bluetooth.
-Grant **Location** at minimum — the destination alarm cannot work without it.
-Every other permission is optional and the app still runs if you deny them.
-
-> ⚠️ Real SMS is sent when you trigger SOS with contacts saved. Don't demo SOS
-> with real contacts unless you mean it. It also needs prepaid load.
-
-### Testing the hardware features
-
-Four features **cannot be verified on an emulator** and need a real handset —
-an AVD has no audio sink, no carrier, and cannot deliver volume-key events to
-the app's media session. If you are testing on a physical phone, these are the
-ones worth your time:
-
-- **SOS SMS** — does the message arrive, with correct coordinates?
-- **Fake call audio** — is the ringtone and the voice clip actually audible?
-- **Volume shortcuts** — Volume-Up ×3 (SOS) and Volume-Down ×3 (fake call),
-  **with the screen off and the phone in a pocket**.
-- **A real commute** — does the alarm wake you, and does the guide advance?
-
-See the full step-by-step checklist in the group chat / hand-off notes.
+> **Note on filename.** This repository is developed on a case-insensitive
+> filesystem, where `setup.md` and `SETUP.md` are the same file. Git tracks it
+> as `SETUP.md`; linking to `setup.md` will resolve to this document.
 
 ---
 
-## Path B — "I need to edit the code"
+## 1. Mandatory prerequisite: uninstall any previous build
 
-### 1. Install the toolchain
+**Do this first. It is not housekeeping.**
 
-Match these versions. Version drift is the #1 cause of "it builds on your
-machine but not mine."
-
-| Tool | Version used to build this project | Get it |
-|---|---|---|
-| **Flutter SDK** | **3.41.9** (stable channel) | <https://docs.flutter.dev/get-started/install/windows> |
-| **Dart SDK** | 3.11.5 — *ships with Flutter, don't install separately* | — |
-| **Android Studio** | Latest — needed for the Android SDK + emulator | <https://developer.android.com/studio> |
-| **Android SDK** | API 26 (Android 8.0) minimum · API 35 recommended | Android Studio → SDK Manager |
-| **Java JDK** | 17 recommended (this machine has 1.8, see note below) | Bundled with Android Studio |
-| **Git** | Any recent version | <https://git-scm.com/downloads> |
-| **VS Code** *(optional)* | + Flutter and Dart extensions | <https://code.visualstudio.com> |
-
-Gradle **8.14** is downloaded automatically by the wrapper — do not install it.
-
-Verify before going further:
-
-```powershell
-flutter --version     # expect 3.41.9
-flutter doctor        # every line should be a checkmark
+```bash
+adb uninstall ph.edu.pup.navalert
 ```
 
-`flutter doctor` must be clean for Flutter **and** Android toolchain. If it
-reports Android licences, run `flutter doctor --android-licenses` and accept all.
+Two things make this mandatory rather than advisory:
 
-### 2. Get the code
+1. **Notification channel state is locked.** A `NotificationChannel`'s
+   importance is fixed the moment the channel first exists on the device —
+   Android deliberately ignores later changes so a user's own setting is never
+   overridden. Earlier builds created `navalert_trip` at `IMPORTANCE_LOW`, which
+   Android 12+ files under "Silent" and most devices hide from the lock screen.
+   v1.0.0 posts on a new `navalert_trip_v2` channel, but **the stale channel
+   survives an in-place upgrade**, and on some devices the old one continues to
+   shadow the behaviour. A clean install is the only way to guarantee the
+   lock-screen notification behaves as designed.
 
-```powershell
+2. **Signature mismatch.** Release builds are signed with the debug key (see
+   [§5](#5-signing)), so installing over a build from a different machine fails
+   with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+Uninstalling also clears granted permissions, which is exactly the state you
+want for the restricted-settings test in [§4](#4-testing-checklist).
+
+---
+
+## 2. Installation over USB
+
+Install with `adb`, not by copying the APK to the phone and tapping it:
+
+```bash
+adb install NavAlert-release.apk
+```
+
+Or from a fresh build:
+
+```bash
+flutter build apk --release
+adb install build/app/outputs/apk/release/NavAlert-release.apk
+```
+
+### Why USB rather than tapping the file
+
+Android 13+ (API 33+) treats apps installed by a non-store installer as
+**sideloaded** and gates sensitive permissions behind *Restricted Settings*,
+refusing the grant with **"App was denied access to SMS."** Packages installed
+through `adb` are generally not flagged this way, so the SMS permission can be
+granted through the normal in-app prompt and the SOS works immediately.
+
+> **If you are blocked anyway** — behaviour varies by OEM and Android version,
+> so treat USB install as the smoother path, not a guarantee. NavAlert detects
+> the blocked state and handles it: the Emergency screen shows an **"SOS cannot
+> send SMS"** banner, and its **Fix** button opens the app's Settings page with
+> the exact steps. Manually:
+>
+> `Settings → Apps → NavAlert → ⋮ (top-right) → Allow restricted settings`,
+> then grant SMS.
+
+### Permissions
+
+Grant **Location** at minimum — the destination alarm cannot work without it.
+Everything else is optional and the app runs if you deny it.
+
+> ⚠️ Triggering SOS with real contacts saved sends **real SMS** and consumes
+> prepaid load. Use a test contact for demonstrations.
+
+---
+
+## 3. Building from source
+
+### Toolchain
+
+| Tool | Version used for v1.0.0 |
+|---|---|
+| Flutter SDK | **3.41.9** (stable) |
+| Dart SDK | 3.11.5 — ships with Flutter |
+| Android SDK | API 26 minimum · compiled and targeted at **API 36** |
+| JDK | 17 recommended |
+
+Gradle 8.14 is fetched by the wrapper — do not install it separately.
+
+```bash
+flutter --version     # expect 3.41.9
+flutter doctor        # Flutter and Android toolchain must be clean
+```
+
+### Build
+
+```bash
 git clone https://github.com/AlasdairDev/navalert.git
 cd navalert
-```
-
-`main` is the current, verified branch — everything is merged there. (The old
-`ui-handoff-baseline` branch is kept for history only; do not start from it.)
-
-### 3. Install dependencies — this is the "dependencies file" step
-
-```powershell
 flutter pub get
-```
-
-That single command reads `pubspec.yaml` + `pubspec.lock` and downloads **all
-141 packages**. There is nothing to download manually and nothing to commit.
-
-> **Do NOT run `flutter pub upgrade`.** `pubspec.lock` pins the exact package
-> versions this project was built and tested against. Upgrading silently moves
-> everyone onto different versions and is a classic source of "works on mine,
-> broken on yours." If you genuinely need a new package, tell the team first.
-
-### 4. Run it
-
-```powershell
-flutter devices                 # confirm your phone/emulator is listed
-flutter run                     # debug build, hot reload enabled
-```
-
-Press `r` in the terminal to hot-reload after a change, `R` for a full restart,
-`q` to quit.
-
-No emulator yet? `flutter emulators --launch Pixel_6_2`, or create one in
-Android Studio → Device Manager (API 26+).
-
-**Give the emulator a location**, or the map has nothing to centre on:
-
-```powershell
-adb emu geo fix 121.0108 14.5979      # PUP Sta. Mesa — longitude FIRST
-```
-
-Anything outside Metro Manila is outside the routing service area, and the app
-will say so rather than showing an empty guide.
-
-### 5. Build a shareable APK
-
-```powershell
 flutter build apk --release
 ```
 
-This produces **two copies of the same signed APK**:
+`flutter pub get` reads `pubspec.yaml` + `pubspec.lock` and fetches all 141
+packages. Nothing is downloaded by hand.
+
+> **Do not run `flutter pub upgrade`.** `pubspec.lock` pins the exact versions
+> v1.0.0 was built and tested against.
+
+The build produces two byte-identical copies:
 
 | Path | Filename |
 |---|---|
-| `build\app\outputs\apk\release\` | **`NavAlert-release.apk`** ← share this one |
-| `build\app\outputs\flutter-apk\` | `app-release.apk` |
+| `build/app/outputs/apk/release/` | **`NavAlert-release.apk`** ← distribute this |
+| `build/app/outputs/flutter-apk/` | `app-release.apk` |
 
-They are byte-identical. `flutter build` prints only the second path because
-Flutter's Gradle plugin copies the artifact under its own hardcoded
-`app-<buildmode>.apk` name; the branded name comes from `base.archivesName` in
-`android/app/build.gradle.kts` and applies to Gradle's own output.
+### Before committing
 
-Use `--release` for anything you hand to someone else — debug builds render
-maps noticeably slower and look janky in a demo.
-
-> **Signing.** The release build is signed with the **debug** key — the Flutter
-> template default in `android/app/build.gradle.kts` was deliberately kept. This
-> is fine for the academic defense: the APK installs and runs normally. It is
-> **not** Play Store publishable, and it is why swapping between builds signed
-> by different machines throws `INSTALL_FAILED_UPDATE_INCOMPATIBLE` (see Path A).
-> Adding a production keystore is a `signingConfigs` block whenever it is needed.
-
----
-
-## Direct dependencies (21)
-
-All are pulled automatically by `flutter pub get`. Listed here so you can see
-what the app is built on.
-
-| Package | Version | Purpose |
-|---|---|---|
-| `provider` | ^6.1.2 | MVVM state management |
-| `sqflite_sqlcipher` | ^3.1.0+1 | SQLite encrypted with SQLCipher AES-256 |
-| `flutter_secure_storage` | ^9.2.2 | DB key in the Android Keystore |
-| `path` | ^1.9.0 | Filesystem paths |
-| `path_provider` | ^2.1.4 | App directories (incl. the offline tile cache) |
-| `http` | ^1.2.2 | Nominatim geocoding calls |
-| `flutter_map` | ^7.0.2 | OpenStreetMap tile rendering |
-| `flutter_map_cache` | ^2.1.0 | Cancellable + cached tile provider |
-| `dio_cache_interceptor` | ^4.0.7 | Cache plumbing behind `TileCacheStore` |
-| `latlong2` | ^0.9.1 | Coordinate maths |
-| `geolocator` | ^13.0.1 | GPS stream, speed, background service |
-| `url_launcher` | ^6.3.0 | Google Maps reroute intent |
-| `permission_handler` | ^11.3.1 | Runtime permissions |
-| `uuid` | ^4.5.1 | Primary keys |
-| `clock` | ^1.1.1 | Injectable clock (virtual time in tests) |
-| `vibration` | ^2.0.0 | Alarm haptics |
-| `audioplayers` | ^6.1.0 | Alarm + ringtone playback |
-| `record` | ^6.0.0 | Custom fake-call recordings |
-| `flutter_local_notifications` | ^17.2.3 | Lock-screen trip widget |
-| `home_widget` | ^0.9.3 | Home-screen App Widget |
-| `cupertino_icons` | ^1.0.8 | Icon set |
-
-**Dev dependencies:** `flutter_test`, `integration_test`, `flutter_lints ^4.0.0`,
-`fake_async ^1.3.1`.
-
-> `flutter_map_cancellable_tile_provider` was **removed**. `flutter_map_cache`
-> supersedes it — it reports `supportsCancelLoading`, so request cancellation is
-> kept, with disk caching added on top rather than traded for it.
-
----
-
-## Before you commit
-
-```powershell
+```bash
 flutter analyze     # expect: No issues found
-flutter test        # expect: 262 passing
+flutter test        # expect: 280 passing
 ```
 
-If either regresses, your change touched logic rather than styling — revert and
-restyle instead. See the **UI hand-off rules** section in
-[README.md](README.md), and respect every
-`// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block (there are 13,
-across 6 files).
-
-An on-device sweep also exists, if you have a device or emulator attached:
-
-```powershell
-flutter test integration_test\full_app_sweep_test.dart
-```
+Respect every `// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block —
+there are 15 across 8 files (Dart and Kotlin), each naming what it protects and
+what breaks without it.
 
 ---
 
-## Troubleshooting
+## 4. Testing checklist
+
+Run these on a **physical handset with a SIM**. None can be verified on an
+emulator: an AVD has no radio, no carrier, no audio sink, and cannot deliver
+volume-key events to a media session.
+
+Set up first: complete onboarding, save **one test emergency contact**, and plan
+a trip (search a destination → *Show Commute Guide* → *Start Trip*).
+
+### 4.1 Lock-screen notification
+
+1. Start a trip.
+2. Lock the phone.
+
+**Expect:** the trip card on the lock screen showing destination, remaining
+distance and ETA, with **SOS · Open in App · End trip** actions — contents
+visible, not replaced by "Contents hidden."
+
+**If it fails:** you almost certainly upgraded in place. Uninstall
+([§1](#1-mandatory-prerequisite-uninstall-any-previous-build)) and reinstall.
+
+### 4.2 Blue dot and auto-recenter
+
+1. Start a trip with the destination alarm **off** — the map layout only appears
+   in guide-first mode.
+2. Confirm the blue dot is present immediately, centred in the map band above
+   the guide sheet.
+3. Drag the map away from the dot. A **recenter** button appears.
+4. Stop touching the map and wait **12 seconds**.
+
+**Expect:** the camera returns to the dot on its own; the dot tracks you as you
+move.
+
+**If it fails, note *when*** — it distinguishes two different mechanisms:
+
+- Missing from the moment the screen opens → cold-start GPS seeding.
+- Disappears only after you touch the map → the 12 s follow re-arm.
+
+### 4.3 Fake call volume
+
+1. Trigger a fake call (Emergency screen, or triple Volume-Down with the screen
+   off).
+2. While it rings, press **Volume Down** several times.
+
+**Expect:** the volume lowers and **stays** lowered. No slider flashing
+repeatedly, no level running up and down on its own.
+
+### 4.4 SMS delivery and offline fallback
+
+Enable **Airplane Mode**, then hold SOS for 3 seconds.
+
+**Expect:** *"Failed: Phone radio is off — turn off Airplane Mode"* — **not** a
+success message. This is the whole point of the delivery-tracking work: the app
+must never claim an SMS was sent when it was not.
+
+Then disable Airplane Mode and repeat.
+
+**Expect:** *"Emergency SMS Sent"* **and** the message actually arriving on the
+contact's phone. Verify both — the first without the second is the failure mode
+this feature exists to eliminate.
+
+Also worth confirming: with no prepaid load, the failure names the load rather
+than blaming the signal.
+
+### 4.5 Restricted settings (fresh sideload only)
+
+Only reproducible if the install was flagged as sideloaded — see
+[§2](#2-installation-over-usb).
+
+1. Open the **Emergency** tab.
+
+**Expect:** an amber **"SOS cannot send SMS"** banner. Tapping **Fix** shows the
+⋮-menu walkthrough and deep-links to Settings; the banner clears on return once
+the permission is allowed.
+
+---
+
+## 5. Signing
+
+The release APK is signed with the **debug key** — the Flutter template default
+in `android/app/build.gradle.kts` was deliberately kept.
+
+This is appropriate for an academic defense: the APK installs and runs normally.
+It is **not** Play Store publishable, and it is why swapping between builds from
+different machines throws `INSTALL_FAILED_UPDATE_INCOMPATIBLE`. Adding a
+production keystore is a `signingConfigs` block whenever it is needed.
+
+---
+
+## 6. Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `flutter: command not found` | Flutter's `bin` folder isn't on your PATH. Re-check the install guide, then reopen your terminal. |
-| `flutter doctor` flags Android licences | `flutter doctor --android-licenses`, accept all. |
-| Gradle build fails after pulling changes | `flutter clean` then `flutter pub get`. First build after a clean is slow (10+ min) — that's normal. |
-| **Build fails with `classes.dex ... used by another process`** | A stale Gradle daemon is holding the file (Windows). Run `cd android; .\gradlew.bat --stop`, delete `build\app\intermediates\dex\release\minifyReleaseWithR8`, and rebuild. Not a code error. |
-| `Could not resolve all files for configuration` | You're offline or behind a proxy; Gradle needs internet on first build. |
-| Map is blank on **first** load | Tiles need internet the first time. Once loaded they are cached to disk and render offline afterwards, including after a force-close. |
-| **Map goes grey mid-session on an emulator**, having worked minutes earlier | Emulator DNS flaking, not a code fault. Check `adb logcat -s flutter:*` for `Failed host lookup: 'tile.openstreetmap.org' (errno = 7)`. Restart the AVD with `emulator -avd Pixel_6_2 -dns-server 8.8.8.8`. The polyline and markers keep rendering, which is what makes it look like a tile-layer bug. |
-| Active Trip map shows no blue dot and no recenter button | Neither renders until a **real** GPS fix lands — the trip's origin is a planning coordinate that may be minutes stale, and drawing it would claim "you are here" wrongly. Feed a fix with `adb emu geo fix 121.0108 14.5979`. |
-| App builds but no GPS on emulator | `adb emu geo fix 121.0108 14.5979` (longitude first), or use the emulator's ⋯ menu → Location → Set. |
-| Emulator shows the app but the blue dot is missing | The dot only renders for a **real** fix. If the app is falling back to a default position it deliberately hides the dot rather than show a confident wrong one — grant Location and set a geo fix. |
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Uninstall the existing NavAlert first (different signing key). |
-| Want a clean first-run state | `adb shell pm clear ph.edu.pup.navalert` — wipes the database, settings and tile cache, and revokes permissions, exactly like a fresh install. |
-| Java version warnings during build | This machine builds with JDK 1.8; JDK 17 is recommended if you hit Gradle/Java errors. Point Android Studio at JDK 17 under Settings → Build Tools → Gradle. |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | Uninstall the existing build first — different signing key. |
+| Lock-screen notification still missing | You upgraded in place; the old `navalert_trip` channel persists. Uninstall and reinstall. |
+| "App was denied access to SMS" | Restricted settings. Use the in-app **Fix** button, or `Settings → Apps → NavAlert → ⋮ → Allow restricted settings`. |
+| Map blank on **first** load | Tiles need internet once. Afterwards they render from disk, including after a force-close. |
+| Map goes grey mid-session on an **emulator** | Emulator DNS flaking, not a code fault. Check `adb logcat -s flutter:*` for `Failed host lookup`. Restart with `emulator -avd <name> -dns-server 8.8.8.8`. |
+| No GPS on emulator | `adb emu geo fix 121.0108 14.5979` — **longitude first**. Anything outside Metro Manila is outside the service area. |
+| Blue dot missing on Home | The dot renders only for a **real** fix; a fallback position deliberately shows no dot rather than a confident wrong one. |
+| Gradle fails after pulling changes | `flutter clean && flutter pub get`. The first build after a clean is slow — that is normal. |
+| `classes.dex … used by another process` (Windows) | Stale Gradle daemon: `cd android && ./gradlew --stop`, then rebuild. |
+| Want a clean first-run state without reinstalling | `adb shell pm clear ph.edu.pup.navalert` — wipes database, settings and tile cache, and revokes permissions. |
 
-Still stuck? Run `flutter doctor -v` and send the full output to the group — it
-shows exactly which part of the toolchain is missing.
+Still stuck? Run `flutter doctor -v` and share the full output — it shows
+exactly which part of the toolchain is missing.
