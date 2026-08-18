@@ -46,7 +46,7 @@ until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]
 ```bash
 adb install -r -t build/app/outputs/flutter-apk/app-debug.apk
 ```
-APKs are committed under `build/app/outputs/flutter-apk/` (built on Windows and carried on the shared DevSpace drive). If they're missing/stale, they must be rebuilt on the Windows machine — this host can't build.
+APKs live under `build/app/outputs/flutter-apk/` — **gitignored**, not in git: they're built on Windows and present on the shared DevSpace drive. On a fresh clone without them, rebuild on the Windows machine — this host can't build.
 
 ### 3. Launch and give it real data
 ```bash
