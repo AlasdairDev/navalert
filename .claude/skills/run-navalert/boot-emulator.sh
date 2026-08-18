@@ -7,10 +7,12 @@ set -euo pipefail
 AVD="${1:-Pixel_6}"
 EMU="$HOME/Android/Sdk/emulator/emulator"
 LOG="/tmp/navalert-emu.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Already have a running emulator? Do nothing.
+# Already have a running emulator? Just make sure the toolbar stays hidden.
 if adb devices | grep -qE 'emulator-[0-9]+\s+device'; then
   echo "Emulator already running:"; adb devices | grep emulator
+  "$SCRIPT_DIR/hide-emulator-toolbar.sh" 2>/dev/null || true
   exit 0
 fi
 
@@ -30,3 +32,8 @@ until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]
   echo -n .; sleep 3
 done
 echo; echo "Booted. $(adb devices | grep emulator)"
+
+# Hide the emulator's separate toolbar window so it shows as one clean phone
+# window (KDE/KWin only; no-ops elsewhere). Runs in the background so it can
+# catch the toolbar window as it appears without delaying the boot return.
+"$SCRIPT_DIR/hide-emulator-toolbar.sh" >/dev/null 2>&1 &
