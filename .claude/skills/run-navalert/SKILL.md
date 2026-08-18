@@ -34,6 +34,7 @@ DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) \
   -no-snapshot -no-boot-anim -no-audio -gpu host >/tmp/navalert-emu.log 2>&1 &
 ```
 - **Why `-gpu host` and windowed:** with any software renderer (`swiftshader_indirect`, `guest`, `angle_indirect`, or headless `-no-window`) the emulator crashes ~20s into boot inside SwiftShader's `libGLESv2.so` JIT. `-gpu host` uses the real Intel GPU and never loads SwiftShader. It needs a visible window, so **do not** add `-no-window`.
+- **Toolbar auto-hide:** the emulator always opens a *second* window — a control toolbar (caption `Emulator`) next to the device screen — which looks like a detached "doubled" bar under KWin. `boot-emulator.sh` automatically runs `hide-emulator-toolbar.sh` (minimizes that toolbar window via KWin) so you get one clean phone window. Re-run `hide-emulator-toolbar.sh` any time the toolbar reappears (it's runtime-only). This is KDE-specific and no-ops on other hosts / Windows.
 - Wait for boot:
 ```bash
 adb wait-for-device
