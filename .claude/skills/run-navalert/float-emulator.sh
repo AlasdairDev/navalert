@@ -46,12 +46,16 @@ fi
 S2="$(mktemp --suffix=.js)"
 cat > "$S2" <<'JS'
 var l=(typeof workspace.windowList==='function')?workspace.windowList():workspace.clientList();
+// Use the panel-aware work area so the whole phone fits on screen.
 var geo={x:0,y:0,width:1670,height:939};
 try{if(workspace.screens&&workspace.screens.length)geo=workspace.screens[0].geometry;}catch(e){}
-var h=Math.min(geo.height-90,900), wdt=Math.round((h-40)*1080/2400);
+try{var ca=workspace.clientArea(0, workspace.activeScreen, workspace.currentDesktop); if(ca&&ca.height){geo=ca;}}catch(e){}
+var topM=14, botM=18, titleBar=38;
+var frameH=Math.round(geo.height-topM-botM);              // fill the height
+var frameW=Math.round((frameH-titleBar)*1080/2400);       // width from phone aspect
 for(var i=0;i<l.length;i++){var w=l[i];if(w.resourceClass==="Emulator"&&w.windowType===0){
   try{w.noBorder=false;}catch(e){}   // ensure a title bar so it can be dragged/closed
-  w.frameGeometry={x:geo.x+geo.width-wdt-15,y:geo.y+50,width:wdt,height:h};
+  w.frameGeometry={x:Math.round(geo.x+geo.width-frameW-14),y:Math.round(geo.y+topM),width:frameW,height:frameH};
 }}
 JS
 gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.loadScript "$S2" >/dev/null 2>&1
