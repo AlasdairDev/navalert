@@ -58,11 +58,15 @@ add_rule "$(cat /proc/sys/kernel/random/uuid)" \
   "skiptaskbar=true" "skiptaskbarrule=2" "skipswitcher=true" "skipswitcherrule=2" \
   "skippager=true" "skippagerrule=2"
 
-# NOTE: we do NOT pin the device window. A Force position rule does not beat
-# Kröhnkite (it moves windows by script, bypassing the rule) and it also blocks
-# dragging. The device is left as a normal, draggable window; keeping Kröhnkite
-# from snapping it is handled (best-effort) by ensure-krohnkite-ignore.sh.
-: "${DW:?} ${DH:?} ${DX:?} ${DY:?}"   # (kept for reference; not applied)
+# 2. Device -> Force a TITLE BAR (Kröhnkite strips window borders via noTileBorder
+# and re-applies that on move, so the title bar keeps vanishing). Forcing
+# noborder=false keeps a draggable/closable title bar. We do NOT force position or
+# size (that blocks dragging and Kröhnkite bypasses it anyway) — float-emulator.sh
+# floats + places it instead. DW/DH/DX/DY are computed above but intentionally unused.
+add_rule "$(cat /proc/sys/kernel/random/uuid)" \
+  "Description=$MARKER (titlebar)" \
+  "wmclass=Emulator" "wmclasscomplete=false" "wmclassmatch=1" "titlematch=0" \
+  "types=1" "noborder=false" "noborderrule=2"
 
 qdbus-qt6 org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null \
   || qdbus org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null || true
