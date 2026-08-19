@@ -238,6 +238,18 @@ class _SettingsViewState extends State<SettingsView>
           header('Bluetooth'),
           allowTile('Enable bluetooth connection', s.bluetoothEnabled,
               (v) => s.bluetoothEnabled = v),
+          header('Map'),
+          Card(
+            child: SwitchListTile(
+              title: const Text('Map dark mode'),
+              subtitle: const Text('Only changes the map tiles — the rest '
+                  'of the app stays as-is.',
+                  style: TextStyle(
+                      fontSize: 11, color: NavAlertColors.textSecondary)),
+              value: app.mapDarkMode,
+              onChanged: (v) => app.setMapDarkMode(v),
+            ),
+          ),
           header('Alarm'),
           Card(
             child: Padding(

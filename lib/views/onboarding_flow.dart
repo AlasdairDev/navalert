@@ -49,18 +49,18 @@ class _TutorialViewState extends State<TutorialView> {
   }
 
   static const _pages = [
-    (Icons.airline_seat_recline_extra, 'Welcome to NavAlert.',
+    ('assets/images/tutorial/1.jpeg', 'Welcome to NavAlert.',
         'Never miss your stop again.'),
-    (Icons.route, 'Know your commute.',
-        'Fastest routes, boarding points, fares and step-by-step guidance for jeepney, bus and UV Express.'),
-    (Icons.speed, 'Adaptive smart alarm.',
-        'Trigger distance adjusts to real-time vehicle speed and learns from how you wake up.'),
-    (Icons.alarm, 'Three escalating stages.',
-        'Gentle vibration, louder alert, then a full-screen emergency alarm you cannot sleep through.'),
-    (Icons.sos, 'Emergency SOS.',
-        'Hold the SOS button to text your exact GPS location to trusted contacts — even without internet.'),
-    (Icons.phone_in_talk, 'Fake call escape.',
-        'Simulate a realistic incoming call to discreetly exit unsafe situations.'),
+    ('assets/images/tutorial/2.jpg', 'Set Your Destination',
+        'Pick a spot on the map and track your destination in real-time.'),
+    ('assets/images/tutorial/3.jpeg', 'Fast Route Suggestions',
+        'Get the fastest route suggestions and avoid delays.'),
+    ('assets/images/tutorial/4.jpeg', 'Commute Guide & Fare',
+        'Get a step-by-step guide for your entire journey and see accurate fare estimates for different travel options.'),
+    ('assets/images/tutorial/5.jpeg', 'Rest Easy',
+        'Close your eyes and let us handle the rest. Wake up to personalized sounds and vibrations.'),
+    ('assets/images/tutorial/6.jpeg', 'Smart Travel Safety',
+        'Get adaptive ETA alarms, travel stop alerts, overshoot detection, and SOS features.'),
   ];
 
   void _next() {
@@ -77,72 +77,92 @@ class _TutorialViewState extends State<TutorialView> {
 
   @override
   Widget build(BuildContext context) {
+    final (_, title, sub) = _pages[_page];
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.58,
+              width: double.infinity,
               child: PageView.builder(
                 controller: _controller,
                 itemCount: _pages.length,
                 onPageChanged: (i) => setState(() => _page = i),
                 itemBuilder: (_, i) {
-                  final (icon, title, sub) = _pages[i];
-                  return Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, size: 120, color: NavAlertColors.accent),
-                        const SizedBox(height: 36),
-                        Text(title,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        Text(sub,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                color: NavAlertColors.textSecondary,
-                                fontSize: 15)),
-                      ],
-                    ),
-                  );
+                  final (asset, _, _) = _pages[i];
+                  return Image.asset(asset,
+                      width: double.infinity, fit: BoxFit.cover);
                 },
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _pages.length,
-                (i) => Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == _page ? 18 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: i == _page
-                        ? NavAlertColors.accent
-                        : NavAlertColors.surface,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+            Expanded(
+              child: Align(
+                alignment: const Alignment(0, -0.5),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        _pages.length,
+                        (i) => Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: i == _page ? 18 : 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: i == _page
+                                ? Colors.white
+                                : NavAlertColors.surface,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(sub,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: NavAlertColors.textSecondary,
+                              fontSize: 15)),
+                    ),
+                    const SizedBox(height: 32),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: NavAlertColors.primary,
+                                  minimumSize: const Size(130, 46),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 10)),
+                              onPressed: _skip,
+                              child: const Text('Skip')),
+                          const SizedBox(width: 16),
+                          ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size(130, 46),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 10)),
+                              onPressed: _next,
+                              child: Text(_page == _pages.length - 1
+                                  ? 'Get Started'
+                                  : 'Next')),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  Expanded(
-                      child: OutlinedButton(
-                          onPressed: _skip, child: const Text('Skip'))),
-                  const SizedBox(width: 16),
-                  Expanded(
-                      child: ElevatedButton(
-                          onPressed: _next,
-                          child: Text(_page == _pages.length - 1
-                              ? 'Get Started'
-                              : 'Next'))),
-                ],
               ),
             ),
           ],
