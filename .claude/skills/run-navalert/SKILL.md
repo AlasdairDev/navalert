@@ -34,7 +34,7 @@ DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) \
   -no-snapshot -no-boot-anim -no-audio -gpu host >/tmp/navalert-emu.log 2>&1 &
 ```
 - **Why `-gpu host` and windowed:** with any software renderer (`swiftshader_indirect`, `guest`, `angle_indirect`, or headless `-no-window`) the emulator crashes ~20s into boot inside SwiftShader's `libGLESv2.so` JIT. `-gpu host` uses the real Intel GPU and never loads SwiftShader. It needs a visible window, so **do not** add `-no-window`.
-- **The emulator control toolbar** (power / rotate / volume / back / home / recents) opens as a *second* window beside the device screen (a `NET::Utility` window, same class `Emulator`). This is normal and wanted — keep it. Under KWin it can look slightly detached from the device; just drag it flush if you like. Do NOT try to auto-hide it (a previous attempt did, and those buttons turned out to be useful).
+- **The emulator side toolbar is hidden on purpose.** The emulator opens a second window — a control toolbar (a `NET::Utility` window, same class `Emulator`) — that on this KWin+Wayland+fractional-scaling setup renders with a buggy white/black strip. Instead of using it, we switch the phone to **on-screen 3-button navigation** (`set-3button-nav.sh`) and move the toolbar off-screen. It's hidden two ways: a persistent KWin rule forcing its position off-screen (`install-toolbar-hide-rule.sh`, installed at boot) and a runtime move (`hide-emulator-toolbar.sh`, run after launch because launching raises it). **Minimize does NOT work** on this window — it un-minimizes itself; off-screen position is what sticks. Match on window **type** (Utility=256), NOT title — both emulator windows briefly share the title `Emulator` at boot. All KDE-specific; no-ops on Windows. To undo: delete the `NavAlert: hide Android emulator toolbar` rule (System Settings → Window Rules) and re-run `set-3button-nav.sh` swapping enable/disable back to `gestural`.
 - Wait for boot:
 ```bash
 adb wait-for-device
@@ -55,6 +55,11 @@ adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 adb shell pm grant $PKG android.permission.ACCESS_FINE_LOCATION
 adb shell pm grant $PKG android.permission.ACCESS_COARSE_LOCATION
 adb emu geo fix 121.0244 14.5547     # Ayala Ave, Metro Manila — gives the map/blue-dot UI a location
+
+# On-screen 3-button nav (Back/Home/Recents) instead of the gesture pill,
+# and hide the buggy side toolbar. Run the hide AFTER launch (launching raises it).
+.claude/skills/run-navalert/set-3button-nav.sh
+.claude/skills/run-navalert/hide-emulator-toolbar.sh
 ```
 
 ### 4. Drive & verify
