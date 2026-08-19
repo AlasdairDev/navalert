@@ -50,6 +50,7 @@ var geo={x:0,y:0,width:1670,height:939};
 try{if(workspace.screens&&workspace.screens.length)geo=workspace.screens[0].geometry;}catch(e){}
 var h=Math.min(geo.height-90,900), wdt=Math.round((h-40)*1080/2400);
 for(var i=0;i<l.length;i++){var w=l[i];if(w.resourceClass==="Emulator"&&w.windowType===0){
+  try{w.noBorder=false;}catch(e){}   // ensure a title bar so it can be dragged/closed
   w.frameGeometry={x:geo.x+geo.width-wdt-15,y:geo.y+50,width:wdt,height:h};
 }}
 JS
