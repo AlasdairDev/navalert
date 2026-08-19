@@ -58,11 +58,11 @@ add_rule "$(cat /proc/sys/kernel/random/uuid)" \
   "skiptaskbar=true" "skiptaskbarrule=2" "skipswitcher=true" "skipswitcherrule=2" \
   "skippager=true" "skippagerrule=2"
 
-# 2. Device -> Force pinned docked-right, on-screen, fit
-add_rule "$(cat /proc/sys/kernel/random/uuid)" \
-  "Description=$MARKER (device pinned right)" \
-  "wmclass=Emulator" "wmclasscomplete=false" "wmclassmatch=1" "titlematch=0" \
-  "types=1" "position=$DX,$DY" "positionrule=2" "size=$DW,$DH" "sizerule=2"
+# NOTE: we do NOT pin the device window. A Force position rule does not beat
+# Kröhnkite (it moves windows by script, bypassing the rule) and it also blocks
+# dragging. The device is left as a normal, draggable window; keeping Kröhnkite
+# from snapping it is handled (best-effort) by ensure-krohnkite-ignore.sh.
+: "${DW:?} ${DH:?} ${DX:?} ${DY:?}"   # (kept for reference; not applied)
 
 qdbus-qt6 org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null \
   || qdbus org.kde.KWin /KWin org.kde.KWin.reconfigure 2>/dev/null || true
