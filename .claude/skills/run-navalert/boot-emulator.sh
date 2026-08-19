@@ -9,9 +9,10 @@ EMU="$HOME/Android/Sdk/emulator/emulator"
 LOG="/tmp/navalert-emu.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Make Kröhnkite float the emulator (else it snaps it to a left tile), and install
-# the persistent KWin rules (toolbar off-screen + device pinned right). KDE-only.
-"$SCRIPT_DIR/ensure-krohnkite-ignore.sh" 2>/dev/null || true
+# Install the persistent KWin rule that hides the emulator's side toolbar
+# off-screen (KDE-only). The device window is made floating/draggable after launch
+# by float-emulator.sh (see the launch step) — Kröhnkite's ignoreClass can't match
+# the emulator, but its Toggle-Float action can.
 "$SCRIPT_DIR/install-toolbar-hide-rule.sh" 2>/dev/null || true
 
 # Already have a running emulator? Do nothing.

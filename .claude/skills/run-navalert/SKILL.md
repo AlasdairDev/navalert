@@ -36,9 +36,9 @@ DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) \
 - **Why `-gpu host` and windowed:** with any software renderer (`swiftshader_indirect`, `guest`, `angle_indirect`, or headless `-no-window`) the emulator crashes ~20s into boot inside SwiftShader's `libGLESv2.so` JIT. `-gpu host` uses the real Intel GPU and never loads SwiftShader. It needs a visible window, so **do not** add `-no-window`.
 - **Emulator window layout is managed by two persistent KWin rules** (`install-toolbar-hide-rule.sh`, installed at boot; KDE-only, no-ops on Windows):
   - The **side toolbar** (a `NET::Utility` window) renders a buggy white/black strip on this KWin+Wayland+scaling setup, so it's forced **off-screen**. You navigate with the phone's own **on-screen 3-button nav** instead (`set-3button-nav.sh` → Back/Home/Recents). `hide-emulator-toolbar.sh` re-hides it after launch (launching can raise it; and minimize does NOT stick on this window — off-screen position does).
-  - The **device window** is **Force-pinned** docked-right, lowered, sized to fit the screen height (the phone's tall aspect otherwise exceeds the screen / snaps to a tile). Force means nothing moves it — not Kröhnkite, not the screenshot tool (which used to snap it left), not focus. Trade-off: it can't be dragged.
-  - Rules match on window **type** (Utility=256 / Normal=1) + class `Emulator`, NOT title (both windows briefly share the title `Emulator` at boot). Device position/size is computed from the screen width at install time.
-  - To undo / move it: delete the `NavAlert: emulator window rules` entries in System Settings → Window Rules (and re-run `set-3button-nav.sh` swapping enable/disable back to `gestural` for gesture nav).
+  - The **device window** kept getting tiled/snapped to a **left tile by Kröhnkite** (notably when the screenshot tool opened a window). Kröhnkite's `ignoreClass`/`ignoreTitle` do NOT match the emulator on this Wayland setup (it reads the window class too early), and a Force **position** rule can't beat Kröhnkite (script moves bypass rules). What works: Kröhnkite's per-window **Toggle-Float** action — `float-emulator.sh` focuses the device window and fires `KrohnkiteToggleFloat` (via `qdbus-qt6 org.kde.kglobalaccel /component/kwin invokeShortcut KrohnkiteToggleFloat`), making it a **free-floating, draggable** window Kröhnkite ignores, then places it on the right. A guard skips the toggle if it's already floating (so re-running never un-floats it). Run it AFTER launch (fresh launch starts tiled).
+  - The toolbar rule matches on window **type** (Utility=256) + class `Emulator`, NOT title (both windows briefly share the title `Emulator` at boot).
+  - To undo: delete the `NavAlert: emulator window rules` entry in System Settings → Window Rules; press **Super+F** on the emulator to toggle its float back; re-run `set-3button-nav.sh` swapping enable/disable back to `gestural` for gesture nav.
 - Wait for boot:
 ```bash
 adb wait-for-device
@@ -61,9 +61,11 @@ adb shell pm grant $PKG android.permission.ACCESS_COARSE_LOCATION
 adb emu geo fix 121.0244 14.5547     # Ayala Ave, Metro Manila — gives the map/blue-dot UI a location
 
 # On-screen 3-button nav (Back/Home/Recents) instead of the gesture pill,
-# and hide the buggy side toolbar. Run the hide AFTER launch (launching raises it).
+# hide the buggy side toolbar, and make the device a floating/draggable window.
+# Run these AFTER launch (launching raises the toolbar / re-tiles the window).
 .claude/skills/run-navalert/set-3button-nav.sh
 .claude/skills/run-navalert/hide-emulator-toolbar.sh
+.claude/skills/run-navalert/float-emulator.sh
 ```
 
 ### 4. Drive & verify
