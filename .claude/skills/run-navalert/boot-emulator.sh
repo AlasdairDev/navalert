@@ -7,6 +7,12 @@ set -euo pipefail
 AVD="${1:-Pixel_6}"
 EMU="$HOME/Android/Sdk/emulator/emulator"
 LOG="/tmp/navalert-emu.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Install the persistent KWin rule that hides the emulator's side toolbar
+# off-screen (idempotent; KDE-only). You navigate via the phone's own 3-button
+# nav instead — see set-3button-nav.sh / hide-emulator-toolbar.sh in the launch step.
+"$SCRIPT_DIR/install-toolbar-hide-rule.sh" 2>/dev/null || true
 
 # Already have a running emulator? Do nothing.
 if adb devices | grep -qE 'emulator-[0-9]+\s+device'; then
