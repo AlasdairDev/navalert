@@ -9,6 +9,9 @@ EMU="$HOME/Android/Sdk/emulator/emulator"
 LOG="/tmp/navalert-emu.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Make sure the persistent toolbar-hide KWin rule is installed (idempotent).
+"$SCRIPT_DIR/install-toolbar-hide-rule.sh" 2>/dev/null || true
+
 # Already have a running emulator? Just make sure the toolbar stays hidden.
 if adb devices | grep -qE 'emulator-[0-9]+\s+device'; then
   echo "Emulator already running:"; adb devices | grep emulator
@@ -33,7 +36,7 @@ until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]
 done
 echo; echo "Booted. $(adb devices | grep emulator)"
 
-# Hide the emulator's separate toolbar window so it shows as one clean phone
-# window (KDE/KWin only; no-ops elsewhere). Runs in the background so it can
-# catch the toolbar window as it appears without delaying the boot return.
+# The persistent KWin rule (installed above) hides the toolbar at window map.
+# Also run the runtime minimize as a belt-and-suspenders for the current session
+# (KDE/KWin only; no-ops elsewhere). Backgrounded so it doesn't delay return.
 "$SCRIPT_DIR/hide-emulator-toolbar.sh" >/dev/null 2>&1 &
