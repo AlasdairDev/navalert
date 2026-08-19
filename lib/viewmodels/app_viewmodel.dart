@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
@@ -30,6 +31,29 @@ class AppViewModel extends ChangeNotifier {
   /// where the encrypted store fails). Surfaced to the user; the app still opens
   /// with default settings rather than hanging on the splash.
   String? loadError;
+
+  /// Map tile style only — the rest of the app keeps its single dark theme.
+  /// Kept in SharedPreferences rather than the encrypted SQLCipher store: it's
+  /// a cosmetic toggle, not app data, and loading it must never be gated
+  /// behind (or block) the splash's DB-load wait.
+  bool mapDarkMode = false;
+
+  AppViewModel() {
+    _loadMapDarkMode();
+  }
+
+  Future<void> _loadMapDarkMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    mapDarkMode = prefs.getBool('map_dark_mode') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setMapDarkMode(bool value) async {
+    mapDarkMode = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('map_dark_mode', value);
+  }
 
   // DO NOT MODIFY LOGIC: the splash gate ([LaunchView]) waits on `loaded`, so
   // this MUST always finish and set loaded=true — otherwise the app hangs on

@@ -6,9 +6,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cache/flutter_map_cache.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 
 import '../services/route_engine.dart';
 import '../services/tile_cache_store.dart';
+import '../viewmodels/app_viewmodel.dart';
+import 'theme.dart';
 
 /// Shared map configuration so Home, Pin-on-map and Route screens agree on
 /// region, tile quality and buffering.
@@ -117,8 +120,24 @@ class NavAlertMap {
   /// map took so long to appear. panBuffer 0 fetches only what is on screen;
   /// `keepBuffer` (memory-only, it never fetches) still holds tiles after they
   /// scroll off, so panning back is instant.
-  static TileLayer tiles(BuildContext context) => TileLayer(
-        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  /// Map-only dark mode (a user toggle in Settings): swaps just the tile
+  /// source, since the rest of the app already has a single dark theme.
+  ///
+  /// Both the light and dark CARTO basemaps are near-greyscale on their own —
+  /// deliberately chosen over stock OSM (all the default greens/yellows/blues)
+  /// — with a thin, low-opacity purple veil layered on top rather than a
+  /// [ColorFilter]/BlendMode tint on the tiles themselves. A BlendMode tint
+  /// forces every pixel to one hue+saturation, which crushed the basemap's
+  /// own (already subtle) light-vs-dark contrast and made labels unreadable.
+  /// A plain translucent overlay leaves that contrast untouched — it just
+  /// sits above it — so text stays legible in both modes.
+  static Widget tiles(BuildContext context) {
+    final dark = context.watch<AppViewModel>().mapDarkMode;
+    final layer = TileLayer(
+        urlTemplate: dark
+            ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'
+            : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        subdomains: const ['a', 'b', 'c', 'd'],
         userAgentPackageName: 'ph.edu.pup.navalert',
         retinaMode: RetinaMode.isHighDensity(context),
         maxNativeZoom: 19,
@@ -132,6 +151,17 @@ class NavAlertMap {
         panBuffer: 0,
         keepBuffer: 8,
       );
+    return Stack(
+      children: [
+        layer,
+        IgnorePointer(
+          child: Container(
+            color: NavAlertColors.primary.withValues(alpha: dark ? 0.22 : 0.10),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Glides a point toward each new target instead of snapping to it.

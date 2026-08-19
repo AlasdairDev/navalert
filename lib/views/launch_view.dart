@@ -24,10 +24,15 @@ class LaunchView extends StatefulWidget {
 }
 
 class _LaunchViewState extends State<LaunchView> {
+  bool _showWordmark = false;
+
   @override
   void initState() {
     super.initState();
     _go();
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) setState(() => _showWordmark = true);
+    });
   }
 
   // DO NOT MODIFY LOGIC: the splash gate — waits for AppViewModel to finish
@@ -76,28 +81,27 @@ class _LaunchViewState extends State<LaunchView> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: NavAlertColors.surface,
                   boxShadow: [
                     BoxShadow(
                         color: NavAlertColors.primary.withValues(alpha: 0.5),
                         blurRadius: 40),
                   ],
                 ),
-                child: const Icon(Icons.alarm_on,
-                    size: 84, color: NavAlertColors.accent),
+                child: Image.asset('assets/icons/ALARMA APP ICON.png',
+                    width: 260, height: 260),
               ),
               const SizedBox(height: 20),
-              const Text('NavAlert',
-                  style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white)),
-              const SizedBox(height: 6),
-              const Text('Never miss your stop again.',
-                  style: TextStyle(color: NavAlertColors.textSecondary)),
+              AnimatedOpacity(
+                opacity: _showWordmark ? 1 : 0,
+                duration: const Duration(milliseconds: 400),
+                child: const Text('NavAlert',
+                    style: TextStyle(
+                        fontSize: 34,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white)),
+              ),
             ],
           ),
         ),
