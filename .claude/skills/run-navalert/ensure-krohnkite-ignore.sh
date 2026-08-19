@@ -13,10 +13,15 @@ command -v kreadconfig6 >/dev/null 2>&1 || { echo "krohnkite: not KDE — skippi
 cur="$(kreadconfig6 --file kwinrc --group Script-krohnkite --key ignoreClass 2>/dev/null || true)"
 [ -z "$cur" ] && { echo "krohnkite: not configured — skipping"; exit 0; }
 
-case ",$cur," in
-  *,Emulator,*|*,emulator,*) ;;                                   # already ignored
-  *) kwriteconfig6 --file kwinrc --group Script-krohnkite --key ignoreClass "${cur},Emulator" ;;
-esac
+# Kröhnkite matches the emulator by its Wayland app_id "qemu-system-x86_64"
+# (resourceName), NOT the resourceClass "Emulator" — so BOTH must be listed.
+# Without qemu-system-x86_64, Kröhnkite tiles/snaps the emulator to a left tile.
+for cls in Emulator qemu-system-x86_64; do
+  case ",$cur," in
+    *,"$cls",*) ;;                                                # already present
+    *) cur="${cur},$cls"; kwriteconfig6 --file kwinrc --group Script-krohnkite --key ignoreClass "$cur" ;;
+  esac
+done
 
 # Full restart so the live instance re-reads ignoreClass.
 kwriteconfig6 --file kwinrc --group Plugins --key krohnkiteEnabled false
