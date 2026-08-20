@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -189,6 +191,36 @@ class AppViewModel extends ChangeNotifier {
     await _db.deleteContact(id);
     contacts = await _db.getContacts();
     notifyListeners();
+  }
+
+  // ---------- custom alarm sound ----------
+  /// Lets the rider pick an audio file (e.g. an MP3) from their device and
+  /// copies it into app storage, so it keeps working even if the original
+  /// file is later moved or deleted. Returns the `SoundService`-formatted
+  /// `custom:<path>` value to store as `alarmSound` (Settings' global default
+  /// or a single trip's choice — the caller decides which), or null if the
+  /// rider cancelled the picker or the pick/copy failed.
+  Future<String?> pickCustomAlarmSound() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    } catch (_) {
+      return null;
+    }
+    final pickedPath = result?.files.single.path;
+    if (pickedPath == null) return null;
+
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final soundsDir = Directory('${docsDir.path}/alarm_sounds');
+      if (!await soundsDir.exists()) await soundsDir.create(recursive: true);
+      final ext = p.extension(pickedPath);
+      final destPath = '${soundsDir.path}/${_uuid.v4()}$ext';
+      await File(pickedPath).copy(destPath);
+      return SoundService.toCustom(destPath);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------- recordings ----------

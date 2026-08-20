@@ -32,6 +32,10 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView>
     with WidgetsBindingObserver {
+  // Sentinel dropdown value distinct from any catalogue name or `custom:`
+  // sound — selecting it opens the file picker instead of setting a sound.
+  static const _uploadSoundValue = '__upload_sound__';
+
   // DO NOT MODIFY LOGIC: the REAL OS permission states, re-read on every resume.
   // Location / Battery / Notifications used to render from the stored strings in
   // UserSettings, which default to 'Allow' and which NOTHING in the app ever
@@ -251,15 +255,38 @@ class _SettingsViewState extends State<SettingsView>
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   isExpanded: true,
-                  value: SoundService.alarmCatalog.containsKey(s.alarmSound)
+                  value: SoundService.alarmCatalog.containsKey(s.alarmSound) ||
+                          SoundService.isCustom(s.alarmSound)
                       ? s.alarmSound
                       : SoundService.alarmCatalog.keys.first,
                   dropdownColor: NavAlertColors.card,
-                  items: SoundService.alarmCatalog.keys
-                      .map((n) => DropdownMenuItem(value: n, child: Text(n)))
-                      .toList(),
-                  onChanged: (v) {
+                  items: [
+                    ...SoundService.alarmCatalog.keys
+                        .map((n) => DropdownMenuItem(value: n, child: Text(n))),
+                    // The rider's own uploaded file, if one is active — shown
+                    // by its filename so it reads like a real option, not the
+                    // full on-disk path.
+                    if (SoundService.isCustom(s.alarmSound))
+                      DropdownMenuItem(
+                        value: s.alarmSound,
+                        child: Text(SoundService.customLabel(s.alarmSound),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    const DropdownMenuItem(
+                      value: _uploadSoundValue,
+                      child: Text('Upload your own audio…'),
+                    ),
+                  ],
+                  onChanged: (v) async {
                     if (v == null) return;
+                    if (v == _uploadSoundValue) {
+                      final picked = await app.pickCustomAlarmSound();
+                      if (picked == null) return;
+                      s.alarmSound = picked;
+                      await app.saveSettings();
+                      SoundService.instance.previewAlarm(picked);
+                      return;
+                    }
                     s.alarmSound = v;
                     app.saveSettings();
                     SoundService.instance.previewAlarm(v);

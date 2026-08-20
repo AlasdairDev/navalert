@@ -39,6 +39,10 @@ class RouteView extends StatefulWidget {
 class _RouteViewState extends State<RouteView> {
   bool _showGuide = false;
 
+  // Sentinel dropdown value distinct from any catalogue name or `custom:`
+  // sound — selecting it opens the file picker instead of setting a sound.
+  static const _uploadSoundValue = '__upload_sound__';
+
   // ╔══════════════════════════════════════════════════════════════════════╗
   // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                     ║
   // ║ SPAM-TAP DEBOUNCER (isProcessing) for the "Start Trip" button.       ║
@@ -272,20 +276,38 @@ class _RouteViewState extends State<RouteView> {
                     // Guard the value like Settings does: a non-catalog sound
                     // (e.g. from an imported backup) must not crash the sheet
                     // with DropdownButton's "value not in items" assertion.
-                    value: SoundService.alarmCatalog.containsKey(sound)
+                    value: SoundService.alarmCatalog.containsKey(sound) ||
+                            SoundService.isCustom(sound)
                         ? sound
                         : SoundService.alarmCatalog.keys.first,
                     dropdownColor: NavAlertColors.card,
-                    items: SoundService.alarmCatalog.keys
-                        .map((s) =>
-                            DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
+                    items: [
+                      ...SoundService.alarmCatalog.keys
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s))),
+                      if (SoundService.isCustom(sound))
+                        DropdownMenuItem(
+                          value: sound,
+                          child: Text(SoundService.customLabel(sound),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      const DropdownMenuItem(
+                        value: _uploadSoundValue,
+                        child: Text('Upload your own audio…'),
+                      ),
+                    ],
                     // Picking a sound for an alarm that is switched off does
                     // nothing, and previewing one implies the alarm is armed.
                     // Disabled until the toggle above turns it on.
                     onChanged: alarmEnabled
-                        ? (v) {
+                        ? (v) async {
                             if (v == null) return;
+                            if (v == _uploadSoundValue) {
+                              final picked = await app.pickCustomAlarmSound();
+                              if (picked == null) return;
+                              setSheet(() => sound = picked);
+                              SoundService.instance.previewAlarm(picked);
+                              return;
+                            }
                             setSheet(() => sound = v);
                             SoundService.instance.previewAlarm(v);
                           }
