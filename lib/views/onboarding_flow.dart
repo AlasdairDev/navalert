@@ -294,24 +294,14 @@ class _PermissionsViewState extends State<PermissionsView>
   /// every one of these permissions is optional, and none may block onboarding.
   Future<void> _offerSettings(String what) async {
     if (!mounted) return;
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('$what is blocked'),
-        content: Text(
-            'Android will not ask again for $what. You can turn it on from '
-            'NavAlert\'s app settings. The app still works without it, with '
-            'reduced functionality.',
-            style: const TextStyle(fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Not now')),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Open Settings')),
-        ],
-      ),
+    final open = await showNavAlertConfirmDialog(
+      context,
+      title: '$what is blocked',
+      message: 'Android will not ask again for $what. You can turn it on '
+          'from NavAlert\'s app settings. The app still works without it, '
+          'with reduced functionality.',
+      cancelLabel: 'Not now',
+      confirmLabel: 'Open Settings',
     );
     if (open == true) await openAppSettings();
   }
@@ -1127,28 +1117,13 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     if (rec == null || rec.isPreset) return;
     final messenger = ScaffoldMessenger.of(context);
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete this recording?'),
-        content: Text(
-          '${rec.title}\n\nThis permanently removes the recording from your '
-          'device. This cannot be undone.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Delete this recording?',
+      message: '${rec.title}\n\nThis permanently removes the recording from '
+          'your device. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
     if (confirmed != true) return;
 

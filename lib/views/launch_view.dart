@@ -12,7 +12,7 @@ import 'shell.dart';
 ///  [NEED] _go(): wait for AppViewModel.loaded, then route to TutorialView
 ///         (first run) or ShellView. Keep the "wait for load" gate.
 ///  [EDIT] the whole splash look — logo/icon (currently Icons.alarm_on),
-///         "NavAlert" wordmark, tagline, gradient, the 1400 ms min-display.
+///         "NavAlert" wordmark, tagline, gradient, the 2500 ms min-display.
 ///         Prime spot to drop in your real logo image asset.
 ///  [WANT] animated logo reveal, progress indicator, brand motion.
 class LaunchView extends StatefulWidget {
@@ -37,7 +37,7 @@ class _LaunchViewState extends State<LaunchView> {
   // DO NOT MODIFY LOGIC: the splash gate — waits for AppViewModel to finish
   // loading (DB/settings), then routes to onboarding on first run or straight
   // to the app afterwards. Keep the load-wait + the onboardingCompleted branch.
-  // The 1400 ms minimum is just so the splash doesn't flash — that value and
+  // The 2500 ms minimum is just so the splash doesn't flash — that value and
   // everything visual are [EDIT].
   //
   // Fail-safe: never wait forever. If init genuinely hangs on a device (e.g. a
@@ -53,8 +53,8 @@ class _LaunchViewState extends State<LaunchView> {
       if (!mounted) return;
     }
     final elapsed = DateTime.now().difference(start);
-    if (elapsed < const Duration(milliseconds: 1400)) {
-      await Future.delayed(const Duration(milliseconds: 1400) - elapsed);
+    if (elapsed < const Duration(milliseconds: 2500)) {
+      await Future.delayed(const Duration(milliseconds: 2500) - elapsed);
     }
     if (!mounted) return;
     final next = app.appState.onboardingCompleted
@@ -70,11 +70,37 @@ class _LaunchViewState extends State<LaunchView> {
       body: AnimatedOpacity(
         opacity: _visible ? 1 : 0,
         duration: const Duration(milliseconds: 500),
-        child: Image.asset(
-          'assets/images/branding/launch_splash.png',
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/branding/launch_bg.jpg',
+              fit: BoxFit.cover,
+            ),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/branding/navalert_logo.png',
+                    width: 200,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'NavAlert',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(color: Color(0xFFB39DDB), blurRadius: 16),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

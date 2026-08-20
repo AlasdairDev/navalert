@@ -319,31 +319,15 @@ class _HistoryViewState extends State<HistoryView> {
   Future<void> _confirmDelete(Trip t) async {
     final vm = context.read<HistoryViewModel>();
     final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        // TODO (UI Team): dialog styling (title/body typography, button colors).
-        title: const Text('Delete this trip?'),
-        content: Text(
-          '${t.originLabel.split(',').first} → '
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Delete this trip?',
+      message: '${t.originLabel.split(',').first} → '
           '${t.destinationLabel.split(',').first}\n\n'
           'This will permanently remove the trip and its alarm records '
           'from your history. This cannot be undone.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Delete',
+      destructive: true,
     );
     if (confirmed != true) return;
     try {

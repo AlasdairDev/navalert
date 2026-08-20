@@ -351,29 +351,14 @@ class _EmergencyViewState extends State<EmergencyView>
   /// it is what keeps this trigger distinct from the SOS hold beside it.
   Future<void> _confirmCall911(BuildContext context) async {
     final vm = context.read<EmergencyViewModel>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Call 911?'),
-        content: const Text(
-          'This places a real call to emergency services.\n\n'
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Call 911?',
+      message: 'This places a real call to emergency services.\n\n'
           'To text your location to your saved contacts instead, press and '
           'hold the SOS button for 3 seconds.',
-          style: TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Call 911',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Call 911',
+      destructive: true,
     );
     if (confirmed == true) await vm.call911();
   }
@@ -423,33 +408,18 @@ class _EmergencyViewState extends State<EmergencyView>
   /// dialog scheduled from build() would pop up over Home.
   static Future<void> _showRestrictedSmsDialog(BuildContext context) async {
     final em = context.read<EmergencyViewModel>();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.sms_failed, color: NavAlertColors.warning),
-        title: const Text('SMS access is blocked'),
-        content: const Text(
-          'Because this app was downloaded directly, Android restricted its '
-          'SMS access.\n\n'
-          "Please tap 'Settings', then tap the three dots (⋮) in the top right "
-          "corner, and select 'Allow restricted settings'.",
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Not now'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await em.openSmsSettings();
-            },
-            child: const Text('Settings'),
-          ),
-        ],
-      ),
+    final openSettings = await showNavAlertConfirmDialog(
+      context,
+      title: 'SMS access is blocked',
+      message: 'Because this app was downloaded directly, Android '
+          'restricted its SMS access.\n\n'
+          "Please tap 'Settings', then tap the three dots (⋮) in the top "
+          "right corner, and select 'Allow restricted settings'.",
+      icon: Icons.sms_failed,
+      cancelLabel: 'Not now',
+      confirmLabel: 'Settings',
     );
+    if (openSettings == true) await em.openSmsSettings();
     // They may have fixed it while they were away — clear the warning if so.
     await em.refreshSmsPermission();
   }

@@ -103,20 +103,12 @@ class _SettingsViewState extends State<SettingsView>
   /// one of these is optional.
   Future<void> _offerSettings(String what, String why) async {
     if (!mounted) return;
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('$what is blocked'),
-        content: Text(why, style: const TextStyle(fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Not now')),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Open Settings')),
-        ],
-      ),
+    final open = await showNavAlertConfirmDialog(
+      context,
+      title: '$what is blocked',
+      message: why,
+      cancelLabel: 'Not now',
+      confirmLabel: 'Open Settings',
     );
     if (open == true) await openAppSettings();
   }
@@ -398,30 +390,15 @@ class _SettingsViewState extends State<SettingsView>
     if (chosen == null) return;
     if (!context.mounted) return;
     // Importing overwrites the current data — confirm before applying.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Import this backup?'),
-        content: Text(
-          '${backups[chosen].path.split(RegExp(r'[\\/]')).last}\n\n'
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Import this backup?',
+      message: '${backups[chosen].path.split(RegExp(r'[\\/]')).last}\n\n'
           'Your current contacts, favorites, trip history and settings '
           'will be replaced by the data in this backup. This cannot be '
           'undone.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Import',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Import',
+      destructive: true,
     );
     if (confirmed != true) return;
     final err = await app.importBackup(backups[chosen]);
