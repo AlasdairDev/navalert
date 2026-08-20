@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../core/legal_text.dart';
 import '../core/theme.dart';
 import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
@@ -14,10 +15,11 @@ import 'onboarding_flow.dart';
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] each SwitchListTile onChanged → app.saveSettings · alarm
 ///         DropdownButton onChanged (+ previewAlarm) · Update → ContactsSetup ·
-///         View → FakeCallSetup · T&C/Privacy View → _showLegal · Import/Export
-///         onPressed (confirm dialog + app.import/exportBackup).
+///         View → FakeCallSetup · T&C/Privacy View → LegalText.show ·
+///         Import/Export onPressed (confirm dialog + app.import/exportBackup).
 ///  [EDIT] section header labels/casing, tile copy, "Allow/Deny" wording,
-///         Import/Export button icons, legal dialog text (_terms/_privacy),
+///         Import/Export button icons, legal text (core/legal_text.dart —
+///         shared with the onboarding tutorial's final page, edit once),
 ///         row spacing, whether sections use cards or dividers.
 ///  [WANT] group sections with icons, add an "About/version" row, a theme
 ///         switch, per-setting helper subtitles.
@@ -242,8 +244,8 @@ class _SettingsViewState extends State<SettingsView>
           Card(
             child: SwitchListTile(
               title: const Text('Map dark mode'),
-              subtitle: const Text('Only changes the map tiles — the rest '
-                  'of the app stays as-is.',
+              subtitle: const Text('Only changes the map tiles, the rest '
+                  'of the app stays the same.',
                   style: TextStyle(
                       fontSize: 11, color: NavAlertColors.textSecondary)),
               value: app.mapDarkMode,
@@ -319,7 +321,7 @@ class _SettingsViewState extends State<SettingsView>
             child: ListTile(
               title: const Text('Terms & Conditions'),
               trailing: ElevatedButton(
-                  onPressed: () => _showLegal(context, _terms),
+                  onPressed: () => LegalText.show(context, LegalText.terms),
                   child: const Text('View')),
             ),
           ),
@@ -328,7 +330,7 @@ class _SettingsViewState extends State<SettingsView>
             child: ListTile(
               title: const Text('Privacy Policy'),
               trailing: ElevatedButton(
-                  onPressed: () => _showLegal(context, _privacy),
+                  onPressed: () => LegalText.show(context, LegalText.privacy),
                   child: const Text('View')),
             ),
           ),
@@ -352,7 +354,7 @@ class _SettingsViewState extends State<SettingsView>
                     final path = await app.exportBackup();
                     messenger.showSnackBar(SnackBar(
                         content: Text(path == null
-                            ? 'Export failed — could not write the backup '
+                            ? 'Export failed - could not write the backup '
                                 'file. Check your storage space.'
                             : 'Backup exported to $path')));
                   },
@@ -377,7 +379,7 @@ class _SettingsViewState extends State<SettingsView>
     if (!context.mounted) return;
     if (backups.isEmpty) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('No backups found — use Export first.')));
+          content: Text('No backups found - use Export first.')));
       return;
     }
     final chosen = await showDialog<int>(
@@ -427,36 +429,4 @@ class _SettingsViewState extends State<SettingsView>
         SnackBar(content: Text(err ?? 'Backup imported successfully.')));
   }
 
-  void _showLegal(BuildContext context, String text) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('NavAlert'),
-        content: SingleChildScrollView(
-            child: Text(text, style: const TextStyle(fontSize: 13))),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  static const _terms =
-      'NavAlert is a capstone research prototype of the Polytechnic University '
-      'of the Philippines. Route, fare and travel-time figures are estimates '
-      'and may not reflect real-time changes such as route suspensions or '
-      'fare adjustments. Alarms are designed to be loud and strong, but the '
-      'system cannot guarantee that every user will wake up. The emergency '
-      'SMS feature requires sufficient prepaid load.';
-
-  static const _privacy =
-      'In compliance with the Data Privacy Act of 2012 (RA 10173), all '
-      'personal data — trip history, saved routes, emergency contacts and '
-      'behavioural data — is stored only on this device in a local SQLite '
-      'database. NavAlert has no backend server and transmits no personal '
-      'data to any first party. Location is used solely for on-device alarm '
-      'computation and, when you trigger SOS, inside the SMS sent to your '
-      'chosen contacts.';
 }

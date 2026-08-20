@@ -117,7 +117,7 @@ class _RouteViewState extends State<RouteView> {
             SnackBar(content: Text('${dest.name} removed from Favorites.')));
       } catch (_) {
         messenger.showSnackBar(const SnackBar(
-            content: Text('Could not update Favorites — storage is '
+            content: Text('Could not update Favorites - storage is '
                 'unavailable.')));
       }
     } else {
@@ -129,7 +129,7 @@ class _RouteViewState extends State<RouteView> {
             SnackBar(content: Text('${dest.name} added to Favorites.')));
       } catch (_) {
         messenger.showSnackBar(const SnackBar(
-            content: Text('Could not update Favorites — storage is '
+            content: Text('Could not update Favorites - storage is '
                 'unavailable.')));
       }
     }
@@ -141,19 +141,37 @@ class _RouteViewState extends State<RouteView> {
     showModalBottomSheet(
       context: context,
       backgroundColor: NavAlertColors.background,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         final p = app.transportPrefs;
-        Widget tile(String label, IconData icon, bool value,
+        Widget tile(String label, String asset, bool value,
                 void Function(bool) set) =>
-            Card(
-              child: SwitchListTile(
-                secondary: Icon(icon, color: NavAlertColors.accent),
-                title: Text(label),
-                value: value,
-                onChanged: (v) => setSheet(() => set(v)),
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+              decoration: BoxDecoration(
+                color: NavAlertColors.card,
+                borderRadius: BorderRadius.circular(20),
               ),
+              child: Row(children: [
+                Image.asset(asset, width: 80, height: 80, fit: BoxFit.contain),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(label,
+                      style: const TextStyle(
+                          fontSize: 19, fontWeight: FontWeight.w700)),
+                ),
+                Transform.scale(
+                  scale: 1.4,
+                  child: Switch(
+                    value: value,
+                    onChanged: (v) => setSheet(() => set(v)),
+                  ),
+                ),
+              ]),
             );
         return Padding(
           padding: const EdgeInsets.all(20),
@@ -170,12 +188,12 @@ class _RouteViewState extends State<RouteView> {
                   color: NavAlertColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
-            tile('Bus', Icons.directions_bus, p.busEnabled,
+            tile('Bus', 'assets/images/transport/bus.png', p.busEnabled,
                 (v) => p.busEnabled = v),
-            tile('UV Express', Icons.airport_shuttle, p.uvExpressEnabled,
-                (v) => p.uvExpressEnabled = v),
-            tile('Jeepney', Icons.directions_transit, p.jeepneyEnabled,
-                (v) => p.jeepneyEnabled = v),
+            tile('UV Express', 'assets/images/transport/uv_express.png',
+                p.uvExpressEnabled, (v) => p.uvExpressEnabled = v),
+            tile('Jeepney', 'assets/images/transport/jeepney.png',
+                p.jeepneyEnabled, (v) => p.jeepneyEnabled = v),
             const SizedBox(height: 10),
             SizedBox(
               width: 160,
@@ -246,7 +264,7 @@ class _RouteViewState extends State<RouteView> {
                 subtitle: Text(
                     alarmEnabled
                         ? 'You will be woken as you approach your stop.'
-                        : 'Optional — off. You can turn it on any time '
+                        : 'Optional - off. You can turn it on any time '
                             'during the trip.',
                     style: const TextStyle(
                         fontSize: 11, color: NavAlertColors.textSecondary)),
@@ -346,7 +364,7 @@ class _RouteViewState extends State<RouteView> {
                   } catch (_) {
                     _startingTrip = false;
                     messenger.showSnackBar(const SnackBar(
-                        content: Text('Could not start the trip — please try '
+                        content: Text('Could not start the trip - please try '
                             'again.')));
                     return;
                   }
@@ -444,7 +462,8 @@ class _RouteViewState extends State<RouteView> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: ActionChip(
-                      avatar: const Icon(Icons.directions_bus, size: 16),
+                      avatar: const Icon(Icons.directions_bus,
+                          size: 16, color: Colors.white),
                       label: const Text('Mode of Transport'),
                       backgroundColor: NavAlertColors.primaryButton,
                       onPressed: _openModePriority,
@@ -733,7 +752,7 @@ class _RouteViewState extends State<RouteView> {
             color: NavAlertColors.warning.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Text('ESTIMATE — approximate boarding points',
+          child: const Text('ESTIMATE - approximate boarding points',
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -902,22 +921,35 @@ class _RouteViewState extends State<RouteView> {
   /// draws a full vehicle illustration for ride legs; the app has no such
   /// artwork, so the existing Material mode glyph is used inside the same
   /// circular plate — layout from the mockup, iconography already in the app.
-  static Widget _modeBadge(String mode) => Container(
-        width: 36,
-        height: 36,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
+  static Widget _modeBadge(String mode) {
+    final asset = switch (mode) {
+      'bus' => 'assets/images/transport/bus_purple.png',
+      'uv_express' => 'assets/images/transport/uv_express_purple.png',
+      'jeepney' => 'assets/images/transport/jeepney_purple.png',
+      _ => null,
+    };
+    if (asset != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 64,
+          height: 56,
           color: NavAlertColors.surface,
+          child: Image.asset(asset, fit: BoxFit.contain),
         ),
-        child: Icon(_modeIconFor(mode), size: 18, color: NavAlertColors.accent),
       );
-
-  static IconData _modeIconFor(String mode) => switch (mode) {
-        'walk' => Icons.directions_walk,
-        'bus' => Icons.directions_bus,
-        'uv_express' => Icons.airport_shuttle,
-        _ => Icons.directions_transit,
-      };
+    }
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: NavAlertColors.surface,
+      ),
+      child: const Icon(Icons.directions_walk,
+          size: 18, color: NavAlertColors.accent),
+    );
+  }
 
   /// Fare pill over a clock-glyph travel time — the top-right cluster on every
   /// ride card in Pages 15/16. These are the two numbers a rider compares

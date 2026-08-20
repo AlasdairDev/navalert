@@ -84,7 +84,7 @@ class SosService {
     final lng = pos?.longitude;
     final stamp = DateTime.now();
     final locText = await _buildLocationText(lat, lng);
-    final message = 'NAVALERT SOS — I need help!\n'
+    final message = 'NAVALERT SOS - I need help!\n'
         '$locText\n'
         'Time: ${stamp.toLocal().toString().substring(0, 16)}';
 
@@ -266,7 +266,7 @@ class SosService {
     switch (code) {
       // ── refused locally ───────────────────────────────────────────────
       case 'PERMISSION_DENIED':
-        return 'Permission Denied — allow SMS in App Info › Permissions';
+        return 'Permission Denied - allow SMS in App Info › Permissions';
       case 'INVALID_NUMBER':
         return 'Invalid contact number';
       case 'INVALID_ARGS':
@@ -275,14 +275,14 @@ class SosService {
         return 'SMS bridge unavailable on this build';
       // ── reported by the network ───────────────────────────────────────
       case 'NO_SERVICE':
-        return 'No cellular service — move to an area with signal';
+        return 'No cellular service - move to an area with signal';
       case 'RADIO_OFF':
-        return 'Phone radio is off — turn off Airplane Mode';
+        return 'Phone radio is off - turn off Airplane Mode';
       case 'GENERIC_FAILURE':
         // The catch-all the radio returns for a rejected send. Insufficient
         // prepaid load is by far the most common cause in the field, and it is
         // the one the rider can actually do something about.
-        return 'Network rejected the message — check your prepaid load';
+        return 'Network rejected the message - check your prepaid load';
       case 'NULL_PDU':
         return 'The message could not be encoded';
       case 'TIMEOUT':

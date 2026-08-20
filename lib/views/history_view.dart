@@ -120,13 +120,100 @@ class _HistoryViewState extends State<HistoryView> {
                         ),
                       ])
                     : trips.isEmpty
-                    ? ListView(children: const [
-                        SizedBox(height: 120),
-                        Center(
-                            child: Text('No trips yet.',
-                                style: TextStyle(
-                                    color: NavAlertColors.textSecondary))),
-                      ])
+                    ? LayoutBuilder(
+                        builder: (context, constraints) => ListView(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                          children: [
+                            SizedBox(
+                              height: constraints.maxHeight - 20,
+                              child: Container(
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  color: NavAlertColors.card,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                padding: const EdgeInsets.all(32),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      height: 160,
+                                      width: 160,
+                                      child: Stack(
+                                        alignment: Alignment.center,
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          Container(
+                                            height: 140,
+                                            width: 140,
+                                            decoration: const BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              gradient: RadialGradient(
+                                                center: Alignment(-0.3, -0.3),
+                                                colors: [
+                                                  NavAlertColors.accent,
+                                                  NavAlertColors.primary,
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                          const Icon(Icons.route,
+                                              size: 68, color: Colors.white),
+                                          const Positioned(
+                                              top: 4,
+                                              right: 4,
+                                              child: Icon(Icons.star,
+                                                  size: 32,
+                                                  color:
+                                                      NavAlertColors.accent)),
+                                          const Positioned(
+                                              bottom: 22,
+                                              left: 2,
+                                              child: Icon(Icons.star,
+                                                  size: 12,
+                                                  color:
+                                                      NavAlertColors.accent)),
+                                          const Positioned(
+                                              top: 28,
+                                              left: 8,
+                                              child: Icon(Icons.star,
+                                                  size: 10,
+                                                  color:
+                                                      NavAlertColors.accent)),
+                                          const Positioned(
+                                              bottom: 6,
+                                              right: 28,
+                                              child: Icon(Icons.star,
+                                                  size: 14,
+                                                  color:
+                                                      NavAlertColors.accent)),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 24),
+                                    const Text('No trips yet.',
+                                        style: TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 8),
+                                    const Text(
+                                      'Your completed trips will show up '
+                                      'here once you take a ride with the '
+                                      'destination alarm on.',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          color: NavAlertColors.textSecondary,
+                                          fontStyle: FontStyle.italic,
+                                          fontSize: 13,
+                                          height: 1.4),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         itemCount: trips.length,
@@ -148,7 +235,7 @@ class _HistoryViewState extends State<HistoryView> {
   ];
 
   static String _longDate(DateTime? d) {
-    if (d == null) return '—';
+    if (d == null) return '-';
     final l = d.toLocal();
     return '${_months[l.month - 1]} ${l.day}, ${l.year}';
   }
@@ -164,7 +251,7 @@ class _HistoryViewState extends State<HistoryView> {
 
   Widget _tripCard(Trip t) {
     String time(DateTime? d) => d == null
-        ? '—'
+        ? '-'
         : TimeOfDay.fromDateTime(d.toLocal()).format(context);
     return Card(
       child: Padding(
@@ -264,7 +351,7 @@ class _HistoryViewState extends State<HistoryView> {
       messenger.showSnackBar(const SnackBar(content: Text('Trip deleted.')));
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('Could not delete — storage is unavailable.')));
+          content: Text('Could not delete - storage is unavailable.')));
     }
   }
 

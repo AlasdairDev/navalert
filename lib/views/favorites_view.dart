@@ -68,7 +68,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     if (!mounted) return;
     if (!planned) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('Could not plan a route from that favorite — '
+          content: Text('Could not plan a route from that favorite - '
               'please try again.')));
       return;
     }
@@ -112,7 +112,7 @@ class _FavoritesViewState extends State<FavoritesView> {
           SnackBar(content: Text('${f.name} removed from Favorites.')));
     } catch (_) {
       messenger.showSnackBar(
-          const SnackBar(content: Text('Could not remove — storage is '
+          const SnackBar(content: Text('Could not remove - storage is '
               'unavailable.')));
     }
   }

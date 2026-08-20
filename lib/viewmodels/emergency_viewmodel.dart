@@ -27,7 +27,7 @@ class EmergencyViewModel extends ChangeNotifier {
       statusIsError = true;
       final why = _sos.lastFailureReason;
       statusMessage = 'Failed: SOS not delivered after $attempts attempts'
-          '${why == null ? ' — no cellular signal' : ' — $why'}. '
+          '${why == null ? ' - no cellular signal' : ' - $why'}. '
           'NavAlert will keep retrying every 15 minutes, but use Call 911 if '
           'you are in danger.';
       notifyListeners();
@@ -35,7 +35,7 @@ class EmergencyViewModel extends ChangeNotifier {
     _sos.onQueuedSosResolved = (delivered, count) {
       statusIsError = !delivered;
       statusMessage = delivered
-          ? 'Emergency SMS Sent — signal restored, $count '
+          ? 'Emergency SMS Sent - signal restored, $count '
               'contact${count == 1 ? '' : 's'} notified.'
           : 'Failed: SOS could NOT be sent after several attempts. Use Call 911 '
               'if you are in danger.';
@@ -164,7 +164,7 @@ class EmergencyViewModel extends ChangeNotifier {
       final n = await _sos.triggerSos(tripId: tripId);
       if (n > 0) {
         statusIsError = false;
-        statusMessage = 'Emergency SMS Sent — $n contact'
+        statusMessage = 'Emergency SMS Sent - $n contact'
             '${n == 1 ? '' : 's'} notified with your GPS location.';
       } else {
         // DO NOT MODIFY LOGIC: name the ACTUAL fault. This branch used to read
@@ -175,8 +175,8 @@ class EmergencyViewModel extends ChangeNotifier {
         statusIsError = true;
         final why = _sos.lastFailureReason;
         statusMessage = why == null
-            ? 'SOS queued — no cellular signal. Retrying in the background.'
-            : 'Failed: $why. NavAlert will keep retrying — use Call 911 if you '
+            ? 'SOS queued - no cellular signal. Retrying in the background.'
+            : 'Failed: $why. NavAlert will keep retrying - use Call 911 if you '
                 'are in danger.';
       }
     } on StateError {

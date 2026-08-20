@@ -89,7 +89,7 @@ class _SearchViewState extends State<SearchView> {
     if (!mounted) return;
     if (!planned) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('Could not plan a route to that destination — '
+          content: Text('Could not plan a route to that destination - '
               'please try again.')));
       return;
     }

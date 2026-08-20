@@ -91,7 +91,7 @@ class _EmergencyViewState extends State<EmergencyView>
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('SOS in progress — wait for it to finish.')));
+            content: Text('SOS in progress - wait for it to finish.')));
       },
       child: Scaffold(
       body: SafeArea(
