@@ -112,6 +112,11 @@ class CommuteGuideSheet extends StatelessWidget {
           // into a drag target, so a handle placed outside it would look
           // draggable and do nothing.
           if (hosted) _handle(),
+          const Center(
+            child: Text('Commute Guide',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          const SizedBox(height: 12),
           for (var i = 0; i < guide.legs.length; i++)
             _legCard(vm, i, i == guide.currentIndex, i < guide.currentIndex),
         ],
@@ -199,11 +204,7 @@ class CommuteGuideSheet extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: NavAlertColors.surface,
               ),
-              child: Icon(_iconFor(step.transportMode),
-                  size: 17,
-                  color: isDone
-                      ? NavAlertColors.textSecondary
-                      : NavAlertColors.primary),
+              child: Center(child: _modeIcon(step.transportMode, isDone)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -285,10 +286,20 @@ class CommuteGuideSheet extends StatelessWidget {
     );
   }
 
-  IconData _iconFor(String mode) => switch (mode) {
-        'walk' => Icons.directions_walk,
-        'bus' => Icons.directions_bus,
-        'uv_express' => Icons.airport_shuttle,
-        _ => Icons.directions_transit,
-      };
+  Widget _modeIcon(String mode, bool isDone) {
+    final asset = switch (mode) {
+      'bus' => 'assets/images/transport/bus_purple.png',
+      'uv_express' => 'assets/images/transport/uv_express_purple.png',
+      'jeepney' => 'assets/images/transport/jeepney_purple.png',
+      _ => null,
+    };
+    if (asset != null) {
+      return Image.asset(asset, width: 24, height: 24, fit: BoxFit.contain);
+    }
+    return Icon(
+        mode == 'walk' ? Icons.directions_walk : Icons.directions_transit,
+        size: 17,
+        color:
+            isDone ? NavAlertColors.textSecondary : NavAlertColors.primary);
+  }
 }

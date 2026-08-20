@@ -176,7 +176,7 @@ class HomeViewModel extends ChangeNotifier {
         currentLat = last.latitude;
         currentLng = last.longitude;
         locationIsFallback = true;
-        locationError = 'Using your last known location — turn on GPS for an '
+        locationError = 'Using your last known location - turn on GPS for an '
             'accurate starting point.';
       } else {
         // No fix at all. Keep the map centred somewhere sensible, but never
@@ -341,11 +341,11 @@ class HomeViewModel extends ChangeNotifier {
           nearLat: locationIsFallback ? null : currentLat,
           nearLng: locationIsFallback ? null : currentLng);
       if (results.isEmpty) {
-        searchError = 'No results — refine your search or pin on the map.';
+        searchError = 'No results - refine your search or pin on the map.';
       }
     } catch (_) {
       searchError =
-          'Network error — the commute guide needs an internet connection.';
+          'Network error - the commute guide needs an internet connection.';
       results = [];
     }
     searching = false;
@@ -418,7 +418,7 @@ class HomeViewModel extends ChangeNotifier {
               : 'Your destination is';
       guideUnavailableReason =
           '$which outside Metro Manila. Route and fare data cover NCR only, '
-          'so there is no commute guide for this trip — but your destination '
+          'so there is no commute guide for this trip - but your destination '
           'alarm will still work normally.';
       return [];
     }

@@ -67,7 +67,7 @@ class _ShellViewState extends State<ShellView> {
       final em = context.read<EmergencyViewModel>();
       em.fireSos();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Volume-Up ×3 — sending SOS to your contacts…')));
+          content: Text('Volume-Up ×3 - sending SOS to your contacts…')));
     }, onError: (e) => debugPrint('NavAlert: SOS shortcut stream error — $e'),
         cancelOnError: false);
     _fakeSub = HardwareButtons.instance.onFakeCallShortcut.listen((_) {
@@ -104,7 +104,7 @@ class _ShellViewState extends State<ShellView> {
       final tripId = context.read<TripViewModel>().trip?.tripId;
       em.fireSos(tripId: tripId);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Lock screen SOS — sending your location…')));
+          content: Text('Lock screen SOS - sending your location…')));
     };
   }
 
@@ -123,7 +123,7 @@ class _ShellViewState extends State<ShellView> {
     final em = context.read<EmergencyViewModel>();
     em.fireSos();
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Widget SOS — sending your location to your contacts…')));
+        content: Text('Widget SOS - sending your location to your contacts…')));
   }
 
   Future<void> _launchFakeCall() async {

@@ -79,7 +79,7 @@ class AppViewModel extends ChangeNotifier {
       } catch (e, st) {
         debugPrint('NavAlert: load attempt $attempt failed — $e\n$st');
         loadError = 'Could not open local storage. Your contacts and '
-            'recordings are unavailable — tap Retry.';
+            'recordings are unavailable - tap Retry.';
         if (attempt == 1) {
           await Future.delayed(const Duration(milliseconds: 400));
         }
@@ -159,17 +159,17 @@ class AppViewModel extends ChangeNotifier {
 
   Future<void> saveSettings() async {
     await _savePreference(() => _db.saveUserSettings(settings),
-        'Could not save your settings — storage is unavailable.');
+        'Could not save your settings - storage is unavailable.');
     _applyEarphoneRouting();
   }
 
   Future<void> saveTransportPrefs() => _savePreference(
       () => _db.saveTransportPreferences(transportPrefs),
-      'Could not save your transport preferences — storage is unavailable.');
+      'Could not save your transport preferences - storage is unavailable.');
 
   Future<void> saveFakeCallConfig() => _savePreference(
       () => _db.saveFakeCallConfig(fakeCallConfig),
-      'Could not save the fake-call settings — storage is unavailable.');
+      'Could not save the fake-call settings - storage is unavailable.');
 
   // ---------- emergency contacts ----------
   Future<void> saveContact(

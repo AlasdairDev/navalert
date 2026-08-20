@@ -251,7 +251,7 @@ class _Monitoring extends StatelessWidget {
                   title: const Text('Signal Lost',
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: const Text(
-                      'GPS has been unavailable — stay alert for your stop.',
+                      'GPS has been unavailable - stay alert for your stop.',
                       style: TextStyle(fontSize: 11)),
                   trailing: ElevatedButton(
                     onPressed: vm.dismissSignalLostAlarm,
@@ -581,7 +581,7 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
                     title: const Text('Signal Lost',
                         style: TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: const Text(
-                        'GPS has been unavailable — stay alert for your stop.',
+                        'GPS has been unavailable - stay alert for your stop.',
                         style: TextStyle(fontSize: 11)),
                     trailing: ElevatedButton(
                       onPressed: vm.dismissSignalLostAlarm,
@@ -691,8 +691,8 @@ class _AlarmToggleChip extends StatelessWidget {
           compact
               ? (on ? 'Alarm on' : 'Alarm off')
               : (on
-                  ? 'Alarm on — tap to turn off'
-                  : 'Alarm off — tap to turn on'),
+                  ? 'Alarm on - tap to turn off'
+                  : 'Alarm off - tap to turn on'),
           style: compact ? const TextStyle(fontSize: 12) : null),
       backgroundColor: NavAlertColors.surface,
       onPressed: () => vm.setAlarmEnabled(!vm.trip!.alarmEnabled),
@@ -735,8 +735,9 @@ class _EmergencyActionsRow extends StatelessWidget {
       final em = context.watch<EmergencyViewModel>();
       return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         ElevatedButton.icon(
-          style:
-              ElevatedButton.styleFrom(backgroundColor: NavAlertColors.danger),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: NavAlertColors.danger,
+              minimumSize: const Size(140, 48)),
           onPressed: em.sending
               ? null
               : () => context
@@ -754,6 +755,7 @@ class _EmergencyActionsRow extends StatelessWidget {
         // back side by side without another separator.
         const SizedBox(width: 40),
         ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(minimumSize: const Size(140, 48)),
           onPressed: em.fakeCallActive
               ? null
               : () async {
@@ -805,12 +807,12 @@ class _BackToShellButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
         icon: const Icon(Icons.arrow_back),
-        tooltip: 'Back — the trip keeps running',
+        tooltip: 'Back - the trip keeps running',
         onPressed: () {
           final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
           messenger.showSnackBar(const SnackBar(
-              content: Text('Trip still running — tap "View Active Trip" to '
+              content: Text('Trip still running - tap "View Active Trip" to '
                   'come back.')));
         },
       );
@@ -1295,7 +1297,7 @@ class _SlideToStopState extends State<_SlideToStop> {
                 _done = false;
                 setState(() => _drag = 0);
                 messenger.showSnackBar(const SnackBar(
-                    content: Text('Could not stop the trip — please try '
+                    content: Text('Could not stop the trip - please try '
                         'again.')));
               }
             } else {

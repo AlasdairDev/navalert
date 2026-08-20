@@ -44,7 +44,7 @@ class _PinOnMapViewState extends State<PinOnMapView> {
     if (!NavAlertMap.isWithinNcr(point)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text(
-            'NavAlert routing covers Metro Manila (NCR) only — pick a drop-off '
+            'NavAlert routing covers Metro Manila (NCR) only - pick a drop-off '
             'inside the region.'),
       ));
       return;

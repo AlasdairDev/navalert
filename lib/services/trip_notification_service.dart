@@ -62,6 +62,11 @@ class TripNotificationService {
   /// and whole-metre text changed on almost every one of them, so this cuts
   /// roughly ten out of eleven updates in the final kilometre for a difference
   /// the rider cannot perceive on a lock-screen line.
+  ///
+  /// Android always renders `title` bold/prominent and `body` as the lighter
+  /// line beneath it — the distance is the one number a half-asleep rider
+  /// needs at a glance, so it takes the bold title slot; "Approaching X" and
+  /// the Monitoring status move to the secondary line.
   static ({String title, String body}) composeTripText({
     required String destination,
     required double distanceM,
@@ -73,8 +78,8 @@ class TripNotificationService {
     final etaText =
         etaMinutes == null ? '' : ' · ETA ${etaMinutes.round()} min';
     return (
-      title: 'Approaching $destination',
-      body: '$distText$etaText  •  Monitoring',
+      title: '$distText$etaText',
+      body: 'Approaching $destination  •  Monitoring',
     );
   }
 
@@ -163,7 +168,7 @@ class TripNotificationService {
           // custom layouts. These are system-drawn text actions by necessity,
           // not by choice.
           actions: [
-            AndroidNotificationAction('sos_send', 'SOS — send my location',
+            AndroidNotificationAction('sos_send', 'SOS - send my location',
                 showsUserInterface: true),
             AndroidNotificationAction('open_app', 'Open in App',
                 showsUserInterface: true),

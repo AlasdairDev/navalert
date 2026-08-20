@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import 'onboarding_flow.dart';
 import 'shell.dart';
@@ -24,14 +23,14 @@ class LaunchView extends StatefulWidget {
 }
 
 class _LaunchViewState extends State<LaunchView> {
-  bool _showWordmark = false;
+  bool _visible = false;
 
   @override
   void initState() {
     super.initState();
     _go();
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (mounted) setState(() => _showWordmark = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _visible = true);
     });
   }
 
@@ -68,42 +67,14 @@ class _LaunchViewState extends State<LaunchView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A0E2B), NavAlertColors.background],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                        color: NavAlertColors.primary.withValues(alpha: 0.5),
-                        blurRadius: 40),
-                  ],
-                ),
-                child: Image.asset('assets/icons/ALARMA APP ICON.png',
-                    width: 260, height: 260),
-              ),
-              const SizedBox(height: 20),
-              AnimatedOpacity(
-                opacity: _showWordmark ? 1 : 0,
-                duration: const Duration(milliseconds: 400),
-                child: const Text('NavAlert',
-                    style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white)),
-              ),
-            ],
-          ),
+      body: AnimatedOpacity(
+        opacity: _visible ? 1 : 0,
+        duration: const Duration(milliseconds: 500),
+        child: Image.asset(
+          'assets/images/branding/launch_splash.png',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
         ),
       ),
     );
