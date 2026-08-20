@@ -52,6 +52,10 @@ dependencies:
   record: ^6.0.0
   flutter_local_notifications: ^17.2.3
 
+  # Custom alarm sound upload — lets the rider pick an audio file from
+  # device storage instead of only the bundled catalogue.
+  file_picker: ^8.1.2
+
   cupertino_icons: ^1.0.8
   home_widget: ^0.9.3
   flutter_map_cache: ^2.1.0

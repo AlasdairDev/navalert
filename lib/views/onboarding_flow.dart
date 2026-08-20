@@ -808,8 +808,10 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   @override
   void initState() {
     super.initState();
-    _callerCtrl = TextEditingController(
-        text: context.read<AppViewModel>().fakeCallConfig.callerName);
+    // Blank by default — the hint text below shows the format ("e.g. Mom"),
+    // it does not pre-fill it, so the rider always types their own name
+    // rather than silently saving under a name they never chose.
+    _callerCtrl = TextEditingController();
     final sound = SoundService.instance;
     _subs
       ..add(sound.voicePosition.listen((p) {
@@ -1311,19 +1313,24 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
               ),
               const SizedBox(height: 16),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: _recordNew,
-                    icon: Icon(em.recording ? Icons.stop : Icons.fiber_manual_record,
-                        color: em.recording ? NavAlertColors.danger : null),
-                    label: Text(em.recording ? 'Stop Recording' : 'Record New'),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _recordNew,
+                      icon: Icon(
+                          em.recording ? Icons.stop : Icons.fiber_manual_record,
+                          color: em.recording ? NavAlertColors.danger : null),
+                      label: Text(
+                          em.recording ? 'Stop Recording' : 'Record New'),
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                      onPressed: _preview,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Play')),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                        onPressed: _preview,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Play')),
+                  ),
                 ],
               ),
               const SizedBox(height: 32),
