@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -16,6 +17,14 @@ class SoundService {
   static final SoundService instance = SoundService._();
 
   final AudioPlayer _alarmPlayer = AudioPlayer();
+
+  /// Caps previewAlarm() to a short snippet regardless of the file's real
+  /// length — a rider previewing an uploaded song must not have it play out
+  /// in full with no way to stop it. Cancelled by every OTHER path that
+  /// touches _alarmPlayer, so a leftover timer from a preview can never fire
+  /// mid-trip and cut off the real escalating alarm.
+  Timer? _previewStopTimer;
+  static const _previewDuration = Duration(seconds: 6);
   final AudioPlayer _voicePlayer = AudioPlayer();
 
   /// DO NOT MODIFY LOGIC: earphone-only alarm routing (the paper's "Bluetooth /
@@ -173,6 +182,9 @@ class SoundService {
   }
 
   Future<void> _loopSound(String soundName, {required double volume}) async {
+    // A pending preview auto-stop must never fire mid-trip and cut off the
+    // real escalating alarm.
+    _previewStopTimer?.cancel();
     try {
       await _alarmPlayer.stop();
       await _alarmPlayer.setReleaseMode(ReleaseMode.loop);
@@ -189,13 +201,22 @@ class SoundService {
   /// UNHANDLED async error — a red frame in front of the panel — rather than
   /// simply not previewing. A preview is cosmetic; it must never be louder than
   /// the failure it is reporting.
+  ///
+  /// Capped to [_previewDuration]: a rider previewing an uploaded song (which
+  /// can run minutes long) must hear a short snippet, not the whole track with
+  /// no way to stop it.
   Future<void> previewAlarm(String soundName) async {
+    _previewStopTimer?.cancel();
     await _yieldAudio(true);
     await _applyAlarmRoute();
     try {
       await _alarmPlayer.stop();
       await _alarmPlayer.setReleaseMode(ReleaseMode.release);
       await _alarmPlayer.play(_sourceFor(soundName), volume: 0.8);
+      _previewStopTimer = Timer(_previewDuration, () {
+        _alarmPlayer.stop();
+        _yieldAudio(false);
+      });
     } catch (_) {/* unplayable asset — silently skip the preview */}
   }
 
@@ -340,6 +361,7 @@ class SoundService {
   /// a failing player must not leave the alarm ringing or block the trip
   /// from ending.
   Future<void> stopAll() async {
+    _previewStopTimer?.cancel();
     try {
       await _alarmPlayer.stop();
     } catch (_) {}
