@@ -214,8 +214,10 @@ class AppViewModel extends ChangeNotifier {
       final docsDir = await getApplicationDocumentsDirectory();
       final soundsDir = Directory('${docsDir.path}/alarm_sounds');
       if (!await soundsDir.exists()) await soundsDir.create(recursive: true);
-      final ext = p.extension(pickedPath);
-      final destPath = '${soundsDir.path}/${_uuid.v4()}$ext';
+      // Keep the rider's own filename — SoundService.customLabel shows it
+      // in the dropdown, and a generated id there read as a bug, not a
+      // filename. A repeat upload of the same name simply replaces it.
+      final destPath = '${soundsDir.path}/${p.basename(pickedPath)}';
       await File(pickedPath).copy(destPath);
       return SoundService.toCustom(destPath);
     } catch (_) {

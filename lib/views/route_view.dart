@@ -271,47 +271,57 @@ class _RouteViewState extends State<RouteView> {
                         : NavAlertColors.textSecondary),
                 title: const Text('Alarm sound',
                     style: TextStyle(fontSize: 13)),
-                trailing: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    // Guard the value like Settings does: a non-catalog sound
-                    // (e.g. from an imported backup) must not crash the sheet
-                    // with DropdownButton's "value not in items" assertion.
-                    value: SoundService.alarmCatalog.containsKey(sound) ||
-                            SoundService.isCustom(sound)
-                        ? sound
-                        : SoundService.alarmCatalog.keys.first,
-                    dropdownColor: NavAlertColors.card,
-                    items: [
-                      ...SoundService.alarmCatalog.keys
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s))),
-                      if (SoundService.isCustom(sound))
-                        DropdownMenuItem(
-                          value: sound,
-                          child: Text(SoundService.customLabel(sound),
-                              overflow: TextOverflow.ellipsis),
+                // A custom sound's filename can be much longer than any
+                // catalogue name. Without a width cap the dropdown demands
+                // whatever space fits it unellipsized, which starves the
+                // title next to it down to a sliver — "Alarm sound" wrapping
+                // one letter per line.
+                trailing: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      // Guard the value like Settings does: a non-catalog
+                      // sound (e.g. from an imported backup) must not crash
+                      // the sheet with DropdownButton's "value not in items"
+                      // assertion.
+                      value: SoundService.alarmCatalog.containsKey(sound) ||
+                              SoundService.isCustom(sound)
+                          ? sound
+                          : SoundService.alarmCatalog.keys.first,
+                      dropdownColor: NavAlertColors.card,
+                      items: [
+                        ...SoundService.alarmCatalog.keys.map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s))),
+                        if (SoundService.isCustom(sound))
+                          DropdownMenuItem(
+                            value: sound,
+                            child: Text(SoundService.customLabel(sound),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        const DropdownMenuItem(
+                          value: _uploadSoundValue,
+                          child: Text('Upload your own audio…'),
                         ),
-                      const DropdownMenuItem(
-                        value: _uploadSoundValue,
-                        child: Text('Upload your own audio…'),
-                      ),
-                    ],
-                    // Picking a sound for an alarm that is switched off does
-                    // nothing, and previewing one implies the alarm is armed.
-                    // Disabled until the toggle above turns it on.
-                    onChanged: alarmEnabled
-                        ? (v) async {
-                            if (v == null) return;
-                            if (v == _uploadSoundValue) {
-                              final picked = await app.pickCustomAlarmSound();
-                              if (picked == null) return;
-                              setSheet(() => sound = picked);
-                              SoundService.instance.previewAlarm(picked);
-                              return;
+                      ],
+                      // Picking a sound for an alarm that is switched off does
+                      // nothing, and previewing one implies the alarm is
+                      // armed. Disabled until the toggle above turns it on.
+                      onChanged: alarmEnabled
+                          ? (v) async {
+                              if (v == null) return;
+                              if (v == _uploadSoundValue) {
+                                final picked = await app.pickCustomAlarmSound();
+                                if (picked == null) return;
+                                setSheet(() => sound = picked);
+                                SoundService.instance.previewAlarm(picked);
+                                return;
+                              }
+                              setSheet(() => sound = v);
+                              SoundService.instance.previewAlarm(v);
                             }
-                            setSheet(() => sound = v);
-                            SoundService.instance.previewAlarm(v);
-                          }
-                        : null,
+                          : null,
+                    ),
                   ),
                 ),
               ),
