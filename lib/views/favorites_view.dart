@@ -80,28 +80,13 @@ class _FavoritesViewState extends State<FavoritesView> {
   Future<void> _confirmRemove(
       BuildContext context, AppViewModel app, Favorite f) async {
     final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove from Favorites?'),
-        content: Text(
-          '${f.name}\n\nThis place will be removed from your favorites. '
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Remove from Favorites?',
+      message: '${f.name}\n\nThis place will be removed from your favorites. '
           'You can add it again anytime.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Remove',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Remove',
+      destructive: true,
     );
     if (confirmed != true) return;
     // A storage failure must report itself, not leave a button that appears

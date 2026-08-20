@@ -109,25 +109,36 @@ class _FakeCallViewState extends State<FakeCallView> {
           padding: const EdgeInsets.all(28),
           child: Column(children: [
             const SizedBox(height: 40),
-            Text(em.fakeCallAnswered ? _fmt(_seconds) : 'Incoming call',
-                style: const TextStyle(color: Colors.white54)),
-            const SizedBox(height: 12),
+            Text(caller,
+                style: const TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white)),
+            const SizedBox(height: 16),
             CircleAvatar(
               radius: 52,
               backgroundColor: Colors.blueGrey.shade700,
               child: Text(caller.isEmpty ? '?' : caller[0].toUpperCase(),
                   style: const TextStyle(fontSize: 44, color: Colors.white)),
             ),
-            const SizedBox(height: 16),
-            Text(caller,
-                style: const TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white)),
-            const Text('Mobile · Philippines',
-                style: TextStyle(color: Colors.white38)),
-            const Spacer(),
+            const SizedBox(height: 12),
             if (!em.fakeCallAnswered)
+              const Text('Incoming call', style: TextStyle(color: Colors.white54))
+            else
+              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                const Icon(Icons.call, color: Colors.green, size: 16),
+                const SizedBox(width: 6),
+                Text(_fmt(_seconds),
+                    style:
+                        const TextStyle(color: Colors.green, fontSize: 16)),
+              ]),
+            const Spacer(),
+            if (!em.fakeCallAnswered) ...[
+              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                _actionButton(Icons.alarm, 'Remind Me', () {}),
+                _actionButton(Icons.message, 'Message', () {}),
+              ]),
+              const SizedBox(height: 24),
               Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
                 // DO NOT MODIFY LOGIC: decline → pop, and the PopScope above
                 // runs endFakeCall (audio + lock-screen window); answer → play
@@ -147,8 +158,20 @@ class _FakeCallViewState extends State<FakeCallView> {
                   await em.answerFakeCall(rec?.filePath);
                   _tick();
                 }),
-              ])
-            else
+              ]),
+            ] else ...[
+              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                _actionButton(Icons.add, 'Add call', () {}),
+                _actionButton(Icons.videocam, 'Video call', () {}),
+                _actionButton(Icons.bluetooth, 'Bluetooth', () {}),
+              ]),
+              const SizedBox(height: 20),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
+                _actionButton(Icons.volume_up, 'Speaker', () {}),
+                _actionButton(Icons.mic_off, 'Mute', () {}),
+                _actionButton(Icons.dialpad, 'Keypad', () {}),
+              ]),
+              const SizedBox(height: 24),
               // Wrapped in a full-width Row like the incoming-call branch:
               // without it the Column shrinks to its widest child and the
               // whole screen jumps left the instant the call is answered,
@@ -157,7 +180,8 @@ class _FakeCallViewState extends State<FakeCallView> {
                 // Pop only; the PopScope tears down (see the incoming branch).
                 _roundButton(Icons.call_end, Colors.red, _leave),
               ]),
-              const SizedBox(height: 40),
+            ],
+            const SizedBox(height: 40),
             ]),
           ),
         ),
@@ -184,5 +208,21 @@ class _FakeCallViewState extends State<FakeCallView> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           child: Icon(icon, color: Colors.white, size: 32),
         ),
+      );
+
+  Widget _actionButton(IconData icon, String label, VoidCallback onTap) =>
+      GestureDetector(
+        onTap: onTap,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: const BoxDecoration(
+                color: Colors.white12, shape: BoxShape.circle),
+            child: Icon(icon, color: Colors.white, size: 24),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+        ]),
       );
 }

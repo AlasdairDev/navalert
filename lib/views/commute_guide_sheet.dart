@@ -194,18 +194,10 @@ class CommuteGuideSheet extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Same round mode badge the planning guide on RouteView uses, so
-            // the live sheet and the sheet the rider chose the route on read
-            // as one component rather than two different lists.
-            Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: NavAlertColors.surface,
-              ),
-              child: Center(child: _modeIcon(step.transportMode, isDone)),
-            ),
+            // Same mode badge the planning guide on RouteView uses, so the
+            // live sheet and the sheet the rider chose the route on read as
+            // one component rather than two different lists.
+            _modeBadge(step.transportMode),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -286,7 +278,7 @@ class CommuteGuideSheet extends StatelessWidget {
     );
   }
 
-  Widget _modeIcon(String mode, bool isDone) {
+  Widget _modeBadge(String mode) {
     final asset = switch (mode) {
       'bus' => 'assets/images/transport/bus_purple.png',
       'uv_express' => 'assets/images/transport/uv_express_purple.png',
@@ -294,12 +286,25 @@ class CommuteGuideSheet extends StatelessWidget {
       _ => null,
     };
     if (asset != null) {
-      return Image.asset(asset, width: 24, height: 24, fit: BoxFit.contain);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 64,
+          height: 56,
+          color: NavAlertColors.surface,
+          child: Image.asset(asset, fit: BoxFit.contain),
+        ),
+      );
     }
-    return Icon(
-        mode == 'walk' ? Icons.directions_walk : Icons.directions_transit,
-        size: 17,
-        color:
-            isDone ? NavAlertColors.textSecondary : NavAlertColors.primary);
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: NavAlertColors.surface,
+      ),
+      child: const Icon(Icons.directions_walk,
+          size: 18, color: NavAlertColors.accent),
+    );
   }
 }

@@ -88,25 +88,12 @@ class _RouteViewState extends State<RouteView> {
     final existing = app.favoriteAt(dest.lat, dest.lng);
     if (existing != null) {
       // Removing is destructive — confirm before un-starring.
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Remove from Favorites?'),
-          content: Text('${dest.name} will be removed from your favorites.',
-              style: const TextStyle(fontSize: 13)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel')),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Remove',
-                  style: TextStyle(
-                      color: NavAlertColors.danger,
-                      fontWeight: FontWeight.w700)),
-            ),
-          ],
-        ),
+      final confirmed = await showNavAlertConfirmDialog(
+        context,
+        title: 'Remove from Favorites?',
+        message: '${dest.name} will be removed from your favorites.',
+        confirmLabel: 'Remove',
+        destructive: true,
       );
       if (confirmed != true) return;
       // The star must report a storage failure rather than silently doing
@@ -697,50 +684,10 @@ class _RouteViewState extends State<RouteView> {
       return const SizedBox.shrink();
     }
     final estimate = home.suggestionsAreEstimates;
-    // Figure 22 — the guide header is flanked by ‹ › chevrons that page
-    // between the suggested routes WITHOUT leaving the guide, so the rider can
-    // compare "Option A" and "Option B" step by step. The guide is the primary
-    // feature; dismissing it is the separate "Close" button below.
-    final index = home.suggestions
-        .indexWhere((x) => x.suggestionId == s.suggestionId);
-    final hasPrev = index > 0;
-    final hasNext = index >= 0 && index < home.suggestions.length - 1;
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        IconButton(
-            icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous route',
-            // DO NOT MODIFY LOGIC: paging re-selects the suggestion, which is
-            // what feeds the fare, the map polyline and the live guide legs.
-            // Keep the home.selectSuggestion call.
-            onPressed: hasPrev
-                ? () => home.selectSuggestion(home.suggestions[index - 1])
-                : null),
-        const Flexible(
-          child: Text('Step-by-Step Commute Guide',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        IconButton(
-            icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next route',
-            onPressed: hasNext
-                ? () => home.selectSuggestion(home.suggestions[index + 1])
-                : null),
-      ]),
-      // Which of the suggested routes this guide belongs to — the mockup pages
-      // between two options, so the rider must be able to tell them apart.
-      if (home.suggestions.length > 1 && index >= 0)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-              'Route ${index + 1} of ${home.suggestions.length}  ·  '
-              '${s.routeLabel}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 11, color: NavAlertColors.textSecondary)),
-        ),
+      const Text('Step-by-Step Commute Guide',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.w700)),
       // No direct GTFS route was matched — the boarding points below are
       // approximate, so label the whole guide as an estimate to avoid sending
       // the rider looking for a specific named terminal that isn't real data.

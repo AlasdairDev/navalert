@@ -737,7 +737,8 @@ class _EmergencyActionsRow extends StatelessWidget {
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
               backgroundColor: NavAlertColors.danger,
-              minimumSize: const Size(140, 48)),
+              minimumSize: const Size(140, 48),
+              alignment: Alignment.center),
           onPressed: em.sending
               ? null
               : () => context
@@ -750,12 +751,13 @@ class _EmergencyActionsRow extends StatelessWidget {
         // SOS and Fake Call are DIFFERENT emergency actions and must stay
         // physically separated. They were 14 px apart, which on a moving
         // jeepney is close enough for one thumb to catch both — the likeliest
-        // cause of "SOS and the recording trigger at the same time". UI team:
-        // you may restyle both buttons, but do not reduce this gap or put them
-        // back side by side without another separator.
-        const SizedBox(width: 40),
+        // cause of "SOS and the recording trigger at the same time". Narrowed
+        // from 40px to 24px on request, still well clear of the 14px that
+        // caused the original mis-tap — do not go below this.
+        const SizedBox(width: 24),
         ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(minimumSize: const Size(140, 48)),
+          style: ElevatedButton.styleFrom(
+              minimumSize: const Size(140, 48), alignment: Alignment.center),
           onPressed: em.fakeCallActive
               ? null
               : () async {
@@ -841,7 +843,12 @@ class _AlarmStage extends StatelessWidget {
       // wash; if you retheme, keep Stage 3 unmistakably red/urgent. Do NOT
       // make it easier to dismiss (R1: it must stay a hard-to-dismiss alert).
       return Container(
-        color: const Color(0xFF3B0A0A),
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/alarm/alarm_stage_3_bg.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(28),
@@ -883,7 +890,12 @@ class _AlarmStage extends StatelessWidget {
         : ('Get Ready', 'You are near your destination.');
 
     return Container(
-      color: NavAlertColors.background,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/alarm/alarm_stage_1_2_bg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),

@@ -128,3 +128,59 @@ ThemeData buildNavAlertTheme() {
     dialogTheme: const DialogThemeData(backgroundColor: NavAlertColors.surface),
   );
 }
+
+/// [EDIT] Shared two-button confirmation dialog — centered title/body and
+/// equal-width pill buttons side by side, matching the design system's
+/// confirm-dialog component ("Delete recording?", "Remove from Favorites?",
+/// etc.). Returns true if [confirmLabel] was tapped, false for [cancelLabel],
+/// null if dismissed without a choice.
+Future<bool?> showNavAlertConfirmDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+  required String confirmLabel,
+  String cancelLabel = 'Cancel',
+  bool destructive = false,
+  IconData? icon,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(title, textAlign: TextAlign.center),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: NavAlertColors.warning, size: 32),
+            const SizedBox(height: 10),
+          ],
+          Text(message,
+              textAlign: TextAlign.center, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+      actionsAlignment: MainAxisAlignment.center,
+      actions: [
+        Row(children: [
+          Expanded(
+            child: ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(cancelLabel),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: ElevatedButton(
+              style: destructive
+                  ? ElevatedButton.styleFrom(
+                      backgroundColor: NavAlertColors.danger,
+                      foregroundColor: Colors.white)
+                  : null,
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ),
+        ]),
+      ],
+    ),
+  );
+}
