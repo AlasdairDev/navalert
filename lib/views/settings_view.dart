@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -387,40 +390,30 @@ class _SettingsViewState extends State<SettingsView>
     );
   }
 
-  /// Figure 33 — Data Backup: pick one of the exported backup files.
+  /// Figure 33 — Data Backup: pick a backup file from anywhere on the phone.
   // DO NOT MODIFY LOGIC: Import OVERWRITES the user's current settings,
   // contacts and favorites — the confirm dialog below is required. Keep the
-  // list → confirm → importBackup flow; dialog copy/look are [EDIT].
+  // pick → confirm → importBackup flow; dialog copy/look are [EDIT].
   Future<void> _importBackup(BuildContext context) async {
-    final app = context.read<AppViewModel>();
     final messenger = ScaffoldMessenger.of(context);
-    final backups = await app.listBackups();
-    if (!context.mounted) return;
-    if (backups.isEmpty) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('No backups found - use Export first.')));
-      return;
-    }
-    final chosen = await showDialog<int>(
-      context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('Import backup'),
-        children: [
-          for (var i = 0; i < backups.length; i++)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(i),
-              child: Text(backups[i].path.split(RegExp(r'[\\/]')).last),
-            ),
-        ],
-      ),
+    // A real "Choose File" dialog — the rider can import any backup saved
+    // anywhere on the phone, not just ones auto-saved to a hidden folder.
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Choose a NavAlert backup',
+      type: FileType.custom,
+      allowedExtensions: ['json'],
     );
-    if (chosen == null) return;
+    final path = result?.files.single.path;
+    if (path == null) return;
     if (!context.mounted) return;
+    final app = context.read<AppViewModel>();
+    final file = File(path);
+    final fileName = path.split(RegExp(r'[\\/]')).last;
     // Importing overwrites the current data — confirm before applying.
     final confirmed = await showNavAlertConfirmDialog(
       context,
       title: 'Import this backup?',
-      message: '${backups[chosen].path.split(RegExp(r'[\\/]')).last}\n\n'
+      message: '$fileName\n\n'
           'Your current contacts, favorites, trip history and settings '
           'will be replaced by the data in this backup. This cannot be '
           'undone.',
@@ -428,7 +421,7 @@ class _SettingsViewState extends State<SettingsView>
       destructive: true,
     );
     if (confirmed != true) return;
-    final err = await app.importBackup(backups[chosen]);
+    final err = await app.importBackup(file);
     messenger.showSnackBar(
         SnackBar(content: Text(err ?? 'Backup imported successfully.')));
   }
