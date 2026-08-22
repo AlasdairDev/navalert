@@ -557,6 +557,26 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
+  // Live, as-you-type feedback for each row — mirrors the same rule
+  // validateContactRows enforces at save time (a row needs BOTH name and
+  // phone, and the phone must look real), just surfaced earlier so the rider
+  // sees the problem before tapping Continue/Update instead of only after.
+  String? _nameError(int i) {
+    final name = _names[i].text.trim();
+    final phone = _phones[i].text.trim();
+    if (name.isEmpty && phone.isNotEmpty) return 'Enter a name.';
+    return null;
+  }
+
+  String? _phoneError(int i) {
+    final name = _names[i].text.trim();
+    final phone = _phones[i].text.trim();
+    if (phone.isEmpty) {
+      return name.isNotEmpty ? 'Enter a phone number.' : null;
+    }
+    return _phonePattern.hasMatch(phone) ? null : 'Invalid phone number.';
+  }
+
   // DO NOT MODIFY LOGIC: in-flight guard. Continue writes to the database and
   // then navigates; a second tap while the first is still saving duplicates
   // the writes and pushes the next screen twice.
@@ -687,17 +707,25 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
                     child: Column(children: [
                       TextField(
                         controller: _names[i],
+                        // Live feedback only — the authoritative check stays
+                        // in validateContactRows/_runSave (DO NOT MODIFY
+                        // LOGIC above). This just surfaces the same rule
+                        // while typing instead of only after Continue/Update.
+                        onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
                             prefixIcon: const Icon(Icons.person),
-                            hintText: 'Enter name ${i + 1}'),
+                            hintText: 'Enter name ${i + 1}',
+                            errorText: _nameError(i)),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _phones[i],
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.phone),
-                            hintText: 'Enter phone number'),
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.phone),
+                            hintText: 'Enter phone number',
+                            errorText: _phoneError(i)),
                       ),
                     ]),
                   ),
@@ -967,7 +995,15 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   // this is the wiring that makes the chosen clip play during a fake call.
   Future<void> _selectRecording(Recording r) async {
     final app = context.read<AppViewModel>();
+    // The caller name must follow the CHOSEN recording, same fix as the
+    // Emergency tab's picker — otherwise picking "Dad call recording" still
+    // shows "Mom" on the call screen. This handler saves right away, it
+    // doesn't wait for the Save button below, so the name is set here too.
+    // The visible field is deliberately left untouched — it stays blank
+    // unless the rider actually types a custom name (see _runSave, which
+    // only overrides this with typed text, never with a hardcoded default).
     app.fakeCallConfig.recordingId = r.recordingId;
+    app.fakeCallConfig.callerName = r.title.split(' ').first;
     try {
       await app.saveFakeCallConfig();
     } catch (_) {
@@ -1173,9 +1209,13 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
       await SoundService.instance.stopVoice();
     } catch (_) {/* audio teardown must never block finishing setup */}
     // Persist the caller name exactly as typed (Save must not require
-    // pressing Enter on the keyboard first).
+    // pressing Enter on the keyboard first). Only override when the rider
+    // actually typed something — a blank field must NOT reset the name to a
+    // hardcoded "Mom", or picking "Dad call recording" and leaving the field
+    // blank would silently save the wrong name over what selecting Dad just
+    // set.
     final name = _callerCtrl.text.trim();
-    app.fakeCallConfig.callerName = name.isEmpty ? 'Mom' : name;
+    if (name.isNotEmpty) app.fakeCallConfig.callerName = name;
     var stored = true;
     try {
       await app.saveFakeCallConfig();
@@ -1280,7 +1320,22 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                                 value: r.recordingId, child: Text(r.title)))
                             .toList(),
                         onChanged: (v) {
+                          if (v == null) return;
+                          // The caller name must follow the CHOSEN recording,
+                          // same fix as the Emergency tab's picker — otherwise
+                          // picking "Dad call recording" still shows "Mom" on
+                          // the call screen. This dropdown saves right away,
+                          // it doesn't wait for the Save button below, so the
+                          // name is set here too. The visible field is
+                          // deliberately left untouched — it stays blank
+                          // unless the rider actually types a custom name
+                          // (see _runSave, which only overrides this with
+                          // typed text, never with a hardcoded default).
+                          final r = app.recordings
+                              .firstWhere((r) => r.recordingId == v);
                           app.fakeCallConfig.recordingId = v;
+                          app.fakeCallConfig.callerName =
+                              r.title.split(' ').first;
                           app.saveFakeCallConfig();
                         },
                       ),

@@ -340,39 +340,21 @@ class AppViewModel extends ChangeNotifier {
     final name =
         'navalert_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json';
     try {
-      final dir = await _backupDirectory();
-      final file = File('${dir.path}/$name');
-      await file.writeAsString(payload);
-      return file.path;
+      // A real "Save As" dialog — the rider picks where the file actually
+      // goes (Downloads, a folder, wherever), rather than it silently
+      // landing in a hidden app-private folder they can't find or share.
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save NavAlert backup',
+        fileName: name,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(utf8.encode(payload)),
+      );
+      return path;
     } catch (e) {
       debugPrint('NavAlert: backup export failed — $e');
       return null;
     }
-  }
-
-  /// Backups live in the app's external files folder so a file manager
-  /// can copy them off the device.
-  Future<Directory> _backupDirectory() async {
-    Directory? dir;
-    try {
-      dir = await getExternalStorageDirectory();
-    } catch (_) {}
-    dir ??= await getApplicationDocumentsDirectory();
-    final backups = Directory('${dir.path}/backups');
-    if (!backups.existsSync()) backups.createSync(recursive: true);
-    return backups;
-  }
-
-  /// Lists previously exported backup files (newest first) for Import.
-  Future<List<File>> listBackups() async {
-    final dir = await _backupDirectory();
-    final files = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.json'))
-        .toList()
-      ..sort((a, b) => b.path.compareTo(a.path));
-    return files;
   }
 
   /// Imports a previously exported backup file. Returns an error message
