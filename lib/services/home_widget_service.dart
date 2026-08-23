@@ -10,7 +10,7 @@ import 'package:home_widget/home_widget.dart';
 /// to fireSos (see ShellView).
 // DO NOT MODIFY LOGIC: this is the data bridge to the native widget, not a UI
 // file. The widget's LOOK lives in android/app/src/main/res/layout/
-// navalert_widget.xml and its drawables (see the TODO (UI Team) notes there).
+// navalert_widget.xml and its drawables.
 // The string keys below ('active', 'status', 'destination', 'distance', 'eta')
 // are the contract read by NavAlertWidgetProvider.kt — keep them in sync.
 class HomeWidgetService {

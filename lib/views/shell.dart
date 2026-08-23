@@ -181,8 +181,7 @@ class _ShellViewState extends State<ShellView> {
             right: 0,
             bottom: 14,
             child: Center(
-              // TODO (UI Team): pill colour/icon/copy are [EDIT] — but keep the
-              // onTap that re-opens ActiveTripView.
+              // Keep the onTap that re-opens ActiveTripView.
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(19),
@@ -238,10 +237,6 @@ class _ShellViewState extends State<ShellView> {
             ),
           ),
       ]),
-      // TODO (UI Team): the bottom nav's look (colors, selected highlight,
-      // shape, label visibility) is mostly driven by the theme's
-      // bottomNavigationBarTheme — restyle there so it stays consistent.
-      // Tab icons/labels below are [EDIT]; the onTap side-effects are logic.
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _index,
         onTap: (i) {
@@ -251,8 +246,8 @@ class _ShellViewState extends State<ShellView> {
           if (i == 0) context.read<HistoryViewModel>().load();
           if (i == 3) context.read<EmergencyViewModel>().ensureSmsReady();
         },
-        // TODO (UI Team): tab icons + labels are free to restyle. Keep 5 tabs
-        // in this order (History · Favorites · Home · Emergency · Settings).
+        // Keep 5 tabs in this order (History · Favorites · Home · Emergency ·
+        // Settings).
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'History'),
           BottomNavigationBarItem(

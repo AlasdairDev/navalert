@@ -605,7 +605,6 @@ class _RouteViewState extends State<RouteView> {
       );
     }
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      // TODO (UI Team): "Suggested Routes" header + count typography.
       const Text('Suggested Routes',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       Text('${home.suggestions.length} SUGGESTED ROUTES FOUND',

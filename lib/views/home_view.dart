@@ -247,7 +247,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                 LatLngGlide(
                   target: center,
                   builder: (context, position) => MarkerLayer(markers: [
-                    // TODO (UI Team): the current-location dot style.
                     // Google-Maps-style blue is intentional and widely
                     // recognised; 0xFF4285F4 is a deliberate keep, not theme
                     // purple.
@@ -300,8 +299,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  // TODO (UI Team): greeting + heading typography. Consider a
-                  // theme text style instead of inline fontSize/weight.
                   Text(_greeting,
                       style: const TextStyle(
                           color: NavAlertColors.textSecondary, fontSize: 14)),
@@ -317,7 +314,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                     onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const SearchView())),
                     child: Container(
-                      // TODO (UI Team): the search pill's shape/padding/color.
                       // USE THEME: this white-on-map pill is deliberate for
                       // contrast over the map — if you restyle, keep it legible
                       // against OSM tiles (a theme token is fine if you add one).
@@ -417,7 +413,6 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
             ),
           ),
           // Locate me button
-          // TODO (UI Team): FAB position/size/icon/color are free to restyle.
           Positioned(
             // Deliberately NOT the mockup's 43 dp — see restingRight.
             right: HomeFabLayout.restingRight,
