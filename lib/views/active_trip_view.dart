@@ -1232,9 +1232,6 @@ class _Arrived extends StatelessWidget {
 // it's the anti-oversleep dismissal, the only way off the alarm screen while
 // PopScope blocks Back. It was rebuilt in Batch 2 to fix a "knob gets stuck"
 // bug; do not revert it to delta-accumulation or raise the threshold.
-// TODO (UI Team): the pill's LOOK is [EDIT] — colour/alpha, height, border,
-// corner radius, the knob icon, and the label text. Restyle the Container +
-// knob; leave the drag handlers alone.
 // ---------------------------------------------------------------------
 class _SlideToStop extends StatefulWidget {
   const _SlideToStop({

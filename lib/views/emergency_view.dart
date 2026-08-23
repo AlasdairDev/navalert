@@ -104,9 +104,7 @@ class _EmergencyViewState extends State<EmergencyView>
             // rider already needs SOS, which is too late to act on the news
             // that their prepaid load may be short. See home_view.dart.
             const SizedBox(height: 16),
-            // SOS press & hold (UC-7). TODO (UI Team): the button's size,
-            // glow, ring, and typography are all restyleable — this is a
-            // high-value screen to make feel urgent and unmistakable.
+            // SOS press & hold (UC-7).
             GestureDetector(
               // DO NOT MODIFY LOGIC: the 3-second press-and-hold guard against
               // accidental SOS. Keep beginSosHold/cancelSosHold on down/up/

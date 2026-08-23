@@ -261,9 +261,8 @@ class _TripMapViewState extends State<TripMapView>
             LatLngGlide(
               target: rider,
               builder: (context, position) => MarkerLayer(markers: [
-                // TODO (UI Team): the current-location dot style. The
-                // Google-Maps blue 0xFF4285F4 is a deliberate keep — it is the
-                // one colour every rider already reads as "me" — not an
+                // The Google-Maps blue 0xFF4285F4 is a deliberate keep — it is
+                // the one colour every rider already reads as "me" — not an
                 // oversight against the purple theme.
                 Marker(
                   point: position,
