@@ -141,8 +141,7 @@ class _RouteViewState extends State<RouteView> {
                 void Function(bool) set) =>
             Container(
               margin: const EdgeInsets.only(bottom: 16),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
               decoration: BoxDecoration(
                 color: NavAlertColors.card,
                 borderRadius: BorderRadius.circular(20),
@@ -175,8 +174,8 @@ class _RouteViewState extends State<RouteView> {
               'Select your preferred modes. Modes on will increase the '
               'likelihood of appearing. Deselect all others to de-prioritize a mode.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: NavAlertColors.textSecondary, fontSize: 12),
+              style:
+                  TextStyle(color: NavAlertColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
             tile('Bus', 'assets/images/transport/bus.png', p.busEnabled,
@@ -248,8 +247,7 @@ class _RouteViewState extends State<RouteView> {
             // the two below it only mean anything once it is on.
             Card(
               child: SwitchListTile(
-                secondary: Icon(
-                    alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
+                secondary: Icon(alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
                     color: NavAlertColors.accent),
                 title: const Text('Destination alarm'),
                 subtitle: Text(
@@ -269,8 +267,8 @@ class _RouteViewState extends State<RouteView> {
                     color: alarmEnabled
                         ? NavAlertColors.accent
                         : NavAlertColors.textSecondary),
-                title: const Text('Alarm sound',
-                    style: TextStyle(fontSize: 13)),
+                title:
+                    const Text('Alarm sound', style: TextStyle(fontSize: 13)),
                 // A custom sound's filename can be much longer than any
                 // catalogue name. Without a width cap the dropdown demands
                 // whatever space fits it unellipsized, which starves the
@@ -355,45 +353,46 @@ class _RouteViewState extends State<RouteView> {
                 onPressed: _startingTrip
                     ? null
                     : () async {
-                  if (_startingTrip) return;
-                  setSheet(() => _startingTrip = true);
-                  final tripVm = context.read<TripViewModel>();
-                  final navigator = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  // Hand the chosen suggestion's guide legs to the trip. They
-                  // are memory-only (Table 24 has no coordinates), so this is
-                  // the one moment they can be transferred.
-                  final legs = context
-                      .read<HomeViewModel>()
-                      .legsFor(trip.selectedRouteSuggestionId);
-                  // View sets the chosen config on the trip; TripViewModel
-                  // .startTrip() persists it (keeps the DB out of the View).
-                  trip
-                    ..alarmSound = sound
-                    ..vibrationOnlyMode = vibrationOnly
-                    ..alarmEnabled = alarmEnabled;
-                  Navigator.of(ctx).pop();
-                  // A failure inside startTrip (the trip write, the GPS stream,
-                  // the foreground service) must SAY so and re-arm the button.
-                  // Unguarded, the exception escaped the handler: the sheet had
-                  // already closed, so the rider saw the sheet dismiss and then
-                  // nothing at all — no trip, no alarm, no error.
-                  try {
-                    await tripVm.startTrip(trip, guideLegs: legs);
-                  } catch (_) {
-                    _startingTrip = false;
-                    messenger.showSnackBar(const SnackBar(
-                        content: Text('Could not start the trip - please try '
-                            'again.')));
-                    return;
-                  }
-                  if (!mounted) {
-                    _startingTrip = false;
-                    return;
-                  }
-                  navigator.pushReplacement(MaterialPageRoute(
-                      builder: (_) => const ActiveTripView()));
-                },
+                        if (_startingTrip) return;
+                        setSheet(() => _startingTrip = true);
+                        final tripVm = context.read<TripViewModel>();
+                        final navigator = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        // Hand the chosen suggestion's guide legs to the trip. They
+                        // are memory-only (Table 24 has no coordinates), so this is
+                        // the one moment they can be transferred.
+                        final legs = context
+                            .read<HomeViewModel>()
+                            .legsFor(trip.selectedRouteSuggestionId);
+                        // View sets the chosen config on the trip; TripViewModel
+                        // .startTrip() persists it (keeps the DB out of the View).
+                        trip
+                          ..alarmSound = sound
+                          ..vibrationOnlyMode = vibrationOnly
+                          ..alarmEnabled = alarmEnabled;
+                        Navigator.of(ctx).pop();
+                        // A failure inside startTrip (the trip write, the GPS stream,
+                        // the foreground service) must SAY so and re-arm the button.
+                        // Unguarded, the exception escaped the handler: the sheet had
+                        // already closed, so the rider saw the sheet dismiss and then
+                        // nothing at all — no trip, no alarm, no error.
+                        try {
+                          await tripVm.startTrip(trip, guideLegs: legs);
+                        } catch (_) {
+                          _startingTrip = false;
+                          messenger.showSnackBar(const SnackBar(
+                              content:
+                                  Text('Could not start the trip - please try '
+                                      'again.')));
+                          return;
+                        }
+                        if (!mounted) {
+                          _startingTrip = false;
+                          return;
+                        }
+                        navigator.pushReplacement(MaterialPageRoute(
+                            builder: (_) => const ActiveTripView()));
+                      },
                 child: const Text('Start Trip'),
               ),
             ]),
@@ -512,8 +511,7 @@ class _RouteViewState extends State<RouteView> {
                   NavAlertMap.tiles(context),
                   PolylineLayer(polylines: [
                     // White casing under the route line for contrast.
-                    Polyline(
-                        points: path, strokeWidth: 9, color: Colors.white),
+                    Polyline(points: path, strokeWidth: 9, color: Colors.white),
                     Polyline(
                         points: path,
                         strokeWidth: 5.5,
@@ -658,7 +656,8 @@ class _RouteViewState extends State<RouteView> {
         ),
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: 4, children: [
               if (s.tagPrimary != null) _tag(s.tagPrimary!),
               if (s.tagSecondary != null) _tag(s.tagSecondary!),
@@ -667,15 +666,20 @@ class _RouteViewState extends State<RouteView> {
             Text(s.routeLabel,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('⏱ ${_fmtDuration(s.totalDurationMinutes)} total',
-                style: const TextStyle(
-                    fontSize: 12, color: NavAlertColors.textSecondary)),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.schedule,
+                  size: 12, color: NavAlertColors.textSecondary),
+              const SizedBox(width: 4),
+              Text('${_fmtDuration(s.totalDurationMinutes)} total',
+                  style: const TextStyle(
+                      fontSize: 12, color: NavAlertColors.textSecondary)),
+            ]),
             Text('₱${s.totalFarePhp.toStringAsFixed(2)}',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700)),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             Text(s.transportSummary ?? '',
                 style: const TextStyle(
                     fontSize: 11, color: NavAlertColors.textSecondary)),
@@ -694,8 +698,8 @@ class _RouteViewState extends State<RouteView> {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-          color: color, borderRadius: BorderRadius.circular(10)),
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
       child: Text(text,
           style: const TextStyle(
               fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
@@ -748,8 +752,7 @@ class _RouteViewState extends State<RouteView> {
             final stops = [
               if (step.fromStop != null && step.fromStop!.isNotEmpty)
                 step.fromStop!,
-              if (step.toStop != null && step.toStop!.isNotEmpty)
-                step.toStop!,
+              if (step.toStop != null && step.toStop!.isNotEmpty) step.toStop!,
             ];
             // For a RIDE leg, the boarding terminal is the thing the rider
             // most needs — show it prominently, not buried in the instruction.
@@ -791,8 +794,7 @@ class _RouteViewState extends State<RouteView> {
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                   fontSize: 14,
-                                                  fontWeight:
-                                                      FontWeight.w700)),
+                                                  fontWeight: FontWeight.w700)),
                                           const SizedBox(height: 2),
                                           Text(step.instruction,
                                               style: const TextStyle(
@@ -812,8 +814,7 @@ class _RouteViewState extends State<RouteView> {
                                           Text(step.instruction,
                                               style: const TextStyle(
                                                   fontSize: 14,
-                                                  fontWeight:
-                                                      FontWeight.w600)),
+                                                  fontWeight: FontWeight.w600)),
                                           if (step.durationMinutes > 0)
                                             Text(
                                                 '${step.durationMinutes.toStringAsFixed(0)} min',
@@ -976,9 +977,8 @@ class _RouteViewState extends State<RouteView> {
               _railGutter(Icon(
                   j == 0 ? Icons.circle : Icons.radio_button_unchecked,
                   size: 8,
-                  color: j == 0
-                      ? NavAlertColors.accent
-                      : NavAlertColors.warning)),
+                  color:
+                      j == 0 ? NavAlertColors.accent : NavAlertColors.warning)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(stops[j],
@@ -993,8 +993,8 @@ class _RouteViewState extends State<RouteView> {
                 _railGutter(Container(
                     width: 1.5,
                     height: 10,
-                    color: NavAlertColors.textSecondary
-                        .withValues(alpha: 0.55))),
+                    color:
+                        NavAlertColors.textSecondary.withValues(alpha: 0.55))),
               ]),
           ],
         ],

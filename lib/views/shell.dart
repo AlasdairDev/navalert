@@ -68,7 +68,8 @@ class _ShellViewState extends State<ShellView> {
       em.fireSos();
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Volume-Up ×3 - sending SOS to your contacts…')));
-    }, onError: (e) => debugPrint('NavAlert: SOS shortcut stream error — $e'),
+    },
+        onError: (e) => debugPrint('NavAlert: SOS shortcut stream error — $e'),
         cancelOnError: false);
     _fakeSub = HardwareButtons.instance.onFakeCallShortcut.listen((_) {
       if (!mounted) return;
@@ -111,8 +112,10 @@ class _ShellViewState extends State<ShellView> {
   void _wireHomeWidgetShortcuts() {
     // Same reasoning as the volume shortcuts: an unhandled error here would
     // cancel the subscription and silently disable the widget's one-tap SOS.
-    HomeWidget.initiallyLaunchedFromHomeWidget().then(_handleWidgetUri).catchError(
-        (e) => debugPrint('NavAlert: widget launch URI unavailable — $e'));
+    HomeWidget.initiallyLaunchedFromHomeWidget()
+        .then(_handleWidgetUri)
+        .catchError(
+            (e) => debugPrint('NavAlert: widget launch URI unavailable — $e'));
     _widgetSub = HomeWidget.widgetClicked.listen(_handleWidgetUri,
         onError: (e) => debugPrint('NavAlert: widget click stream error — $e'),
         cancelOnError: false);
@@ -180,40 +183,54 @@ class _ShellViewState extends State<ShellView> {
             child: Center(
               // TODO (UI Team): pill colour/icon/copy are [EDIT] — but keep the
               // onTap that re-opens ActiveTripView.
-              child: Material(
-                color: NavAlertColors.primaryButton,
-                borderRadius: BorderRadius.circular(19),
-                elevation: 4,
-                child: InkWell(
+              child: Container(
+                decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(19),
-                  // DO NOT MODIFY LOGIC: in-flight guard. Two taps stacked TWO
-                  // ActiveTripView routes; sliding to stop then popped only the
-                  // top one, leaving a second monitoring screen bound to a trip
-                  // that had already ended — a ghost trip the rider cannot make
-                  // sense of.
-                  onTap: () {
-                    if (_resuming) return;
-                    _resuming = true;
-                    Navigator.of(context)
-                        .push(MaterialPageRoute(
-                            builder: (_) => const ActiveTripView()))
-                        .whenComplete(() {
-                      if (mounted) _resuming = false;
-                    });
-                  },
-                  child: const SizedBox(
-                    height: 38,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 18),
-                      child: Row(mainAxisSize: MainAxisSize.min, children: [
-                        Icon(Icons.location_on, size: 18, color: Colors.white),
-                        SizedBox(width: 8),
-                        Text('View Active Trip',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600)),
-                      ]),
+                  border: Border.all(color: NavAlertColors.accent, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                        color:
+                            NavAlertColors.primaryButton.withValues(alpha: 0.6),
+                        blurRadius: 16,
+                        spreadRadius: 1),
+                  ],
+                ),
+                child: Material(
+                  color: NavAlertColors.primaryButton,
+                  borderRadius: BorderRadius.circular(19),
+                  elevation: 4,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(19),
+                    // DO NOT MODIFY LOGIC: in-flight guard. Two taps stacked TWO
+                    // ActiveTripView routes; sliding to stop then popped only the
+                    // top one, leaving a second monitoring screen bound to a trip
+                    // that had already ended — a ghost trip the rider cannot make
+                    // sense of.
+                    onTap: () {
+                      if (_resuming) return;
+                      _resuming = true;
+                      Navigator.of(context)
+                          .push(MaterialPageRoute(
+                              builder: (_) => const ActiveTripView()))
+                          .whenComplete(() {
+                        if (mounted) _resuming = false;
+                      });
+                    },
+                    child: const SizedBox(
+                      height: 38,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 18),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.location_on,
+                              size: 18, color: Colors.white),
+                          SizedBox(width: 8),
+                          Text('View Active Trip',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
                     ),
                   ),
                 ),
@@ -238,14 +255,15 @@ class _ShellViewState extends State<ShellView> {
         // in this order (History · Favorites · Home · Emergency · Settings).
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: 'History'),
-          BottomNavigationBarItem(icon: Icon(Icons.star_border), label: 'Favorites'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.star_border), label: 'Favorites'),
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
           BottomNavigationBarItem(
               icon: Icon(Icons.warning_amber), label: 'Emergency'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Settings'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );
   }
 }
-
