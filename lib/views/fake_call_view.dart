@@ -66,9 +66,7 @@ class _FakeCallViewState extends State<FakeCallView> {
     final app = context.watch<AppViewModel>();
     final caller = app.fakeCallConfig.callerName;
 
-    // TODO (UI Team): this whole screen is [EDIT]-heavy and the HIGHEST-value
-    // one to make convincing — it must look like the phone's REAL incoming-call
-    // UI (safety depends on the illusion). DELIBERATE EXCEPTION TO THE THEME:
+    // DELIBERATE EXCEPTION TO THE THEME:
     // the dark background, white text, and red/green call buttons below are
     // intentionally NOT NavAlert purple — they mimic the native dialer. Match
     // the OS dialer styling here; do not pull app theme colors into it.

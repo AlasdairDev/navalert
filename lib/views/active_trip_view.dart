@@ -837,8 +837,6 @@ class _AlarmStage extends StatelessWidget {
 
     if (stage == 3) {
       // Figure 28 — Emergency Full-Screen Alert.
-      // TODO (UI Team): Stage 3 is [EDIT]-heavy — make it alarming and
-      // impossible to sleep through (bold type, pulsing, high contrast).
       // USE THEME: the dark-red background 0xFF3B0A0A is a deliberate "danger"
       // wash; if you retheme, keep Stage 3 unmistakably red/urgent. Do NOT
       // make it easier to dismiss (R1: it must stay a hard-to-dismiss alert).
@@ -1341,14 +1339,17 @@ class _SlideToStopState extends State<_SlideToStop> {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: widget.color.withValues(alpha: 0.35),
+              // Higher-contrast fill so this reads as THE primary action on
+              // the screen, not a secondary translucent control.
+              color: widget.color.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(height / 2),
-              border: Border.all(color: widget.color),
+              border: Border.all(color: widget.color, width: 1.5),
             ),
             child: Stack(children: [
               Center(
                   child: Text(widget.label,
-                      style: const TextStyle(fontWeight: FontWeight.w600))),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, color: Colors.white))),
               Positioned(
                 left: _drag,
                 top: 3,
@@ -1356,9 +1357,16 @@ class _SlideToStopState extends State<_SlideToStop> {
                   width: height - 6,
                   height: height - 6,
                   decoration: BoxDecoration(
-                      color: widget.color, shape: BoxShape.circle),
-                  child:
-                      const Icon(Icons.chevron_right, color: Colors.white),
+                    color: widget.color,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                          color: widget.color.withValues(alpha: 0.6),
+                          blurRadius: 8),
+                    ],
+                  ),
+                  child: const Icon(Icons.keyboard_double_arrow_right,
+                      color: Colors.white),
                 ),
               ),
             ]),

@@ -143,8 +143,8 @@ class _EmergencyViewState extends State<EmergencyView>
               },
               child: Stack(alignment: Alignment.center, children: [
                 SizedBox(
-                  width: 190,
-                  height: 190,
+                  width: 220,
+                  height: 220,
                   // DO NOT MODIFY LOGIC: the ring must run for exactly
                   // EmergencyViewModel.sosHoldDuration — it is the rider's only
                   // feedback on how much longer the accidental-trigger guard
@@ -154,7 +154,7 @@ class _EmergencyViewState extends State<EmergencyView>
                     animation: _ring,
                     builder: (context, _) => CircularProgressIndicator(
                       value: em.holdingSos ? _ring.value : 0,
-                      strokeWidth: 8,
+                      strokeWidth: 10,
                       // USE THEME: white ring on danger red is deliberate; if
                       // you change it keep the SOS unmistakably red
                       // (NavAlertColors.danger carries the "emergency" meaning
@@ -166,16 +166,17 @@ class _EmergencyViewState extends State<EmergencyView>
                   ),
                 ),
                 Container(
-                  width: 170,
-                  height: 170,
+                  width: 195,
+                  height: 195,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: NavAlertColors.danger,
                     boxShadow: [
                       BoxShadow(
                           color:
-                              NavAlertColors.danger.withValues(alpha: 0.55),
-                          blurRadius: 44),
+                              NavAlertColors.danger.withValues(alpha: 0.6),
+                          blurRadius: 60,
+                          spreadRadius: 4),
                     ],
                   ),
                   // The label block is CENTRED in the circle and never wraps.
@@ -199,8 +200,9 @@ class _EmergencyViewState extends State<EmergencyView>
                                   softWrap: false,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
-                                      fontSize: 34,
+                                      fontSize: 40,
                                       fontWeight: FontWeight.w900,
+                                      letterSpacing: 3,
                                       color: Colors.white)),
                             ),
                             // Only while idle. Leaving "Press & Hold to
