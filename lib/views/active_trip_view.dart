@@ -1014,7 +1014,12 @@ class _OvershootPromptState extends State<_OvershootPrompt> {
     final vm = widget.vm;
     final m = vm.overshotM;
     return Container(
-      color: NavAlertColors.background,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/alarm/alarm_stage_1_2_bg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: SafeArea(
         child: Center(
           child: Padding(
@@ -1040,13 +1045,24 @@ class _OvershootPromptState extends State<_OvershootPrompt> {
                           color: NavAlertColors.textSecondary)),
                   const SizedBox(height: 18),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    ElevatedButton(
-                        onPressed: () => _answer(false),
-                        child: const Text('No')),
+                    // Matched to the Alarm Stage 1/2 Snooze/Dismiss buttons'
+                    // measured natural size (146.7 x 48 under the app theme)
+                    // so this pair renders at exactly the same size.
+                    SizedBox(
+                      width: 147,
+                      height: 48,
+                      child: ElevatedButton(
+                          onPressed: () => _answer(false),
+                          child: const Text('No')),
+                    ),
                     const SizedBox(width: 14),
-                    ElevatedButton(
-                        onPressed: () => _answer(true),
-                        child: const Text('Yes')),
+                    SizedBox(
+                      width: 147,
+                      height: 48,
+                      child: ElevatedButton(
+                          onPressed: () => _answer(true),
+                          child: const Text('Yes')),
+                    ),
                   ]),
                 ]),
               ),
@@ -1139,7 +1155,12 @@ class _OvershootConfirmed extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = vm.overshotM;
     return Container(
-      color: NavAlertColors.background,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/alarm/alarm_stage_1_2_bg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: SafeArea(
         child: Center(
           child: Padding(
