@@ -479,9 +479,21 @@ class _StorageErrorBanner extends StatelessWidget {
 typedef ContactEntry = ({int order, String name, String phone});
 
 /// UC-2 Flow A — a bad number must be rejected before saving, or the SOS SMS
-/// would fail silently in an emergency. Allows the common Philippine formats
-/// (09171234567, +639171234567, and space/dash grouping).
-final _phonePattern = RegExp(r'^\+?[0-9\- ]{7,15}$');
+/// would fail silently in an emergency. Philippine mobile numbers only: local
+/// (09171234567) or international (+639171234567) — both start with the "09"
+/// mobile prefix (09 locally, +639 once 0 is swapped for the +63 country
+/// code), so a number that merely happens to be 11 digits but isn't a real PH
+/// mobile number (e.g. 01234567890) is rejected too. Matched against the
+/// number with spaces/dashes stripped, so it counts digits, not characters —
+/// a plain length range like {7,15} let 12+ digit numbers through.
+final _localPhonePattern = RegExp(r'^09\d{9}$');
+final _intlPhonePattern = RegExp(r'^\+639\d{9}$');
+
+bool _isValidPhone(String phone) {
+  final normalized = phone.replaceAll(RegExp(r'[\s\-]'), '');
+  return _localPhonePattern.hasMatch(normalized) ||
+      _intlPhonePattern.hasMatch(normalized);
+}
 
 /// Pure validation of the three Emergency Contacts rows (Figure 17), split out
 /// of the View so it is directly unit-testable (see contact_form_test.dart).
@@ -505,7 +517,7 @@ final _phonePattern = RegExp(r'^\+?[0-9\- ]{7,15}$');
     if (phone.isEmpty) {
       return (entries: none, error: 'Contact ${i + 1}: enter a phone number.');
     }
-    if (!_phonePattern.hasMatch(phone)) {
+    if (!_isValidPhone(phone)) {
       return (entries: none, error: 'Contact ${i + 1}: invalid phone number.');
     }
     entries.add((order: i + 1, name: name, phone: phone));
@@ -574,7 +586,7 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
     if (phone.isEmpty) {
       return name.isNotEmpty ? 'Enter a phone number.' : null;
     }
-    return _phonePattern.hasMatch(phone) ? null : 'Invalid phone number.';
+    return _isValidPhone(phone) ? null : 'Invalid phone number.';
   }
 
   // DO NOT MODIFY LOGIC: in-flight guard. Continue writes to the database and

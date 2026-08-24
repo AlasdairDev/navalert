@@ -84,6 +84,21 @@ void main() {
       final r = validateContactRows(['Mama', '', ''], ['12345', '', '']);
       expect(r.error, isNotNull);
     });
+
+    test('rejects a too-long number (12+ digits)', () {
+      for (final p in ['091712345678', '0917 123 45678', '+6391712345678']) {
+        final r = validateContactRows(['Mama', '', ''], [p, '', '']);
+        expect(r.error, isNotNull, reason: '$p should be rejected');
+      }
+    });
+
+    test('rejects non-Philippine numbers that merely match the digit count',
+        () {
+      for (final p in ['01234567890', '+12025550123', '442071234567']) {
+        final r = validateContactRows(['Mama', '', ''], [p, '', '']);
+        expect(r.error, isNotNull, reason: '$p should be rejected');
+      }
+    });
   });
 
   group('an entirely blank form', () {
