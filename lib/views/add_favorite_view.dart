@@ -59,13 +59,13 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
       if (!mounted) return;
       setState(() {
         _results = r;
-        if (r.isEmpty) _error = 'No results — try refining your search.';
+        if (r.isEmpty) _error = 'No results - try refining your search.';
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _results = [];
-        _error = 'Network error — adding favorites needs internet.';
+        _error = 'Network error - adding favorites needs internet.';
       });
     } finally {
       if (mounted) setState(() => _searching = false);
@@ -94,7 +94,7 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
       // a latched guard would leave every result row permanently dead.
       _saving = false;
       messenger.showSnackBar(const SnackBar(
-          content: Text('Could not save — storage is unavailable.')));
+          content: Text('Could not save - storage is unavailable.')));
       return;
     }
     messenger.showSnackBar(
@@ -152,24 +152,77 @@ class _AddFavoriteViewState extends State<AddFavoriteView> {
               // list had no empty state at all: before the first search, and
               // after a search that matched nothing, the screen was simply
               // blank with no indication which of the two had happened.
+              // Only ever the pre-search prompt. A "nothing matched" message
+              // does NOT belong here: _search already reports that through
+              // _error, and the search does not even run until 3 characters,
+              // so keying this on "results are empty" would tell a rider who
+              // has typed "SM" that their search found nothing when no
+              // search had been made.
               child: _results.isEmpty && !_searching && _error == null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 40),
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      child: Container(
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: NavAlertColors.card,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        padding: const EdgeInsets.all(32),
                         child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            // Only ever the pre-search prompt. A "nothing
-                            // matched" message does NOT belong here: _search
-                            // already reports that through _error, and the
-                            // search does not even run until 3 characters, so
-                            // keying this on "results are empty" would tell a
-                            // rider who has typed "SM" that their search found
-                            // nothing when no search had been made.
-                            Icon(Icons.search,
-                                size: 48, color: NavAlertColors.textSecondary),
-                            SizedBox(height: 12),
-                            Text(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            SizedBox(
+                              height: 160,
+                              width: 160,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                clipBehavior: Clip.none,
+                                children: [
+                                  Container(
+                                    height: 140,
+                                    width: 140,
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: RadialGradient(
+                                        center: Alignment(-0.3, -0.3),
+                                        colors: [
+                                          NavAlertColors.accent,
+                                          NavAlertColors.primary,
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const Icon(Icons.search,
+                                      size: 68, color: Colors.white),
+                                  const Positioned(
+                                      top: 4,
+                                      right: 4,
+                                      child: Icon(Icons.star,
+                                          size: 32,
+                                          color: NavAlertColors.accent)),
+                                  const Positioned(
+                                      bottom: 22,
+                                      left: 2,
+                                      child: Icon(Icons.star,
+                                          size: 12,
+                                          color: NavAlertColors.accent)),
+                                  const Positioned(
+                                      top: 28,
+                                      left: 8,
+                                      child: Icon(Icons.star,
+                                          size: 10,
+                                          color: NavAlertColors.accent)),
+                                  const Positioned(
+                                      bottom: 6,
+                                      right: 28,
+                                      child: Icon(Icons.star,
+                                          size: 14,
+                                          color: NavAlertColors.accent)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            const Text(
                               'Search for a place to save it to your '
                               'Favorites.',
                               textAlign: TextAlign.center,

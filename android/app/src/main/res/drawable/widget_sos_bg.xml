@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Widget SOS button — unmistakably red (danger token).
-     TODO (UI Team): the shape/radius is yours to restyle. USE THEME: keep it a
-     clearly-red danger colour (match NavAlertColors' SOS/danger) — the red is a
-     safety affordance, not decoration, so don't tone it down. -->
+     USE THEME: keep it a clearly-red danger colour (match NavAlertColors'
+     SOS/danger) — the red is a safety affordance, not decoration, so don't
+     tone it down. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="#E53935" />

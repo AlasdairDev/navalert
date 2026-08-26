@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   NavAlert home-screen widget (Batch 3) — THIS is the widget's visual surface.
-
-  TODO (UI Team): restyle freely — colours, textSize, textStyle, padding,
-  margins, the "SOS — send my location" copy, and the two background drawables
-  (@drawable/widget_bg, @drawable/widget_sos_bg). Match the in-app theme
-  (NavAlertColors) where you can; RemoteViews can't read Flutter's theme so the
-  hex values are duplicated here on purpose.
+  Match the in-app theme (NavAlertColors) where you can; RemoteViews can't
+  read Flutter's theme so the hex values are duplicated here on purpose.
 
   DO NOT MODIFY LOGIC: the android:id values below are referenced by name in
   NavAlertWidgetProvider.kt (setTextViewText / setOnClickPendingIntent).

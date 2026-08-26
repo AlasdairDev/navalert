@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/models.dart';
@@ -31,6 +34,29 @@ class AppViewModel extends ChangeNotifier {
   /// with default settings rather than hanging on the splash.
   String? loadError;
 
+  /// Map tile style only — the rest of the app keeps its single dark theme.
+  /// Kept in SharedPreferences rather than the encrypted SQLCipher store: it's
+  /// a cosmetic toggle, not app data, and loading it must never be gated
+  /// behind (or block) the splash's DB-load wait.
+  bool mapDarkMode = false;
+
+  AppViewModel() {
+    _loadMapDarkMode();
+  }
+
+  Future<void> _loadMapDarkMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    mapDarkMode = prefs.getBool('map_dark_mode') ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setMapDarkMode(bool value) async {
+    mapDarkMode = value;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('map_dark_mode', value);
+  }
+
   // DO NOT MODIFY LOGIC: the splash gate ([LaunchView]) waits on `loaded`, so
   // this MUST always finish and set loaded=true — otherwise the app hangs on
   // the loading screen forever (groupmate-reported). Every DB read is wrapped:
@@ -55,7 +81,7 @@ class AppViewModel extends ChangeNotifier {
       } catch (e, st) {
         debugPrint('NavAlert: load attempt $attempt failed — $e\n$st');
         loadError = 'Could not open local storage. Your contacts and '
-            'recordings are unavailable — tap Retry.';
+            'recordings are unavailable - tap Retry.';
         if (attempt == 1) {
           await Future.delayed(const Duration(milliseconds: 400));
         }
@@ -135,17 +161,17 @@ class AppViewModel extends ChangeNotifier {
 
   Future<void> saveSettings() async {
     await _savePreference(() => _db.saveUserSettings(settings),
-        'Could not save your settings — storage is unavailable.');
+        'Could not save your settings - storage is unavailable.');
     _applyEarphoneRouting();
   }
 
   Future<void> saveTransportPrefs() => _savePreference(
       () => _db.saveTransportPreferences(transportPrefs),
-      'Could not save your transport preferences — storage is unavailable.');
+      'Could not save your transport preferences - storage is unavailable.');
 
   Future<void> saveFakeCallConfig() => _savePreference(
       () => _db.saveFakeCallConfig(fakeCallConfig),
-      'Could not save the fake-call settings — storage is unavailable.');
+      'Could not save the fake-call settings - storage is unavailable.');
 
   // ---------- emergency contacts ----------
   Future<void> saveContact(
@@ -165,6 +191,38 @@ class AppViewModel extends ChangeNotifier {
     await _db.deleteContact(id);
     contacts = await _db.getContacts();
     notifyListeners();
+  }
+
+  // ---------- custom alarm sound ----------
+  /// Lets the rider pick an audio file (e.g. an MP3) from their device and
+  /// copies it into app storage, so it keeps working even if the original
+  /// file is later moved or deleted. Returns the `SoundService`-formatted
+  /// `custom:<path>` value to store as `alarmSound` (Settings' global default
+  /// or a single trip's choice — the caller decides which), or null if the
+  /// rider cancelled the picker or the pick/copy failed.
+  Future<String?> pickCustomAlarmSound() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    } catch (_) {
+      return null;
+    }
+    final pickedPath = result?.files.single.path;
+    if (pickedPath == null) return null;
+
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final soundsDir = Directory('${docsDir.path}/alarm_sounds');
+      if (!await soundsDir.exists()) await soundsDir.create(recursive: true);
+      // Keep the rider's own filename — SoundService.customLabel shows it
+      // in the dropdown, and a generated id there read as a bug, not a
+      // filename. A repeat upload of the same name simply replaces it.
+      final destPath = '${soundsDir.path}/${p.basename(pickedPath)}';
+      await File(pickedPath).copy(destPath);
+      return SoundService.toCustom(destPath);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------- recordings ----------
@@ -282,39 +340,21 @@ class AppViewModel extends ChangeNotifier {
     final name =
         'navalert_backup_${DateTime.now().toIso8601String().substring(0, 10)}.json';
     try {
-      final dir = await _backupDirectory();
-      final file = File('${dir.path}/$name');
-      await file.writeAsString(payload);
-      return file.path;
+      // A real "Save As" dialog — the rider picks where the file actually
+      // goes (Downloads, a folder, wherever), rather than it silently
+      // landing in a hidden app-private folder they can't find or share.
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save NavAlert backup',
+        fileName: name,
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(utf8.encode(payload)),
+      );
+      return path;
     } catch (e) {
       debugPrint('NavAlert: backup export failed — $e');
       return null;
     }
-  }
-
-  /// Backups live in the app's external files folder so a file manager
-  /// can copy them off the device.
-  Future<Directory> _backupDirectory() async {
-    Directory? dir;
-    try {
-      dir = await getExternalStorageDirectory();
-    } catch (_) {}
-    dir ??= await getApplicationDocumentsDirectory();
-    final backups = Directory('${dir.path}/backups');
-    if (!backups.existsSync()) backups.createSync(recursive: true);
-    return backups;
-  }
-
-  /// Lists previously exported backup files (newest first) for Import.
-  Future<List<File>> listBackups() async {
-    final dir = await _backupDirectory();
-    final files = dir
-        .listSync()
-        .whereType<File>()
-        .where((f) => f.path.endsWith('.json'))
-        .toList()
-      ..sort((a, b) => b.path.compareTo(a.path));
-    return files;
   }
 
   /// Imports a previously exported backup file. Returns an error message

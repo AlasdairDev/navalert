@@ -1,8 +1,12 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../core/legal_text.dart';
 import '../core/theme.dart';
 import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
@@ -14,10 +18,11 @@ import 'onboarding_flow.dart';
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] each SwitchListTile onChanged → app.saveSettings · alarm
 ///         DropdownButton onChanged (+ previewAlarm) · Update → ContactsSetup ·
-///         View → FakeCallSetup · T&C/Privacy View → _showLegal · Import/Export
-///         onPressed (confirm dialog + app.import/exportBackup).
+///         View → FakeCallSetup · T&C/Privacy View → LegalText.show ·
+///         Import/Export onPressed (confirm dialog + app.import/exportBackup).
 ///  [EDIT] section header labels/casing, tile copy, "Allow/Deny" wording,
-///         Import/Export button icons, legal dialog text (_terms/_privacy),
+///         Import/Export button icons, legal text (core/legal_text.dart —
+///         shared with the onboarding tutorial's final page, edit once),
 ///         row spacing, whether sections use cards or dividers.
 ///  [WANT] group sections with icons, add an "About/version" row, a theme
 ///         switch, per-setting helper subtitles.
@@ -30,6 +35,10 @@ class SettingsView extends StatefulWidget {
 
 class _SettingsViewState extends State<SettingsView>
     with WidgetsBindingObserver {
+  // Sentinel dropdown value distinct from any catalogue name or `custom:`
+  // sound — selecting it opens the file picker instead of setting a sound.
+  static const _uploadSoundValue = '__upload_sound__';
+
   // DO NOT MODIFY LOGIC: the REAL OS permission states, re-read on every resume.
   // Location / Battery / Notifications used to render from the stored strings in
   // UserSettings, which default to 'Allow' and which NOTHING in the app ever
@@ -101,20 +110,12 @@ class _SettingsViewState extends State<SettingsView>
   /// one of these is optional.
   Future<void> _offerSettings(String what, String why) async {
     if (!mounted) return;
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('$what is blocked'),
-        content: Text(why, style: const TextStyle(fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Not now')),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Open Settings')),
-        ],
-      ),
+    final open = await showNavAlertConfirmDialog(
+      context,
+      title: '$what is blocked',
+      message: why,
+      cancelLabel: 'Not now',
+      confirmLabel: 'Open Settings',
     );
     if (open == true) await openAppSettings();
   }
@@ -238,6 +239,18 @@ class _SettingsViewState extends State<SettingsView>
           header('Bluetooth'),
           allowTile('Enable bluetooth connection', s.bluetoothEnabled,
               (v) => s.bluetoothEnabled = v),
+          header('Map'),
+          Card(
+            child: SwitchListTile(
+              title: const Text('Map dark mode'),
+              subtitle: const Text('Only changes the map tiles, the rest '
+                  'of the app stays the same.',
+                  style: TextStyle(
+                      fontSize: 11, color: NavAlertColors.textSecondary)),
+              value: app.mapDarkMode,
+              onChanged: (v) => app.setMapDarkMode(v),
+            ),
+          ),
           header('Alarm'),
           Card(
             child: Padding(
@@ -245,15 +258,38 @@ class _SettingsViewState extends State<SettingsView>
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   isExpanded: true,
-                  value: SoundService.alarmCatalog.containsKey(s.alarmSound)
+                  value: SoundService.alarmCatalog.containsKey(s.alarmSound) ||
+                          SoundService.isCustom(s.alarmSound)
                       ? s.alarmSound
                       : SoundService.alarmCatalog.keys.first,
                   dropdownColor: NavAlertColors.card,
-                  items: SoundService.alarmCatalog.keys
-                      .map((n) => DropdownMenuItem(value: n, child: Text(n)))
-                      .toList(),
-                  onChanged: (v) {
+                  items: [
+                    ...SoundService.alarmCatalog.keys
+                        .map((n) => DropdownMenuItem(value: n, child: Text(n))),
+                    // The rider's own uploaded file, if one is active — shown
+                    // by its filename so it reads like a real option, not the
+                    // full on-disk path.
+                    if (SoundService.isCustom(s.alarmSound))
+                      DropdownMenuItem(
+                        value: s.alarmSound,
+                        child: Text(SoundService.customLabel(s.alarmSound),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    const DropdownMenuItem(
+                      value: _uploadSoundValue,
+                      child: Text('Upload your own audio…'),
+                    ),
+                  ],
+                  onChanged: (v) async {
                     if (v == null) return;
+                    if (v == _uploadSoundValue) {
+                      final picked = await app.pickCustomAlarmSound();
+                      if (picked == null) return;
+                      s.alarmSound = picked;
+                      await app.saveSettings();
+                      SoundService.instance.previewAlarm(picked);
+                      return;
+                    }
                     s.alarmSound = v;
                     app.saveSettings();
                     SoundService.instance.previewAlarm(v);
@@ -307,7 +343,7 @@ class _SettingsViewState extends State<SettingsView>
             child: ListTile(
               title: const Text('Terms & Conditions'),
               trailing: ElevatedButton(
-                  onPressed: () => _showLegal(context, _terms),
+                  onPressed: () => LegalText.show(context, LegalText.terms),
                   child: const Text('View')),
             ),
           ),
@@ -316,7 +352,7 @@ class _SettingsViewState extends State<SettingsView>
             child: ListTile(
               title: const Text('Privacy Policy'),
               trailing: ElevatedButton(
-                  onPressed: () => _showLegal(context, _privacy),
+                  onPressed: () => LegalText.show(context, LegalText.privacy),
                   child: const Text('View')),
             ),
           ),
@@ -340,7 +376,7 @@ class _SettingsViewState extends State<SettingsView>
                     final path = await app.exportBackup();
                     messenger.showSnackBar(SnackBar(
                         content: Text(path == null
-                            ? 'Export failed — could not write the backup '
+                            ? 'Export failed - could not write the backup '
                                 'file. Check your storage space.'
                             : 'Backup exported to $path')));
                   },
@@ -354,97 +390,40 @@ class _SettingsViewState extends State<SettingsView>
     );
   }
 
-  /// Figure 33 — Data Backup: pick one of the exported backup files.
+  /// Figure 33 — Data Backup: pick a backup file from anywhere on the phone.
   // DO NOT MODIFY LOGIC: Import OVERWRITES the user's current settings,
   // contacts and favorites — the confirm dialog below is required. Keep the
-  // list → confirm → importBackup flow; dialog copy/look are [EDIT].
+  // pick → confirm → importBackup flow; dialog copy/look are [EDIT].
   Future<void> _importBackup(BuildContext context) async {
-    final app = context.read<AppViewModel>();
     final messenger = ScaffoldMessenger.of(context);
-    final backups = await app.listBackups();
-    if (!context.mounted) return;
-    if (backups.isEmpty) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('No backups found — use Export first.')));
-      return;
-    }
-    final chosen = await showDialog<int>(
-      context: context,
-      builder: (_) => SimpleDialog(
-        title: const Text('Import backup'),
-        children: [
-          for (var i = 0; i < backups.length; i++)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(context).pop(i),
-              child: Text(backups[i].path.split(RegExp(r'[\\/]')).last),
-            ),
-        ],
-      ),
+    // A real "Choose File" dialog — the rider can import any backup saved
+    // anywhere on the phone, not just ones auto-saved to a hidden folder.
+    final result = await FilePicker.platform.pickFiles(
+      dialogTitle: 'Choose a NavAlert backup',
+      type: FileType.custom,
+      allowedExtensions: ['json'],
     );
-    if (chosen == null) return;
+    final path = result?.files.single.path;
+    if (path == null) return;
     if (!context.mounted) return;
+    final app = context.read<AppViewModel>();
+    final file = File(path);
+    final fileName = path.split(RegExp(r'[\\/]')).last;
     // Importing overwrites the current data — confirm before applying.
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Import this backup?'),
-        content: Text(
-          '${backups[chosen].path.split(RegExp(r'[\\/]')).last}\n\n'
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Import this backup?',
+      message: '$fileName\n\n'
           'Your current contacts, favorites, trip history and settings '
           'will be replaced by the data in this backup. This cannot be '
           'undone.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Import',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Import',
+      destructive: true,
     );
     if (confirmed != true) return;
-    final err = await app.importBackup(backups[chosen]);
+    final err = await app.importBackup(file);
     messenger.showSnackBar(
         SnackBar(content: Text(err ?? 'Backup imported successfully.')));
   }
 
-  void _showLegal(BuildContext context, String text) {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('NavAlert'),
-        content: SingleChildScrollView(
-            child: Text(text, style: const TextStyle(fontSize: 13))),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close')),
-        ],
-      ),
-    );
-  }
-
-  static const _terms =
-      'NavAlert is a capstone research prototype of the Polytechnic University '
-      'of the Philippines. Route, fare and travel-time figures are estimates '
-      'and may not reflect real-time changes such as route suspensions or '
-      'fare adjustments. Alarms are designed to be loud and strong, but the '
-      'system cannot guarantee that every user will wake up. The emergency '
-      'SMS feature requires sufficient prepaid load.';
-
-  static const _privacy =
-      'In compliance with the Data Privacy Act of 2012 (RA 10173), all '
-      'personal data — trip history, saved routes, emergency contacts and '
-      'behavioural data — is stored only on this device in a local SQLite '
-      'database. NavAlert has no backend server and transmits no personal '
-      'data to any first party. Location is used solely for on-device alarm '
-      'computation and, when you trigger SOS, inside the SMS sent to your '
-      'chosen contacts.';
 }

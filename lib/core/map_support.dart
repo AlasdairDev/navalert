@@ -6,9 +6,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cache/flutter_map_cache.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 
 import '../services/route_engine.dart';
 import '../services/tile_cache_store.dart';
+import '../viewmodels/app_viewmodel.dart';
+import 'theme.dart';
 
 /// Shared map configuration so Home, Pin-on-map and Route screens agree on
 /// region, tile quality and buffering.
@@ -82,7 +85,7 @@ class NavAlertMap {
       _resolvedStore = TileCacheStore('${dir.path}/tile_cache');
     } catch (e) {
       debugPrint('NavAlert: tile disk cache unavailable, '
-          'falling back to memory — $e');
+          'falling back to memory - $e');
     }
   }
 
@@ -117,8 +120,28 @@ class NavAlertMap {
   /// map took so long to appear. panBuffer 0 fetches only what is on screen;
   /// `keepBuffer` (memory-only, it never fetches) still holds tiles after they
   /// scroll off, so panning back is instant.
-  static TileLayer tiles(BuildContext context) => TileLayer(
-        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  /// Map-only dark mode (a user toggle in Settings): swaps just the tile
+  /// source, since the rest of the app already has a single dark theme.
+  ///
+  /// Light mode uses the original colorful stock OSM basemap with a
+  /// translucent purple veil on top — not a [ColorFilter]/BlendMode tint on
+  /// the tiles themselves, which forces every pixel to one hue+saturation
+  /// and would wipe out the greens/yellows/blues entirely.
+  ///
+  /// Dark mode uses MapTiler's "basic-v2-dark" style instead of CARTO's
+  /// dark basemap: CARTO (and Esri's free dark canvas, also tried) render
+  /// EVERY feature type in the same flat neutral gray — no amount of tinting
+  /// after the fact can recover water/park colors that were never in the
+  /// source pixels. MapTiler actually draws water, parks and roads in their
+  /// own distinct hues, so a veil on top tints without erasing that.
+  static const _mapTilerKey = 'JD7g3DlG0AI6ritolVpP';
+
+  static Widget tiles(BuildContext context) {
+    final dark = context.watch<AppViewModel>().mapDarkMode;
+    final layer = TileLayer(
+        urlTemplate: dark
+            ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}.png?key=$_mapTilerKey'
+            : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         userAgentPackageName: 'ph.edu.pup.navalert',
         retinaMode: RetinaMode.isHighDensity(context),
         maxNativeZoom: 19,
@@ -132,6 +155,45 @@ class NavAlertMap {
         panBuffer: 0,
         keepBuffer: 8,
       );
+    // Light mode: a plain translucent veil. It can only pull colors TOWARD
+    // its own value, never past it — NavAlertColors.primary (a light purple)
+    // lightens OSM's white background correctly, and bright pixels barely
+    // move (adding a color to something already near 255 changes it little),
+    // so text stays legible.
+    //
+    // Dark mode: a flat veil pulls every pixel by the same proportion, so
+    // darkening the land toward purple-maroon (approved) also dragged the
+    // white label text down to a dim gray — and BlendMode.overlay (tried)
+    // fixed the text but shifted the approved land tone in the process,
+    // which is the one thing this was told to leave alone. A calibrated
+    // per-channel linear matrix does both at once without that trade-off:
+    // it's built to map MapTiler's native land grey (~67,67,67) to EXACTLY
+    // the same purple-maroon the flat veil produced (so the background is
+    // unchanged), while separately mapping native white (255,255,255) to
+    // stay at 255 — the two calibration points a flat veil can't satisfy
+    // simultaneously, because it only has one knob (opacity) for both.
+    if (dark) {
+      return ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          1.0745, 0, 0, 0, -18.99,
+          0, 1.1117, 0, 0, -28.48,
+          0, 0, 1.0213, 0, -5.43,
+          0, 0, 0, 1, 0,
+        ]),
+        child: layer,
+      );
+    }
+    return Stack(
+      children: [
+        layer,
+        IgnorePointer(
+          child: Container(
+            color: NavAlertColors.primary.withValues(alpha: 0.32),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Glides a point toward each new target instead of snapping to it.

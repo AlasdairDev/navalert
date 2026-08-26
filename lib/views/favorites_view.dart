@@ -1,3 +1,5 @@
+import 'dart:math' show cos, sin, pi;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -66,7 +68,7 @@ class _FavoritesViewState extends State<FavoritesView> {
     if (!mounted) return;
     if (!planned) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('Could not plan a route from that favorite — '
+          content: Text('Could not plan a route from that favorite - '
               'please try again.')));
       return;
     }
@@ -78,28 +80,13 @@ class _FavoritesViewState extends State<FavoritesView> {
   Future<void> _confirmRemove(
       BuildContext context, AppViewModel app, Favorite f) async {
     final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove from Favorites?'),
-        content: Text(
-          '${f.name}\n\nThis place will be removed from your favorites. '
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Remove from Favorites?',
+      message: '${f.name}\n\nThis place will be removed from your favorites. '
           'You can add it again anytime.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Remove',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Remove',
+      destructive: true,
     );
     if (confirmed != true) return;
     // A storage failure must report itself, not leave a button that appears
@@ -110,7 +97,7 @@ class _FavoritesViewState extends State<FavoritesView> {
           SnackBar(content: Text('${f.name} removed from Favorites.')));
     } catch (_) {
       messenger.showSnackBar(
-          const SnackBar(content: Text('Could not remove — storage is '
+          const SnackBar(content: Text('Could not remove - storage is '
               'unavailable.')));
     }
   }
@@ -149,10 +136,57 @@ class _FavoritesViewState extends State<FavoritesView> {
                 padding: const EdgeInsets.all(32),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.explore, size: 120,
-                        color: NavAlertColors.primary),
-                    SizedBox(height: 24),
+                  children: [
+                    SizedBox(
+                      height: 160,
+                      width: 160,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        clipBehavior: Clip.none,
+                        children: [
+                          Container(
+                            height: 140,
+                            width: 140,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                center: Alignment(-0.3, -0.3),
+                                colors: [
+                                  NavAlertColors.accent,
+                                  NavAlertColors.primary,
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(
+                            height: 140,
+                            width: 140,
+                            child: CustomPaint(painter: _CompassPainter()),
+                          ),
+                          const Positioned(
+                              top: 4,
+                              right: 4,
+                              child: Icon(Icons.star,
+                                  size: 32, color: NavAlertColors.accent)),
+                          const Positioned(
+                              bottom: 22,
+                              left: 2,
+                              child: Icon(Icons.star,
+                                  size: 12, color: NavAlertColors.accent)),
+                          const Positioned(
+                              top: 28,
+                              left: 8,
+                              child: Icon(Icons.star,
+                                  size: 10, color: NavAlertColors.accent)),
+                          const Positioned(
+                              bottom: 6,
+                              right: 28,
+                              child: Icon(Icons.star,
+                                  size: 14, color: NavAlertColors.accent)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                     Text('No favorites yet.',
                         style: TextStyle(
                             fontSize: 20, fontWeight: FontWeight.w700)),
@@ -205,4 +239,57 @@ class _FavoritesViewState extends State<FavoritesView> {
             ),
     );
   }
+}
+
+/// Compass rose for the empty-Favorites illustration: rim tick marks plus a
+/// two-tone diamond needle, drawn directly rather than a stock Material icon
+/// (those bake in their own ring/hash-mark styling that didn't match).
+class _CompassPainter extends CustomPainter {
+  const _CompassPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.width / 2;
+
+    final tickPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.55)
+      ..strokeWidth = 1.5;
+    for (var i = 0; i < 16; i++) {
+      final angle = (i * 2 * pi) / 16;
+      final dir = Offset(cos(angle), sin(angle));
+      final outer = center + dir * (radius - 4);
+      final inner = center + dir * (radius - (i % 4 == 0 ? 16 : 9));
+      canvas.drawLine(inner, outer, tickPaint);
+    }
+
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    canvas.rotate(-pi / 4);
+    final needleLen = radius * 0.72;
+    final needleWidth = radius * 0.2;
+
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, -needleLen)
+        ..lineTo(-needleWidth, 0)
+        ..lineTo(needleWidth, 0)
+        ..close(),
+      Paint()..color = Colors.white.withValues(alpha: 0.9),
+    );
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, needleLen)
+        ..lineTo(-needleWidth, 0)
+        ..lineTo(needleWidth, 0)
+        ..close(),
+      Paint()..color = NavAlertColors.background,
+    );
+    canvas.restore();
+
+    canvas.drawCircle(center, radius * 0.07, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../core/legal_text.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../viewmodels/app_viewmodel.dart';
@@ -41,26 +43,34 @@ class TutorialView extends StatefulWidget {
 class _TutorialViewState extends State<TutorialView> {
   final _controller = PageController();
   int _page = 0;
+  bool _agreedToLegal = false;
+
+  late final _privacyTap = TapGestureRecognizer()
+    ..onTap = () => LegalText.show(context, LegalText.privacy);
+  late final _termsTap = TapGestureRecognizer()
+    ..onTap = () => LegalText.show(context, LegalText.terms);
 
   @override
   void dispose() {
     _controller.dispose(); // was leaked on every pass through onboarding
+    _privacyTap.dispose();
+    _termsTap.dispose();
     super.dispose();
   }
 
   static const _pages = [
-    (Icons.airline_seat_recline_extra, 'Welcome to NavAlert.',
+    ('assets/images/tutorial/1.jpeg', 'Welcome to NavAlert.',
         'Never miss your stop again.'),
-    (Icons.route, 'Know your commute.',
-        'Fastest routes, boarding points, fares and step-by-step guidance for jeepney, bus and UV Express.'),
-    (Icons.speed, 'Adaptive smart alarm.',
-        'Trigger distance adjusts to real-time vehicle speed and learns from how you wake up.'),
-    (Icons.alarm, 'Three escalating stages.',
-        'Gentle vibration, louder alert, then a full-screen emergency alarm you cannot sleep through.'),
-    (Icons.sos, 'Emergency SOS.',
-        'Hold the SOS button to text your exact GPS location to trusted contacts — even without internet.'),
-    (Icons.phone_in_talk, 'Fake call escape.',
-        'Simulate a realistic incoming call to discreetly exit unsafe situations.'),
+    ('assets/images/tutorial/2.jpg', 'Set Your Destination',
+        'Pick a spot on the map and track your destination in real-time.'),
+    ('assets/images/tutorial/3.jpeg', 'Fast Route Suggestions',
+        'Get the fastest route suggestions and avoid delays.'),
+    ('assets/images/tutorial/4.jpeg', 'Commute Guide & Fare',
+        'Get a step-by-step guide for your entire journey and see accurate fare estimates for different travel options.'),
+    ('assets/images/tutorial/5.jpeg', 'Rest Easy',
+        'Close your eyes and let us handle the rest. Wake up to personalized sounds and vibrations.'),
+    ('assets/images/tutorial/6.jpeg', 'Smart Travel Safety',
+        'Get adaptive ETA alarms, travel stop alerts, overshoot detection, and SOS features.'),
   ];
 
   void _next() {
@@ -77,72 +87,141 @@ class _TutorialViewState extends State<TutorialView> {
 
   @override
   Widget build(BuildContext context) {
+    final (_, title, sub) = _pages[_page];
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            Expanded(
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.58,
+              width: double.infinity,
               child: PageView.builder(
                 controller: _controller,
                 itemCount: _pages.length,
                 onPageChanged: (i) => setState(() => _page = i),
                 itemBuilder: (_, i) {
-                  final (icon, title, sub) = _pages[i];
-                  return Padding(
-                    padding: const EdgeInsets.all(32),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(icon, size: 120, color: NavAlertColors.accent),
-                        const SizedBox(height: 36),
-                        Text(title,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                fontSize: 24, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 12),
-                        Text(sub,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                                color: NavAlertColors.textSecondary,
-                                fontSize: 15)),
-                      ],
-                    ),
-                  );
+                  final (asset, _, _) = _pages[i];
+                  return Image.asset(asset,
+                      width: double.infinity, fit: BoxFit.cover);
                 },
               ),
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _pages.length,
-                (i) => Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: i == _page ? 18 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: i == _page
-                        ? NavAlertColors.accent
-                        : NavAlertColors.surface,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
+            Expanded(
+              child: Align(
+                alignment: const Alignment(0, -0.5),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        _pages.length,
+                        (i) => Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: i == _page ? 18 : 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: i == _page
+                                ? Colors.white
+                                : NavAlertColors.surface,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(title,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 12),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(sub,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              color: NavAlertColors.textSecondary,
+                              fontSize: 15)),
+                    ),
+                    if (_page == _pages.length - 1) ...[
+                      const SizedBox(height: 16),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: const TextStyle(
+                                color: NavAlertColors.textSecondary,
+                                fontSize: 12),
+                            children: [
+                              const TextSpan(text: 'By continuing, you agree to our '),
+                              TextSpan(
+                                text: 'Privacy Policy',
+                                recognizer: _privacyTap,
+                                style: const TextStyle(
+                                    color: NavAlertColors.accent,
+                                    decoration: TextDecoration.underline),
+                              ),
+                              const TextSpan(text: ' and '),
+                              TextSpan(
+                                text: 'Terms & Conditions',
+                                recognizer: _termsTap,
+                                style: const TextStyle(
+                                    color: NavAlertColors.accent,
+                                    decoration: TextDecoration.underline),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Checkbox(
+                            value: _agreedToLegal,
+                            onChanged: (v) =>
+                                setState(() => _agreedToLegal = v ?? false),
+                          ),
+                          const Text('I have read and agree',
+                              style: TextStyle(
+                                  color: NavAlertColors.textSecondary,
+                                  fontSize: 13)),
+                        ],
+                      ),
+                    ],
+                    SizedBox(height: _page == _pages.length - 1 ? 12 : 32),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: NavAlertColors.primary,
+                                  minimumSize: const Size(130, 46),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 10)),
+                              onPressed: _skip,
+                              child: const Text('Skip')),
+                          const SizedBox(width: 16),
+                          ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  minimumSize: const Size(130, 46),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20, vertical: 10)),
+                              onPressed:
+                                  _page == _pages.length - 1 && !_agreedToLegal
+                                      ? null
+                                      : _next,
+                              child: Text(_page == _pages.length - 1
+                                  ? 'Get Started'
+                                  : 'Next')),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Row(
-                children: [
-                  Expanded(
-                      child: OutlinedButton(
-                          onPressed: _skip, child: const Text('Skip'))),
-                  const SizedBox(width: 16),
-                  Expanded(
-                      child: ElevatedButton(
-                          onPressed: _next,
-                          child: Text(_page == _pages.length - 1
-                              ? 'Get Started'
-                              : 'Next'))),
-                ],
               ),
             ),
           ],
@@ -215,24 +294,14 @@ class _PermissionsViewState extends State<PermissionsView>
   /// every one of these permissions is optional, and none may block onboarding.
   Future<void> _offerSettings(String what) async {
     if (!mounted) return;
-    final open = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('$what is blocked'),
-        content: Text(
-            'Android will not ask again for $what. You can turn it on from '
-            'NavAlert\'s app settings. The app still works without it, with '
-            'reduced functionality.',
-            style: const TextStyle(fontSize: 13)),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Not now')),
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Open Settings')),
-        ],
-      ),
+    final open = await showNavAlertConfirmDialog(
+      context,
+      title: '$what is blocked',
+      message: 'Android will not ask again for $what. You can turn it on '
+          'from NavAlert\'s app settings. The app still works without it, '
+          'with reduced functionality.',
+      cancelLabel: 'Not now',
+      confirmLabel: 'Open Settings',
     );
     if (open == true) await openAppSettings();
   }
@@ -299,10 +368,15 @@ class _PermissionsViewState extends State<PermissionsView>
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints:
+                  BoxConstraints(minHeight: constraints.maxHeight - 48),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
               const SizedBox(height: 24),
               const Icon(Icons.verified_user,
                   size: 64, color: NavAlertColors.accent),
@@ -343,7 +417,9 @@ class _PermissionsViewState extends State<PermissionsView>
                   child: const Text('Skip for now ›',
                       style:
                           TextStyle(color: NavAlertColors.textSecondary))),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -403,9 +479,21 @@ class _StorageErrorBanner extends StatelessWidget {
 typedef ContactEntry = ({int order, String name, String phone});
 
 /// UC-2 Flow A — a bad number must be rejected before saving, or the SOS SMS
-/// would fail silently in an emergency. Allows the common Philippine formats
-/// (09171234567, +639171234567, and space/dash grouping).
-final _phonePattern = RegExp(r'^\+?[0-9\- ]{7,15}$');
+/// would fail silently in an emergency. Philippine mobile numbers only: local
+/// (09171234567) or international (+639171234567) — both start with the "09"
+/// mobile prefix (09 locally, +639 once 0 is swapped for the +63 country
+/// code), so a number that merely happens to be 11 digits but isn't a real PH
+/// mobile number (e.g. 01234567890) is rejected too. Matched against the
+/// number with spaces/dashes stripped, so it counts digits, not characters —
+/// a plain length range like {7,15} let 12+ digit numbers through.
+final _localPhonePattern = RegExp(r'^09\d{9}$');
+final _intlPhonePattern = RegExp(r'^\+639\d{9}$');
+
+bool _isValidPhone(String phone) {
+  final normalized = phone.replaceAll(RegExp(r'[\s\-]'), '');
+  return _localPhonePattern.hasMatch(normalized) ||
+      _intlPhonePattern.hasMatch(normalized);
+}
 
 /// Pure validation of the three Emergency Contacts rows (Figure 17), split out
 /// of the View so it is directly unit-testable (see contact_form_test.dart).
@@ -429,7 +517,7 @@ final _phonePattern = RegExp(r'^\+?[0-9\- ]{7,15}$');
     if (phone.isEmpty) {
       return (entries: none, error: 'Contact ${i + 1}: enter a phone number.');
     }
-    if (!_phonePattern.hasMatch(phone)) {
+    if (!_isValidPhone(phone)) {
       return (entries: none, error: 'Contact ${i + 1}: invalid phone number.');
     }
     entries.add((order: i + 1, name: name, phone: phone));
@@ -479,6 +567,26 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // Live, as-you-type feedback for each row — mirrors the same rule
+  // validateContactRows enforces at save time (a row needs BOTH name and
+  // phone, and the phone must look real), just surfaced earlier so the rider
+  // sees the problem before tapping Continue/Update instead of only after.
+  String? _nameError(int i) {
+    final name = _names[i].text.trim();
+    final phone = _phones[i].text.trim();
+    if (name.isEmpty && phone.isNotEmpty) return 'Enter a name.';
+    return null;
+  }
+
+  String? _phoneError(int i) {
+    final name = _names[i].text.trim();
+    final phone = _phones[i].text.trim();
+    if (phone.isEmpty) {
+      return name.isNotEmpty ? 'Enter a phone number.' : null;
+    }
+    return _isValidPhone(phone) ? null : 'Invalid phone number.';
   }
 
   // DO NOT MODIFY LOGIC: in-flight guard. Continue writes to the database and
@@ -533,7 +641,7 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
             order: e.order);
         saved++;
       } catch (_) {
-        _toast('Could not save contact ${e.order} — please try again.');
+        _toast('Could not save contact ${e.order} - please try again.');
         return;
       }
     }
@@ -554,7 +662,7 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
     // nothing was written — that is silent data loss. This check is NOT gated
     // on inOnboarding: the Settings and Home-banner entry points need it most.
     if (saved == 0) {
-      _toast('Nothing was saved — please check the details and try again.');
+      _toast('Nothing was saved - please check the details and try again.');
       return;
     }
     _next();
@@ -597,7 +705,7 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
               const SizedBox(height: 8),
               const Text(
                 'Your emergency contacts will be notified with your location '
-                'via SMS when you activate SOS — even without internet.',
+                'via SMS when you activate SOS - even without internet.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: NavAlertColors.textSecondary),
               ),
@@ -611,17 +719,25 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
                     child: Column(children: [
                       TextField(
                         controller: _names[i],
+                        // Live feedback only — the authoritative check stays
+                        // in validateContactRows/_runSave (DO NOT MODIFY
+                        // LOGIC above). This just surfaces the same rule
+                        // while typing instead of only after Continue/Update.
+                        onChanged: (_) => setState(() {}),
                         decoration: InputDecoration(
                             prefixIcon: const Icon(Icons.person),
-                            hintText: 'Enter name ${i + 1}'),
+                            hintText: 'Enter name ${i + 1}',
+                            errorText: _nameError(i)),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: _phones[i],
                         keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.phone),
-                            hintText: 'Enter phone number'),
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.phone),
+                            hintText: 'Enter phone number',
+                            errorText: _phoneError(i)),
                       ),
                     ]),
                   ),
@@ -674,7 +790,7 @@ class _ContactsSetupViewState extends State<ContactsSetupView> {
                     const SizedBox(height: 10),
                     const Text(
                       'Your emergency contacts will be notified with your '
-                      'location via SMS when you activate SOS — even '
+                      'location via SMS when you activate SOS - even '
                       'without internet.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -732,8 +848,10 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   @override
   void initState() {
     super.initState();
-    _callerCtrl = TextEditingController(
-        text: context.read<AppViewModel>().fakeCallConfig.callerName);
+    // Blank by default — the hint text below shows the format ("e.g. Mom"),
+    // it does not pre-fill it, so the rider always types their own name
+    // rather than silently saving under a name they never chose.
+    _callerCtrl = TextEditingController();
     final sound = SoundService.instance;
     _subs
       ..add(sound.voicePosition.listen((p) {
@@ -798,11 +916,17 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     } else {
       final path = await em.stopRecording();
       if (path == null) {
-        _toast('Recording failed — nothing was captured.');
+        _toast('Recording failed - nothing was captured.');
       } else {
         try {
-          final title =
-              'Custom recording ${app.recordings.where((r) => !r.isPreset).length + 1}';
+          // Use whatever the rider typed into the "Caller name" field above,
+          // so a recording they've named saves under that name instead of
+          // the generic placeholder — falls back to the old auto-numbered
+          // title only if that field was left empty.
+          final typedName = _callerCtrl.text.trim();
+          final title = typedName.isNotEmpty
+              ? typedName
+              : 'Custom recording ${app.recordings.where((r) => !r.isPreset).length + 1}';
           await app.addRecording(title, path);
           // firstWhereOrNull-style lookup: lastWhere THROWS when the new row
           // cannot be found, which would lose the recording behind an
@@ -815,7 +939,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
           }
           _toast('Recording saved.');
         } catch (_) {
-          _toast('Could not save the recording — storage is unavailable.');
+          _toast('Could not save the recording - storage is unavailable.');
         }
       }
     }
@@ -883,11 +1007,19 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
   // this is the wiring that makes the chosen clip play during a fake call.
   Future<void> _selectRecording(Recording r) async {
     final app = context.read<AppViewModel>();
+    // The caller name must follow the CHOSEN recording, same fix as the
+    // Emergency tab's picker — otherwise picking "Dad call recording" still
+    // shows "Mom" on the call screen. This handler saves right away, it
+    // doesn't wait for the Save button below, so the name is set here too.
+    // The visible field is deliberately left untouched — it stays blank
+    // unless the rider actually types a custom name (see _runSave, which
+    // only overrides this with typed text, never with a hardcoded default).
     app.fakeCallConfig.recordingId = r.recordingId;
+    app.fakeCallConfig.callerName = r.title.split(' ').first;
     try {
       await app.saveFakeCallConfig();
     } catch (_) {
-      _toast('Could not save the selection — storage is unavailable.');
+      _toast('Could not save the selection - storage is unavailable.');
     }
     if (mounted) setState(() {});
   }
@@ -901,7 +1033,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     if (app.recordings.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
-        child: Text('No recordings yet — use "Record New" below.',
+        child: Text('No recordings yet - use "Record New" below.',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 13, color: NavAlertColors.textSecondary)),
@@ -1035,28 +1167,13 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     if (rec == null || rec.isPreset) return;
     final messenger = ScaffoldMessenger.of(context);
 
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete this recording?'),
-        content: Text(
-          '${rec.title}\n\nThis permanently removes the recording from your '
-          'device. This cannot be undone.',
-          style: const TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Delete this recording?',
+      message: '${rec.title}\n\nThis permanently removes the recording from '
+          'your device. This cannot be undone.',
+      confirmLabel: 'Delete',
+      destructive: true,
     );
     if (confirmed != true) return;
 
@@ -1069,7 +1186,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
       messenger.showSnackBar(SnackBar(content: Text('${rec.title} deleted.')));
     } catch (_) {
       messenger.showSnackBar(const SnackBar(
-          content: Text('Could not delete — storage is unavailable.')));
+          content: Text('Could not delete - storage is unavailable.')));
     }
     if (mounted) setState(() {});
   }
@@ -1104,9 +1221,13 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
       await SoundService.instance.stopVoice();
     } catch (_) {/* audio teardown must never block finishing setup */}
     // Persist the caller name exactly as typed (Save must not require
-    // pressing Enter on the keyboard first).
+    // pressing Enter on the keyboard first). Only override when the rider
+    // actually typed something — a blank field must NOT reset the name to a
+    // hardcoded "Mom", or picking "Dad call recording" and leaving the field
+    // blank would silently save the wrong name over what selecting Dad just
+    // set.
     final name = _callerCtrl.text.trim();
-    app.fakeCallConfig.callerName = name.isEmpty ? 'Mom' : name;
+    if (name.isNotEmpty) app.fakeCallConfig.callerName = name;
     var stored = true;
     try {
       await app.saveFakeCallConfig();
@@ -1116,7 +1237,7 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
     }
     if (!mounted) return;
     if (!stored) {
-      _toast('Saved locally only — storage is unavailable.');
+      _toast('Saved locally only - storage is unavailable.');
     }
     if (widget.inOnboarding) {
       Navigator.of(context).pushAndRemoveUntil(
@@ -1159,10 +1280,14 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
               ],
             ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
+        child: LayoutBuilder(
+          builder: (context, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
               // The big icon + title only belong to the onboarding step; from
               // Settings the AppBar already names the screen, and repeating it
               // pushed the recordings list below the fold.
@@ -1207,7 +1332,22 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                                 value: r.recordingId, child: Text(r.title)))
                             .toList(),
                         onChanged: (v) {
+                          if (v == null) return;
+                          // The caller name must follow the CHOSEN recording,
+                          // same fix as the Emergency tab's picker — otherwise
+                          // picking "Dad call recording" still shows "Mom" on
+                          // the call screen. This dropdown saves right away,
+                          // it doesn't wait for the Save button below, so the
+                          // name is set here too. The visible field is
+                          // deliberately left untouched — it stays blank
+                          // unless the rider actually types a custom name
+                          // (see _runSave, which only overrides this with
+                          // typed text, never with a hardcoded default).
+                          final r = app.recordings
+                              .firstWhere((r) => r.recordingId == v);
                           app.fakeCallConfig.recordingId = v;
+                          app.fakeCallConfig.callerName =
+                              r.title.split(' ').first;
                           app.saveFakeCallConfig();
                         },
                       ),
@@ -1240,19 +1380,24 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
               ),
               const SizedBox(height: 16),
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  OutlinedButton.icon(
-                    onPressed: _recordNew,
-                    icon: Icon(em.recording ? Icons.stop : Icons.fiber_manual_record,
-                        color: em.recording ? NavAlertColors.danger : null),
-                    label: Text(em.recording ? 'Stop Recording' : 'Record New'),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _recordNew,
+                      icon: Icon(
+                          em.recording ? Icons.stop : Icons.fiber_manual_record,
+                          color: em.recording ? NavAlertColors.danger : null),
+                      label: Text(
+                          em.recording ? 'Stop Recording' : 'Record New'),
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                      onPressed: _preview,
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Play')),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                        onPressed: _preview,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Play')),
+                  ),
                 ],
               ),
               const SizedBox(height: 32),
@@ -1267,7 +1412,9 @@ class _FakeCallSetupViewState extends State<FakeCallSetupView> {
                     child: const Text('Skip for now ›',
                         style:
                             TextStyle(color: NavAlertColors.textSecondary))),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
       ),

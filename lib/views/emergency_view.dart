@@ -91,7 +91,7 @@ class _EmergencyViewState extends State<EmergencyView>
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('SOS in progress — wait for it to finish.')));
+            content: Text('SOS in progress - wait for it to finish.')));
       },
       child: Scaffold(
       body: SafeArea(
@@ -104,9 +104,7 @@ class _EmergencyViewState extends State<EmergencyView>
             // rider already needs SOS, which is too late to act on the news
             // that their prepaid load may be short. See home_view.dart.
             const SizedBox(height: 16),
-            // SOS press & hold (UC-7). TODO (UI Team): the button's size,
-            // glow, ring, and typography are all restyleable — this is a
-            // high-value screen to make feel urgent and unmistakable.
+            // SOS press & hold (UC-7).
             GestureDetector(
               // DO NOT MODIFY LOGIC: the 3-second press-and-hold guard against
               // accidental SOS. Keep beginSosHold/cancelSosHold on down/up/
@@ -143,8 +141,8 @@ class _EmergencyViewState extends State<EmergencyView>
               },
               child: Stack(alignment: Alignment.center, children: [
                 SizedBox(
-                  width: 190,
-                  height: 190,
+                  width: 220,
+                  height: 220,
                   // DO NOT MODIFY LOGIC: the ring must run for exactly
                   // EmergencyViewModel.sosHoldDuration — it is the rider's only
                   // feedback on how much longer the accidental-trigger guard
@@ -154,7 +152,7 @@ class _EmergencyViewState extends State<EmergencyView>
                     animation: _ring,
                     builder: (context, _) => CircularProgressIndicator(
                       value: em.holdingSos ? _ring.value : 0,
-                      strokeWidth: 8,
+                      strokeWidth: 10,
                       // USE THEME: white ring on danger red is deliberate; if
                       // you change it keep the SOS unmistakably red
                       // (NavAlertColors.danger carries the "emergency" meaning
@@ -166,16 +164,17 @@ class _EmergencyViewState extends State<EmergencyView>
                   ),
                 ),
                 Container(
-                  width: 170,
-                  height: 170,
+                  width: 195,
+                  height: 195,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: NavAlertColors.danger,
                     boxShadow: [
                       BoxShadow(
                           color:
-                              NavAlertColors.danger.withValues(alpha: 0.55),
-                          blurRadius: 44),
+                              NavAlertColors.danger.withValues(alpha: 0.6),
+                          blurRadius: 60,
+                          spreadRadius: 4),
                     ],
                   ),
                   // The label block is CENTRED in the circle and never wraps.
@@ -199,8 +198,9 @@ class _EmergencyViewState extends State<EmergencyView>
                                   softWrap: false,
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
-                                      fontSize: 34,
+                                      fontSize: 40,
                                       fontWeight: FontWeight.w900,
+                                      letterSpacing: 3,
                                       color: Colors.white)),
                             ),
                             // Only while idle. Leaving "Press & Hold to
@@ -351,29 +351,14 @@ class _EmergencyViewState extends State<EmergencyView>
   /// it is what keeps this trigger distinct from the SOS hold beside it.
   Future<void> _confirmCall911(BuildContext context) async {
     final vm = context.read<EmergencyViewModel>();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Call 911?'),
-        content: const Text(
-          'This places a real call to emergency services.\n\n'
+    final confirmed = await showNavAlertConfirmDialog(
+      context,
+      title: 'Call 911?',
+      message: 'This places a real call to emergency services.\n\n'
           'To text your location to your saved contacts instead, press and '
           'hold the SOS button for 3 seconds.',
-          style: TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Call 911',
-                style: TextStyle(
-                    color: NavAlertColors.danger,
-                    fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+      confirmLabel: 'Call 911',
+      destructive: true,
     );
     if (confirmed == true) await vm.call911();
   }
@@ -423,33 +408,18 @@ class _EmergencyViewState extends State<EmergencyView>
   /// dialog scheduled from build() would pop up over Home.
   static Future<void> _showRestrictedSmsDialog(BuildContext context) async {
     final em = context.read<EmergencyViewModel>();
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.sms_failed, color: NavAlertColors.warning),
-        title: const Text('SMS access is blocked'),
-        content: const Text(
-          'Because this app was downloaded directly, Android restricted its '
-          'SMS access.\n\n'
-          "Please tap 'Settings', then tap the three dots (⋮) in the top right "
-          "corner, and select 'Allow restricted settings'.",
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Not now'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await em.openSmsSettings();
-            },
-            child: const Text('Settings'),
-          ),
-        ],
-      ),
+    final openSettings = await showNavAlertConfirmDialog(
+      context,
+      title: 'SMS access is blocked',
+      message: 'Because this app was downloaded directly, Android '
+          'restricted its SMS access.\n\n'
+          "Please tap 'Settings', then tap the three dots (⋮) in the top "
+          "right corner, and select 'Allow restricted settings'.",
+      icon: Icons.sms_failed,
+      cancelLabel: 'Not now',
+      confirmLabel: 'Settings',
     );
+    if (openSettings == true) await em.openSmsSettings();
     // They may have fixed it while they were away — clear the warning if so.
     await em.refreshSmsPermission();
   }

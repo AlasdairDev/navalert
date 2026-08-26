@@ -39,6 +39,10 @@ class RouteView extends StatefulWidget {
 class _RouteViewState extends State<RouteView> {
   bool _showGuide = false;
 
+  // Sentinel dropdown value distinct from any catalogue name or `custom:`
+  // sound — selecting it opens the file picker instead of setting a sound.
+  static const _uploadSoundValue = '__upload_sound__';
+
   // ╔══════════════════════════════════════════════════════════════════════╗
   // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:                     ║
   // ║ SPAM-TAP DEBOUNCER (isProcessing) for the "Start Trip" button.       ║
@@ -88,25 +92,12 @@ class _RouteViewState extends State<RouteView> {
     final existing = app.favoriteAt(dest.lat, dest.lng);
     if (existing != null) {
       // Removing is destructive — confirm before un-starring.
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Remove from Favorites?'),
-          content: Text('${dest.name} will be removed from your favorites.',
-              style: const TextStyle(fontSize: 13)),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: const Text('Cancel')),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Remove',
-                  style: TextStyle(
-                      color: NavAlertColors.danger,
-                      fontWeight: FontWeight.w700)),
-            ),
-          ],
-        ),
+      final confirmed = await showNavAlertConfirmDialog(
+        context,
+        title: 'Remove from Favorites?',
+        message: '${dest.name} will be removed from your favorites.',
+        confirmLabel: 'Remove',
+        destructive: true,
       );
       if (confirmed != true) return;
       // The star must report a storage failure rather than silently doing
@@ -117,7 +108,7 @@ class _RouteViewState extends State<RouteView> {
             SnackBar(content: Text('${dest.name} removed from Favorites.')));
       } catch (_) {
         messenger.showSnackBar(const SnackBar(
-            content: Text('Could not update Favorites — storage is '
+            content: Text('Could not update Favorites - storage is '
                 'unavailable.')));
       }
     } else {
@@ -129,7 +120,7 @@ class _RouteViewState extends State<RouteView> {
             SnackBar(content: Text('${dest.name} added to Favorites.')));
       } catch (_) {
         messenger.showSnackBar(const SnackBar(
-            content: Text('Could not update Favorites — storage is '
+            content: Text('Could not update Favorites - storage is '
                 'unavailable.')));
       }
     }
@@ -141,19 +132,36 @@ class _RouteViewState extends State<RouteView> {
     showModalBottomSheet(
       context: context,
       backgroundColor: NavAlertColors.background,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         final p = app.transportPrefs;
-        Widget tile(String label, IconData icon, bool value,
+        Widget tile(String label, String asset, bool value,
                 void Function(bool) set) =>
-            Card(
-              child: SwitchListTile(
-                secondary: Icon(icon, color: NavAlertColors.accent),
-                title: Text(label),
-                value: value,
-                onChanged: (v) => setSheet(() => set(v)),
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+              decoration: BoxDecoration(
+                color: NavAlertColors.card,
+                borderRadius: BorderRadius.circular(20),
               ),
+              child: Row(children: [
+                Image.asset(asset, width: 80, height: 80, fit: BoxFit.contain),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(label,
+                      style: const TextStyle(
+                          fontSize: 19, fontWeight: FontWeight.w700)),
+                ),
+                Transform.scale(
+                  scale: 1.4,
+                  child: Switch(
+                    value: value,
+                    onChanged: (v) => setSheet(() => set(v)),
+                  ),
+                ),
+              ]),
             );
         return Padding(
           padding: const EdgeInsets.all(20),
@@ -166,16 +174,16 @@ class _RouteViewState extends State<RouteView> {
               'Select your preferred modes. Modes on will increase the '
               'likelihood of appearing. Deselect all others to de-prioritize a mode.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                  color: NavAlertColors.textSecondary, fontSize: 12),
+              style:
+                  TextStyle(color: NavAlertColors.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
-            tile('Bus', Icons.directions_bus, p.busEnabled,
+            tile('Bus', 'assets/images/transport/bus.png', p.busEnabled,
                 (v) => p.busEnabled = v),
-            tile('UV Express', Icons.airport_shuttle, p.uvExpressEnabled,
-                (v) => p.uvExpressEnabled = v),
-            tile('Jeepney', Icons.directions_transit, p.jeepneyEnabled,
-                (v) => p.jeepneyEnabled = v),
+            tile('UV Express', 'assets/images/transport/uv_express.png',
+                p.uvExpressEnabled, (v) => p.uvExpressEnabled = v),
+            tile('Jeepney', 'assets/images/transport/jeepney.png',
+                p.jeepneyEnabled, (v) => p.jeepneyEnabled = v),
             const SizedBox(height: 10),
             SizedBox(
               width: 160,
@@ -239,14 +247,13 @@ class _RouteViewState extends State<RouteView> {
             // the two below it only mean anything once it is on.
             Card(
               child: SwitchListTile(
-                secondary: Icon(
-                    alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
+                secondary: Icon(alarmEnabled ? Icons.alarm_on : Icons.alarm_off,
                     color: NavAlertColors.accent),
                 title: const Text('Destination alarm'),
                 subtitle: Text(
                     alarmEnabled
                         ? 'You will be woken as you approach your stop.'
-                        : 'Optional — off. You can turn it on any time '
+                        : 'Optional - off. You can turn it on any time '
                             'during the trip.',
                     style: const TextStyle(
                         fontSize: 11, color: NavAlertColors.textSecondary)),
@@ -260,31 +267,59 @@ class _RouteViewState extends State<RouteView> {
                     color: alarmEnabled
                         ? NavAlertColors.accent
                         : NavAlertColors.textSecondary),
-                title: const Text('Alarm sound',
-                    style: TextStyle(fontSize: 13)),
-                trailing: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    // Guard the value like Settings does: a non-catalog sound
-                    // (e.g. from an imported backup) must not crash the sheet
-                    // with DropdownButton's "value not in items" assertion.
-                    value: SoundService.alarmCatalog.containsKey(sound)
-                        ? sound
-                        : SoundService.alarmCatalog.keys.first,
-                    dropdownColor: NavAlertColors.card,
-                    items: SoundService.alarmCatalog.keys
-                        .map((s) =>
-                            DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
-                    // Picking a sound for an alarm that is switched off does
-                    // nothing, and previewing one implies the alarm is armed.
-                    // Disabled until the toggle above turns it on.
-                    onChanged: alarmEnabled
-                        ? (v) {
-                            if (v == null) return;
-                            setSheet(() => sound = v);
-                            SoundService.instance.previewAlarm(v);
-                          }
-                        : null,
+                title:
+                    const Text('Alarm sound', style: TextStyle(fontSize: 13)),
+                // A custom sound's filename can be much longer than any
+                // catalogue name. Without a width cap the dropdown demands
+                // whatever space fits it unellipsized, which starves the
+                // title next to it down to a sliver — "Alarm sound" wrapping
+                // one letter per line.
+                trailing: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      // Guard the value like Settings does: a non-catalog
+                      // sound (e.g. from an imported backup) must not crash
+                      // the sheet with DropdownButton's "value not in items"
+                      // assertion.
+                      value: SoundService.alarmCatalog.containsKey(sound) ||
+                              SoundService.isCustom(sound)
+                          ? sound
+                          : SoundService.alarmCatalog.keys.first,
+                      dropdownColor: NavAlertColors.card,
+                      items: [
+                        ...SoundService.alarmCatalog.keys.map(
+                            (s) => DropdownMenuItem(value: s, child: Text(s))),
+                        if (SoundService.isCustom(sound))
+                          DropdownMenuItem(
+                            value: sound,
+                            child: Text(SoundService.customLabel(sound),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        const DropdownMenuItem(
+                          value: _uploadSoundValue,
+                          child: Text('Upload your own audio…'),
+                        ),
+                      ],
+                      // Picking a sound for an alarm that is switched off does
+                      // nothing, and previewing one implies the alarm is
+                      // armed. Disabled until the toggle above turns it on.
+                      onChanged: alarmEnabled
+                          ? (v) async {
+                              if (v == null) return;
+                              if (v == _uploadSoundValue) {
+                                final picked = await app.pickCustomAlarmSound();
+                                if (picked == null) return;
+                                setSheet(() => sound = picked);
+                                SoundService.instance.previewAlarm(picked);
+                                return;
+                              }
+                              setSheet(() => sound = v);
+                              SoundService.instance.previewAlarm(v);
+                            }
+                          : null,
+                    ),
                   ),
                 ),
               ),
@@ -318,45 +353,46 @@ class _RouteViewState extends State<RouteView> {
                 onPressed: _startingTrip
                     ? null
                     : () async {
-                  if (_startingTrip) return;
-                  setSheet(() => _startingTrip = true);
-                  final tripVm = context.read<TripViewModel>();
-                  final navigator = Navigator.of(context);
-                  final messenger = ScaffoldMessenger.of(context);
-                  // Hand the chosen suggestion's guide legs to the trip. They
-                  // are memory-only (Table 24 has no coordinates), so this is
-                  // the one moment they can be transferred.
-                  final legs = context
-                      .read<HomeViewModel>()
-                      .legsFor(trip.selectedRouteSuggestionId);
-                  // View sets the chosen config on the trip; TripViewModel
-                  // .startTrip() persists it (keeps the DB out of the View).
-                  trip
-                    ..alarmSound = sound
-                    ..vibrationOnlyMode = vibrationOnly
-                    ..alarmEnabled = alarmEnabled;
-                  Navigator.of(ctx).pop();
-                  // A failure inside startTrip (the trip write, the GPS stream,
-                  // the foreground service) must SAY so and re-arm the button.
-                  // Unguarded, the exception escaped the handler: the sheet had
-                  // already closed, so the rider saw the sheet dismiss and then
-                  // nothing at all — no trip, no alarm, no error.
-                  try {
-                    await tripVm.startTrip(trip, guideLegs: legs);
-                  } catch (_) {
-                    _startingTrip = false;
-                    messenger.showSnackBar(const SnackBar(
-                        content: Text('Could not start the trip — please try '
-                            'again.')));
-                    return;
-                  }
-                  if (!mounted) {
-                    _startingTrip = false;
-                    return;
-                  }
-                  navigator.pushReplacement(MaterialPageRoute(
-                      builder: (_) => const ActiveTripView()));
-                },
+                        if (_startingTrip) return;
+                        setSheet(() => _startingTrip = true);
+                        final tripVm = context.read<TripViewModel>();
+                        final navigator = Navigator.of(context);
+                        final messenger = ScaffoldMessenger.of(context);
+                        // Hand the chosen suggestion's guide legs to the trip. They
+                        // are memory-only (Table 24 has no coordinates), so this is
+                        // the one moment they can be transferred.
+                        final legs = context
+                            .read<HomeViewModel>()
+                            .legsFor(trip.selectedRouteSuggestionId);
+                        // View sets the chosen config on the trip; TripViewModel
+                        // .startTrip() persists it (keeps the DB out of the View).
+                        trip
+                          ..alarmSound = sound
+                          ..vibrationOnlyMode = vibrationOnly
+                          ..alarmEnabled = alarmEnabled;
+                        Navigator.of(ctx).pop();
+                        // A failure inside startTrip (the trip write, the GPS stream,
+                        // the foreground service) must SAY so and re-arm the button.
+                        // Unguarded, the exception escaped the handler: the sheet had
+                        // already closed, so the rider saw the sheet dismiss and then
+                        // nothing at all — no trip, no alarm, no error.
+                        try {
+                          await tripVm.startTrip(trip, guideLegs: legs);
+                        } catch (_) {
+                          _startingTrip = false;
+                          messenger.showSnackBar(const SnackBar(
+                              content:
+                                  Text('Could not start the trip - please try '
+                                      'again.')));
+                          return;
+                        }
+                        if (!mounted) {
+                          _startingTrip = false;
+                          return;
+                        }
+                        navigator.pushReplacement(MaterialPageRoute(
+                            builder: (_) => const ActiveTripView()));
+                      },
                 child: const Text('Start Trip'),
               ),
             ]),
@@ -444,7 +480,8 @@ class _RouteViewState extends State<RouteView> {
                   Align(
                     alignment: Alignment.centerLeft,
                     child: ActionChip(
-                      avatar: const Icon(Icons.directions_bus, size: 16),
+                      avatar: const Icon(Icons.directions_bus,
+                          size: 16, color: Colors.white),
                       label: const Text('Mode of Transport'),
                       backgroundColor: NavAlertColors.primaryButton,
                       onPressed: _openModePriority,
@@ -474,8 +511,7 @@ class _RouteViewState extends State<RouteView> {
                   NavAlertMap.tiles(context),
                   PolylineLayer(polylines: [
                     // White casing under the route line for contrast.
-                    Polyline(
-                        points: path, strokeWidth: 9, color: Colors.white),
+                    Polyline(points: path, strokeWidth: 9, color: Colors.white),
                     Polyline(
                         points: path,
                         strokeWidth: 5.5,
@@ -569,7 +605,6 @@ class _RouteViewState extends State<RouteView> {
       );
     }
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      // TODO (UI Team): "Suggested Routes" header + count typography.
       const Text('Suggested Routes',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
       Text('${home.suggestions.length} SUGGESTED ROUTES FOUND',
@@ -620,7 +655,8 @@ class _RouteViewState extends State<RouteView> {
         ),
         child: Padding(
           padding: const EdgeInsets.all(10),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Wrap(spacing: 4, children: [
               if (s.tagPrimary != null) _tag(s.tagPrimary!),
               if (s.tagSecondary != null) _tag(s.tagSecondary!),
@@ -629,15 +665,20 @@ class _RouteViewState extends State<RouteView> {
             Text(s.routeLabel,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 13)),
+                style:
+                    const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 4),
-            Text('⏱ ${_fmtDuration(s.totalDurationMinutes)} total',
-                style: const TextStyle(
-                    fontSize: 12, color: NavAlertColors.textSecondary)),
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.schedule,
+                  size: 12, color: NavAlertColors.textSecondary),
+              const SizedBox(width: 4),
+              Text('${_fmtDuration(s.totalDurationMinutes)} total',
+                  style: const TextStyle(
+                      fontSize: 12, color: NavAlertColors.textSecondary)),
+            ]),
             Text('₱${s.totalFarePhp.toStringAsFixed(2)}',
-                style: const TextStyle(
-                    fontSize: 15, fontWeight: FontWeight.w700)),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             Text(s.transportSummary ?? '',
                 style: const TextStyle(
                     fontSize: 11, color: NavAlertColors.textSecondary)),
@@ -656,8 +697,8 @@ class _RouteViewState extends State<RouteView> {
     };
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-          color: color, borderRadius: BorderRadius.circular(10)),
+      decoration:
+          BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
       child: Text(text,
           style: const TextStyle(
               fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white)),
@@ -678,50 +719,10 @@ class _RouteViewState extends State<RouteView> {
       return const SizedBox.shrink();
     }
     final estimate = home.suggestionsAreEstimates;
-    // Figure 22 — the guide header is flanked by ‹ › chevrons that page
-    // between the suggested routes WITHOUT leaving the guide, so the rider can
-    // compare "Option A" and "Option B" step by step. The guide is the primary
-    // feature; dismissing it is the separate "Close" button below.
-    final index = home.suggestions
-        .indexWhere((x) => x.suggestionId == s.suggestionId);
-    final hasPrev = index > 0;
-    final hasNext = index >= 0 && index < home.suggestions.length - 1;
     return Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        IconButton(
-            icon: const Icon(Icons.chevron_left),
-            tooltip: 'Previous route',
-            // DO NOT MODIFY LOGIC: paging re-selects the suggestion, which is
-            // what feeds the fare, the map polyline and the live guide legs.
-            // Keep the home.selectSuggestion call.
-            onPressed: hasPrev
-                ? () => home.selectSuggestion(home.suggestions[index - 1])
-                : null),
-        const Flexible(
-          child: Text('Step-by-Step Commute Guide',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w700)),
-        ),
-        IconButton(
-            icon: const Icon(Icons.chevron_right),
-            tooltip: 'Next route',
-            onPressed: hasNext
-                ? () => home.selectSuggestion(home.suggestions[index + 1])
-                : null),
-      ]),
-      // Which of the suggested routes this guide belongs to — the mockup pages
-      // between two options, so the rider must be able to tell them apart.
-      if (home.suggestions.length > 1 && index >= 0)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Text(
-              'Route ${index + 1} of ${home.suggestions.length}  ·  '
-              '${s.routeLabel}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  fontSize: 11, color: NavAlertColors.textSecondary)),
-        ),
+      const Text('Step-by-Step Commute Guide',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontWeight: FontWeight.w700)),
       // No direct GTFS route was matched — the boarding points below are
       // approximate, so label the whole guide as an estimate to avoid sending
       // the rider looking for a specific named terminal that isn't real data.
@@ -733,7 +734,7 @@ class _RouteViewState extends State<RouteView> {
             color: NavAlertColors.warning.withValues(alpha: 0.18),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Text('ESTIMATE — approximate boarding points',
+          child: const Text('ESTIMATE - approximate boarding points',
               style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -750,8 +751,7 @@ class _RouteViewState extends State<RouteView> {
             final stops = [
               if (step.fromStop != null && step.fromStop!.isNotEmpty)
                 step.fromStop!,
-              if (step.toStop != null && step.toStop!.isNotEmpty)
-                step.toStop!,
+              if (step.toStop != null && step.toStop!.isNotEmpty) step.toStop!,
             ];
             // For a RIDE leg, the boarding terminal is the thing the rider
             // most needs — show it prominently, not buried in the instruction.
@@ -793,8 +793,7 @@ class _RouteViewState extends State<RouteView> {
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                   fontSize: 14,
-                                                  fontWeight:
-                                                      FontWeight.w700)),
+                                                  fontWeight: FontWeight.w700)),
                                           const SizedBox(height: 2),
                                           Text(step.instruction,
                                               style: const TextStyle(
@@ -814,8 +813,7 @@ class _RouteViewState extends State<RouteView> {
                                           Text(step.instruction,
                                               style: const TextStyle(
                                                   fontSize: 14,
-                                                  fontWeight:
-                                                      FontWeight.w600)),
+                                                  fontWeight: FontWeight.w600)),
                                           if (step.durationMinutes > 0)
                                             Text(
                                                 '${step.durationMinutes.toStringAsFixed(0)} min',
@@ -902,22 +900,35 @@ class _RouteViewState extends State<RouteView> {
   /// draws a full vehicle illustration for ride legs; the app has no such
   /// artwork, so the existing Material mode glyph is used inside the same
   /// circular plate — layout from the mockup, iconography already in the app.
-  static Widget _modeBadge(String mode) => Container(
-        width: 36,
-        height: 36,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
+  static Widget _modeBadge(String mode) {
+    final asset = switch (mode) {
+      'bus' => 'assets/images/transport/bus_purple.png',
+      'uv_express' => 'assets/images/transport/uv_express_purple.png',
+      'jeepney' => 'assets/images/transport/jeepney_purple.png',
+      _ => null,
+    };
+    if (asset != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 64,
+          height: 56,
           color: NavAlertColors.surface,
+          child: Image.asset(asset, fit: BoxFit.contain),
         ),
-        child: Icon(_modeIconFor(mode), size: 18, color: NavAlertColors.accent),
       );
-
-  static IconData _modeIconFor(String mode) => switch (mode) {
-        'walk' => Icons.directions_walk,
-        'bus' => Icons.directions_bus,
-        'uv_express' => Icons.airport_shuttle,
-        _ => Icons.directions_transit,
-      };
+    }
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: NavAlertColors.surface,
+      ),
+      child: const Icon(Icons.directions_walk,
+          size: 18, color: NavAlertColors.accent),
+    );
+  }
 
   /// Fare pill over a clock-glyph travel time — the top-right cluster on every
   /// ride card in Pages 15/16. These are the two numbers a rider compares
@@ -965,9 +976,8 @@ class _RouteViewState extends State<RouteView> {
               _railGutter(Icon(
                   j == 0 ? Icons.circle : Icons.radio_button_unchecked,
                   size: 8,
-                  color: j == 0
-                      ? NavAlertColors.accent
-                      : NavAlertColors.warning)),
+                  color:
+                      j == 0 ? NavAlertColors.accent : NavAlertColors.warning)),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(stops[j],
@@ -982,8 +992,8 @@ class _RouteViewState extends State<RouteView> {
                 _railGutter(Container(
                     width: 1.5,
                     height: 10,
-                    color: NavAlertColors.textSecondary
-                        .withValues(alpha: 0.55))),
+                    color:
+                        NavAlertColors.textSecondary.withValues(alpha: 0.55))),
               ]),
           ],
         ],

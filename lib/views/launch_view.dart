@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import 'onboarding_flow.dart';
 import 'shell.dart';
@@ -13,7 +12,7 @@ import 'shell.dart';
 ///  [NEED] _go(): wait for AppViewModel.loaded, then route to TutorialView
 ///         (first run) or ShellView. Keep the "wait for load" gate.
 ///  [EDIT] the whole splash look — logo/icon (currently Icons.alarm_on),
-///         "NavAlert" wordmark, tagline, gradient, the 1400 ms min-display.
+///         "NavAlert" wordmark, tagline, gradient, the 2500 ms min-display.
 ///         Prime spot to drop in your real logo image asset.
 ///  [WANT] animated logo reveal, progress indicator, brand motion.
 class LaunchView extends StatefulWidget {
@@ -24,16 +23,21 @@ class LaunchView extends StatefulWidget {
 }
 
 class _LaunchViewState extends State<LaunchView> {
+  bool _visible = false;
+
   @override
   void initState() {
     super.initState();
     _go();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() => _visible = true);
+    });
   }
 
   // DO NOT MODIFY LOGIC: the splash gate — waits for AppViewModel to finish
   // loading (DB/settings), then routes to onboarding on first run or straight
   // to the app afterwards. Keep the load-wait + the onboardingCompleted branch.
-  // The 1400 ms minimum is just so the splash doesn't flash — that value and
+  // The 2500 ms minimum is just so the splash doesn't flash — that value and
   // everything visual are [EDIT].
   //
   // Fail-safe: never wait forever. If init genuinely hangs on a device (e.g. a
@@ -49,8 +53,8 @@ class _LaunchViewState extends State<LaunchView> {
       if (!mounted) return;
     }
     final elapsed = DateTime.now().difference(start);
-    if (elapsed < const Duration(milliseconds: 1400)) {
-      await Future.delayed(const Duration(milliseconds: 1400) - elapsed);
+    if (elapsed < const Duration(milliseconds: 2500)) {
+      await Future.delayed(const Duration(milliseconds: 2500) - elapsed);
     }
     if (!mounted) return;
     final next = app.appState.onboardingCompleted
@@ -63,43 +67,40 @@ class _LaunchViewState extends State<LaunchView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Color(0xFF1A0E2B), NavAlertColors.background],
-          ),
-        ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(28),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: NavAlertColors.surface,
-                  boxShadow: [
-                    BoxShadow(
-                        color: NavAlertColors.primary.withValues(alpha: 0.5),
-                        blurRadius: 40),
-                  ],
-                ),
-                child: const Icon(Icons.alarm_on,
-                    size: 84, color: NavAlertColors.accent),
+      body: AnimatedOpacity(
+        opacity: _visible ? 1 : 0,
+        duration: const Duration(milliseconds: 500),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.asset(
+              'assets/images/branding/launch_bg.jpg',
+              fit: BoxFit.cover,
+            ),
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset(
+                    'assets/images/branding/navalert_logo.png',
+                    width: 200,
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'NavAlert',
+                    style: TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                      shadows: [
+                        Shadow(color: Color(0xFFB39DDB), blurRadius: 16),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 20),
-              const Text('NavAlert',
-                  style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white)),
-              const SizedBox(height: 6),
-              const Text('Never miss your stop again.',
-                  style: TextStyle(color: NavAlertColors.textSecondary)),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

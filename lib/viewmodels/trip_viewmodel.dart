@@ -162,7 +162,7 @@ class TripViewModel extends ChangeNotifier {
         : Geolocator.getPositionStream(
             locationSettings: _mobileSettings() ?? settings);
     _sub = positionStream.listen(_onFix, onError: (e) {
-      error = 'GPS signal lost — keeping last known distance.';
+      error = 'GPS signal lost - keeping last known distance.';
       notifyListeners();
     });
     _startSignalWatchdog();
@@ -224,7 +224,7 @@ class TripViewModel extends ChangeNotifier {
       if (phase != TripPhase.monitoring) return;
       if (clock.now().difference(last) > signalLostThreshold) {
         signalLostAlarm = true;
-        error = 'Signal Lost — GPS unavailable for a prolonged period.';
+        error = 'Signal Lost - GPS unavailable for a prolonged period.';
         // Same rule as the overshoot prompt: the WARNING always appears, but a
         // rider who disabled the alarm is not sounded at. The banner and its
         // Dismiss action still show either way.
@@ -604,7 +604,7 @@ class TripViewModel extends ChangeNotifier {
         // return coordinates to the clipboard and surface an error.
         await Clipboard.setData(ClipboardData(
             text: '${t.destinationLat},${t.destinationLng}'));
-        error = 'Google Maps unavailable — destination coordinates '
+        error = 'Google Maps unavailable - destination coordinates '
             'copied to clipboard.';
         notifyListeners();
       }

@@ -251,7 +251,7 @@ class _Monitoring extends StatelessWidget {
                   title: const Text('Signal Lost',
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: const Text(
-                      'GPS has been unavailable — stay alert for your stop.',
+                      'GPS has been unavailable - stay alert for your stop.',
                       style: TextStyle(fontSize: 11)),
                   trailing: ElevatedButton(
                     onPressed: vm.dismissSignalLostAlarm,
@@ -581,7 +581,7 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
                     title: const Text('Signal Lost',
                         style: TextStyle(fontWeight: FontWeight.w700)),
                     subtitle: const Text(
-                        'GPS has been unavailable — stay alert for your stop.',
+                        'GPS has been unavailable - stay alert for your stop.',
                         style: TextStyle(fontSize: 11)),
                     trailing: ElevatedButton(
                       onPressed: vm.dismissSignalLostAlarm,
@@ -691,8 +691,8 @@ class _AlarmToggleChip extends StatelessWidget {
           compact
               ? (on ? 'Alarm on' : 'Alarm off')
               : (on
-                  ? 'Alarm on — tap to turn off'
-                  : 'Alarm off — tap to turn on'),
+                  ? 'Alarm on - tap to turn off'
+                  : 'Alarm off - tap to turn on'),
           style: compact ? const TextStyle(fontSize: 12) : null),
       backgroundColor: NavAlertColors.surface,
       onPressed: () => vm.setAlarmEnabled(!vm.trip!.alarmEnabled),
@@ -735,8 +735,10 @@ class _EmergencyActionsRow extends StatelessWidget {
       final em = context.watch<EmergencyViewModel>();
       return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         ElevatedButton.icon(
-          style:
-              ElevatedButton.styleFrom(backgroundColor: NavAlertColors.danger),
+          style: ElevatedButton.styleFrom(
+              backgroundColor: NavAlertColors.danger,
+              minimumSize: const Size(140, 48),
+              alignment: Alignment.center),
           onPressed: em.sending
               ? null
               : () => context
@@ -749,11 +751,13 @@ class _EmergencyActionsRow extends StatelessWidget {
         // SOS and Fake Call are DIFFERENT emergency actions and must stay
         // physically separated. They were 14 px apart, which on a moving
         // jeepney is close enough for one thumb to catch both — the likeliest
-        // cause of "SOS and the recording trigger at the same time". UI team:
-        // you may restyle both buttons, but do not reduce this gap or put them
-        // back side by side without another separator.
-        const SizedBox(width: 40),
+        // cause of "SOS and the recording trigger at the same time". Narrowed
+        // from 40px to 24px on request, still well clear of the 14px that
+        // caused the original mis-tap — do not go below this.
+        const SizedBox(width: 24),
         ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+              minimumSize: const Size(140, 48), alignment: Alignment.center),
           onPressed: em.fakeCallActive
               ? null
               : () async {
@@ -805,12 +809,12 @@ class _BackToShellButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => IconButton(
         icon: const Icon(Icons.arrow_back),
-        tooltip: 'Back — the trip keeps running',
+        tooltip: 'Back - the trip keeps running',
         onPressed: () {
           final messenger = ScaffoldMessenger.of(context);
           Navigator.of(context).pop();
           messenger.showSnackBar(const SnackBar(
-              content: Text('Trip still running — tap "View Active Trip" to '
+              content: Text('Trip still running - tap "View Active Trip" to '
                   'come back.')));
         },
       );
@@ -833,13 +837,16 @@ class _AlarmStage extends StatelessWidget {
 
     if (stage == 3) {
       // Figure 28 — Emergency Full-Screen Alert.
-      // TODO (UI Team): Stage 3 is [EDIT]-heavy — make it alarming and
-      // impossible to sleep through (bold type, pulsing, high contrast).
       // USE THEME: the dark-red background 0xFF3B0A0A is a deliberate "danger"
       // wash; if you retheme, keep Stage 3 unmistakably red/urgent. Do NOT
       // make it easier to dismiss (R1: it must stay a hard-to-dismiss alert).
       return Container(
-        color: const Color(0xFF3B0A0A),
+        decoration: const BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/alarm/alarm_stage_3_bg.jpg'),
+            fit: BoxFit.cover,
+          ),
+        ),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(28),
@@ -881,7 +888,12 @@ class _AlarmStage extends StatelessWidget {
         : ('Get Ready', 'You are near your destination.');
 
     return Container(
-      color: NavAlertColors.background,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/alarm/alarm_stage_1_2_bg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -1000,7 +1012,12 @@ class _OvershootPromptState extends State<_OvershootPrompt> {
     final vm = widget.vm;
     final m = vm.overshotM;
     return Container(
-      color: NavAlertColors.background,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/alarm/alarm_stage_1_2_bg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: SafeArea(
         child: Center(
           child: Padding(
@@ -1026,13 +1043,24 @@ class _OvershootPromptState extends State<_OvershootPrompt> {
                           color: NavAlertColors.textSecondary)),
                   const SizedBox(height: 18),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    ElevatedButton(
-                        onPressed: () => _answer(false),
-                        child: const Text('No')),
+                    // Matched to the Alarm Stage 1/2 Snooze/Dismiss buttons'
+                    // measured natural size (146.7 x 48 under the app theme)
+                    // so this pair renders at exactly the same size.
+                    SizedBox(
+                      width: 147,
+                      height: 48,
+                      child: ElevatedButton(
+                          onPressed: () => _answer(false),
+                          child: const Text('No')),
+                    ),
                     const SizedBox(width: 14),
-                    ElevatedButton(
-                        onPressed: () => _answer(true),
-                        child: const Text('Yes')),
+                    SizedBox(
+                      width: 147,
+                      height: 48,
+                      child: ElevatedButton(
+                          onPressed: () => _answer(true),
+                          child: const Text('Yes')),
+                    ),
                   ]),
                 ]),
               ),
@@ -1125,7 +1153,12 @@ class _OvershootConfirmed extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = vm.overshotM;
     return Container(
-      color: NavAlertColors.background,
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/alarm/alarm_stage_1_2_bg.jpg'),
+          fit: BoxFit.cover,
+        ),
+      ),
       child: SafeArea(
         child: Center(
           child: Padding(
@@ -1199,9 +1232,6 @@ class _Arrived extends StatelessWidget {
 // it's the anti-oversleep dismissal, the only way off the alarm screen while
 // PopScope blocks Back. It was rebuilt in Batch 2 to fix a "knob gets stuck"
 // bug; do not revert it to delta-accumulation or raise the threshold.
-// TODO (UI Team): the pill's LOOK is [EDIT] — colour/alpha, height, border,
-// corner radius, the knob icon, and the label text. Restyle the Container +
-// knob; leave the drag handlers alone.
 // ---------------------------------------------------------------------
 class _SlideToStop extends StatefulWidget {
   const _SlideToStop({
@@ -1295,7 +1325,7 @@ class _SlideToStopState extends State<_SlideToStop> {
                 _done = false;
                 setState(() => _drag = 0);
                 messenger.showSnackBar(const SnackBar(
-                    content: Text('Could not stop the trip — please try '
+                    content: Text('Could not stop the trip - please try '
                         'again.')));
               }
             } else {
@@ -1306,14 +1336,17 @@ class _SlideToStopState extends State<_SlideToStop> {
             width: width,
             height: height,
             decoration: BoxDecoration(
-              color: widget.color.withValues(alpha: 0.35),
+              // Higher-contrast fill so this reads as THE primary action on
+              // the screen, not a secondary translucent control.
+              color: widget.color.withValues(alpha: 0.55),
               borderRadius: BorderRadius.circular(height / 2),
-              border: Border.all(color: widget.color),
+              border: Border.all(color: widget.color, width: 1.5),
             ),
             child: Stack(children: [
               Center(
                   child: Text(widget.label,
-                      style: const TextStyle(fontWeight: FontWeight.w600))),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, color: Colors.white))),
               Positioned(
                 left: _drag,
                 top: 3,
@@ -1321,9 +1354,16 @@ class _SlideToStopState extends State<_SlideToStop> {
                   width: height - 6,
                   height: height - 6,
                   decoration: BoxDecoration(
-                      color: widget.color, shape: BoxShape.circle),
-                  child:
-                      const Icon(Icons.chevron_right, color: Colors.white),
+                    color: widget.color,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                          color: widget.color.withValues(alpha: 0.6),
+                          blurRadius: 8),
+                    ],
+                  ),
+                  child: const Icon(Icons.keyboard_double_arrow_right,
+                      color: Colors.white),
                 ),
               ),
             ]),

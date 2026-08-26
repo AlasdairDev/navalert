@@ -112,6 +112,11 @@ class CommuteGuideSheet extends StatelessWidget {
           // into a drag target, so a handle placed outside it would look
           // draggable and do nothing.
           if (hosted) _handle(),
+          const Center(
+            child: Text('Commute Guide',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+          ),
+          const SizedBox(height: 12),
           for (var i = 0; i < guide.legs.length; i++)
             _legCard(vm, i, i == guide.currentIndex, i < guide.currentIndex),
         ],
@@ -189,22 +194,10 @@ class CommuteGuideSheet extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            // Same round mode badge the planning guide on RouteView uses, so
-            // the live sheet and the sheet the rider chose the route on read
-            // as one component rather than two different lists.
-            Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: NavAlertColors.surface,
-              ),
-              child: Icon(_iconFor(step.transportMode),
-                  size: 17,
-                  color: isDone
-                      ? NavAlertColors.textSecondary
-                      : NavAlertColors.primary),
-            ),
+            // Same mode badge the planning guide on RouteView uses, so the
+            // live sheet and the sheet the rider chose the route on read as
+            // one component rather than two different lists.
+            _modeBadge(step.transportMode),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -285,10 +278,33 @@ class CommuteGuideSheet extends StatelessWidget {
     );
   }
 
-  IconData _iconFor(String mode) => switch (mode) {
-        'walk' => Icons.directions_walk,
-        'bus' => Icons.directions_bus,
-        'uv_express' => Icons.airport_shuttle,
-        _ => Icons.directions_transit,
-      };
+  Widget _modeBadge(String mode) {
+    final asset = switch (mode) {
+      'bus' => 'assets/images/transport/bus_purple.png',
+      'uv_express' => 'assets/images/transport/uv_express_purple.png',
+      'jeepney' => 'assets/images/transport/jeepney_purple.png',
+      _ => null,
+    };
+    if (asset != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 64,
+          height: 56,
+          color: NavAlertColors.surface,
+          child: Image.asset(asset, fit: BoxFit.contain),
+        ),
+      );
+    }
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: NavAlertColors.surface,
+      ),
+      child: const Icon(Icons.directions_walk,
+          size: 18, color: NavAlertColors.accent),
+    );
+  }
 }

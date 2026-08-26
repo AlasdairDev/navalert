@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:vibration/vibration.dart';
 
 /// Alarm-stage audio + haptics (Requirement R1).
@@ -15,6 +17,14 @@ class SoundService {
   static final SoundService instance = SoundService._();
 
   final AudioPlayer _alarmPlayer = AudioPlayer();
+
+  /// Caps previewAlarm() to a short snippet regardless of the file's real
+  /// length — a rider previewing an uploaded song must not have it play out
+  /// in full with no way to stop it. Cancelled by every OTHER path that
+  /// touches _alarmPlayer, so a leftover timer from a preview can never fire
+  /// mid-trip and cut off the real escalating alarm.
+  Timer? _previewStopTimer;
+  static const _previewDuration = Duration(seconds: 6);
   final AudioPlayer _voicePlayer = AudioPlayer();
 
   /// DO NOT MODIFY LOGIC: earphone-only alarm routing (the paper's "Bluetooth /
@@ -71,6 +81,26 @@ class SoundService {
     'Bell': 'sounds/bell.wav',
     'Air Horn': 'sounds/air_horn.wav',
   };
+
+  /// A user-uploaded alarm sound is stored as this prefix plus the file's
+  /// path on disk, in the SAME `alarm_sound` text column the catalogue names
+  /// already use (Table 19 / Table 22) — no schema change, and every place
+  /// that already reads `alarmSound` as a plain string keeps working.
+  static const String _customPrefix = 'custom:';
+  static bool isCustom(String soundName) => soundName.startsWith(_customPrefix);
+  static String customPath(String soundName) =>
+      soundName.substring(_customPrefix.length);
+  static String toCustom(String filePath) => '$_customPrefix$filePath';
+
+  /// The rider-facing label for a custom sound — its filename, not the full
+  /// on-disk path.
+  static String customLabel(String soundName) =>
+      p.basename(customPath(soundName));
+
+  /// Resolves a catalogue name OR a `custom:` value to a playable source.
+  static Source _sourceFor(String soundName) => isCustom(soundName)
+      ? DeviceFileSource(customPath(soundName))
+      : AssetSource(alarmCatalog[soundName] ?? alarmCatalog.values.first);
 
   /// DO NOT MODIFY LOGIC: decides the alarm's audio route. If earphone-only
   /// routing is enabled AND a headset is connected, the alarm plays on the
@@ -152,11 +182,13 @@ class SoundService {
   }
 
   Future<void> _loopSound(String soundName, {required double volume}) async {
-    final asset = alarmCatalog[soundName] ?? alarmCatalog.values.first;
+    // A pending preview auto-stop must never fire mid-trip and cut off the
+    // real escalating alarm.
+    _previewStopTimer?.cancel();
     try {
       await _alarmPlayer.stop();
       await _alarmPlayer.setReleaseMode(ReleaseMode.loop);
-      await _alarmPlayer.play(AssetSource(asset), volume: volume);
+      await _alarmPlayer.play(_sourceFor(soundName), volume: volume);
     } catch (_) {
       // Audio blocked/unavailable — the vibration already started above is
       // the specified fallback, so fail quietly rather than killing the alarm.
@@ -169,14 +201,22 @@ class SoundService {
   /// UNHANDLED async error — a red frame in front of the panel — rather than
   /// simply not previewing. A preview is cosmetic; it must never be louder than
   /// the failure it is reporting.
+  ///
+  /// Capped to [_previewDuration]: a rider previewing an uploaded song (which
+  /// can run minutes long) must hear a short snippet, not the whole track with
+  /// no way to stop it.
   Future<void> previewAlarm(String soundName) async {
+    _previewStopTimer?.cancel();
     await _yieldAudio(true);
     await _applyAlarmRoute();
-    final asset = alarmCatalog[soundName] ?? alarmCatalog.values.first;
     try {
       await _alarmPlayer.stop();
       await _alarmPlayer.setReleaseMode(ReleaseMode.release);
-      await _alarmPlayer.play(AssetSource(asset), volume: 0.8);
+      await _alarmPlayer.play(_sourceFor(soundName), volume: 0.8);
+      _previewStopTimer = Timer(_previewDuration, () {
+        _alarmPlayer.stop();
+        _yieldAudio(false);
+      });
     } catch (_) {/* unplayable asset — silently skip the preview */}
   }
 
@@ -321,6 +361,7 @@ class SoundService {
   /// a failing player must not leave the alarm ringing or block the trip
   /// from ending.
   Future<void> stopAll() async {
+    _previewStopTimer?.cancel();
     try {
       await _alarmPlayer.stop();
     } catch (_) {}

@@ -19,6 +19,10 @@ dependencies:
   path: ^1.9.0
   path_provider: ^2.1.4
 
+  # Simple key-value prefs (non-sensitive UI toggles, e.g. map dark mode) —
+  # kept separate from the encrypted SQLCipher store on purpose.
+  shared_preferences: ^2.3.2
+
   # Networking (Nominatim geocoding)
   http: ^1.2.2
 
@@ -48,6 +52,10 @@ dependencies:
   record: ^6.0.0
   flutter_local_notifications: ^17.2.3
 
+  # Custom alarm sound upload — lets the rider pick an audio file from
+  # device storage instead of only the bundled catalogue.
+  file_picker: ^8.1.2
+
   cupertino_icons: ^1.0.8
   home_widget: ^0.9.3
   flutter_map_cache: ^2.1.0
@@ -75,3 +83,6 @@ flutter:
     # repo for design reference but excluded from the APK.
     - assets/images/tutorial/
     - assets/images/branding/
+    - assets/icons/
+    - assets/images/transport/
+    - assets/images/alarm/
