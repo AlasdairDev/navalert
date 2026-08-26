@@ -357,8 +357,35 @@ class AppViewModel extends ChangeNotifier {
     }
   }
 
-  /// Imports a previously exported backup file. Returns an error message
-  /// or null on success.
+  /// Reduces a Philippine mobile number to one canonical form so the same
+  /// contact saved as +639171234567, 639171234567 or 09171234567 is recognised
+  /// as already present rather than imported a second time.
+  static String _normalisePhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 12 && digits.startsWith('63')) {
+      return '0${digits.substring(2)}';
+    }
+    if (digits.length == 10 && digits.startsWith('9')) return '0$digits';
+    return digits;
+  }
+
+  /// Merges a previously exported backup into the current data. Returns an
+  /// error message or null on success.
+  ///
+  /// MERGE, NOT OVERWRITE. Restoring used to replace whatever was on the phone,
+  /// so a commuter who imported an old backup silently lost the contacts and
+  /// settings they had since changed — and emergency contacts are the one thing
+  /// in NavAlert whose loss is only discovered in an emergency. Nothing here
+  /// deletes or replaces existing data:
+  ///
+  ///  * **Contacts** — matched by phone number. Numbers already saved are left
+  ///    exactly as they are; numbers only in the backup are added into free
+  ///    slots, up to the three the Emergency Contacts screen holds.
+  ///  * **Favorites** — added when the place isn't already saved.
+  ///  * **Settings, preferences, caller name** — a scalar can hold only one
+  ///    value, so it takes the backup's only where the current value is still
+  ///    the factory default. A fresh install (everything default) restores in
+  ///    full; a commuter who has since chosen their own alarm sound keeps it.
   Future<String?> importBackup(File file) async {
     try {
       final data =
@@ -369,30 +396,69 @@ class AppViewModel extends ChangeNotifier {
 
       final us = data['user_settings'] as Map<String, dynamic>?;
       if (us != null) {
-        settings = UserSettings.fromMap(us);
+        final backup = UserSettings.fromMap(us);
+        final fresh = UserSettings();
+        if (settings.locationAccess == fresh.locationAccess) {
+          settings.locationAccess = backup.locationAccess;
+        }
+        if (settings.optimizeBatteryUsage == fresh.optimizeBatteryUsage) {
+          settings.optimizeBatteryUsage = backup.optimizeBatteryUsage;
+        }
+        if (settings.pushNotifications == fresh.pushNotifications) {
+          settings.pushNotifications = backup.pushNotifications;
+        }
+        if (settings.bluetoothEnabled == fresh.bluetoothEnabled) {
+          settings.bluetoothEnabled = backup.bluetoothEnabled;
+        }
+        if (settings.alarmSound == fresh.alarmSound) {
+          settings.alarmSound = backup.alarmSound;
+        }
         await _db.saveUserSettings(settings);
       }
       final tp = data['transport_preferences'] as Map<String, dynamic>?;
       if (tp != null) {
-        transportPrefs = TransportPreferences.fromMap(tp);
+        final backup = TransportPreferences.fromMap(tp);
+        final fresh = TransportPreferences();
+        if (transportPrefs.busEnabled == fresh.busEnabled) {
+          transportPrefs.busEnabled = backup.busEnabled;
+        }
+        if (transportPrefs.uvExpressEnabled == fresh.uvExpressEnabled) {
+          transportPrefs.uvExpressEnabled = backup.uvExpressEnabled;
+        }
+        if (transportPrefs.jeepneyEnabled == fresh.jeepneyEnabled) {
+          transportPrefs.jeepneyEnabled = backup.jeepneyEnabled;
+        }
         await _db.saveTransportPreferences(transportPrefs);
       }
       final caller = data['caller_name'] as String?;
-      if (caller != null && caller.isNotEmpty) {
+      if (caller != null &&
+          caller.isNotEmpty &&
+          fakeCallConfig.callerName == FakeCallConfig().callerName) {
         fakeCallConfig.callerName = caller;
         await _db.saveFakeCallConfig(fakeCallConfig);
       }
 
+      // Only the slots nobody is using are available to the backup, so an
+      // imported contact can never displace one the commuter is relying on.
+      final takenOrders = contacts.map((c) => c.contactOrder).toSet();
+      final savedNumbers = contacts
+          .map((c) => _normalisePhone(c.phoneNumber))
+          .where((n) => n.isNotEmpty)
+          .toSet();
       for (final raw in (data['emergency_contacts'] as List? ?? [])) {
         final c = raw as Map<String, dynamic>;
-        final order = c['contact_order'] as int? ?? 1;
-        final existing =
-            contacts.where((x) => x.contactOrder == order).toList();
+        final number = c['phone_number'] as String? ?? '';
+        final key = _normalisePhone(number);
+        if (key.isEmpty || savedNumbers.contains(key)) continue;
+        final freeOrder = [1, 2, 3].where((o) => !takenOrders.contains(o));
+        if (freeOrder.isEmpty) continue; // all three slots already in use
+        final order = freeOrder.first;
+        takenOrders.add(order);
+        savedNumbers.add(key);
         await _db.upsertContact(EmergencyContact(
-          contactId:
-              existing.isEmpty ? _uuid.v4() : existing.first.contactId,
+          contactId: _uuid.v4(),
           name: c['name'] as String? ?? '',
-          phoneNumber: c['phone_number'] as String? ?? '',
+          phoneNumber: number,
           contactOrder: order,
         ));
       }

@@ -96,12 +96,13 @@ void main() {
       );
 
   group('UC-5 — proximity alarm escalates by distance', () {
-    test('a vehicle closing on the stop drives Stage 1 → 2 → 3', () async {
+    test('a vehicle closing on the stop drives Stage 1 → 2, never straight to 3',
+        () async {
       final vm = newVm();
       await vm.startTrip(buildTrip());
       expect(vm.phase, TripPhase.monitoring);
 
-      // 5 m/s → Stage-1 radius 1200 m, Stage-2 600 m, Stage-3 150 m.
+      // 5 m/s → Stage-1 radius 1200 m, Stage-2 600 m, arrival radius 150 m.
       gps.add(fixAt(1000));
       await pumpEventQueue();
       expect(vm.phase, TripPhase.alarmStage1);
@@ -110,14 +111,36 @@ void main() {
       await pumpEventQueue();
       expect(vm.phase, TripPhase.alarmStage2);
 
-      gps.add(fixAt(100));
+      // Figure 28: Stage 3 activates when the commuter "remains unresponsive
+      // after Stage 2, or upon the third snooze" — it has NO distance trigger.
+      // Closing further must not skip the escalation and slam straight into the
+      // full-screen alarm.
+      gps.add(fixAt(200));
       await pumpEventQueue();
-      expect(vm.phase, TripPhase.alarmStage3);
+      expect(vm.phase, TripPhase.alarmStage2);
 
       // Each stage was actually sounded, once, in order.
-      expect(sound.stagesPlayed, [1, 2, 3]);
+      expect(sound.stagesPlayed, [1, 2]);
       // Every stage was logged to history with its distance.
-      expect(db.alarmEvents.map((e) => e.stage), [1, 2, 3]);
+      expect(db.alarmEvents.map((e) => e.stage), [1, 2]);
+
+      await vm.stopTrip();
+      vm.dispose();
+    });
+
+    test('a first fix already past the Stage-2 radius still opens at Stage 1',
+        () async {
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+
+      // Destination set late, or the first fix only landed after boarding: the
+      // commuter is already deep inside the Stage-2 radius. The gentle alert
+      // must still be the one that plays first.
+      gps.add(fixAt(300));
+      await pumpEventQueue();
+
+      expect(vm.phase, TripPhase.alarmStage1);
+      expect(sound.stagesPlayed, [1]);
 
       await vm.stopTrip();
       vm.dispose();
@@ -159,8 +182,21 @@ void main() {
         () async {
       final vm = newVm();
       await vm.startTrip(buildTrip());
-      gps.add(fixAt(100));
+
+      // Stage 3 is no longer reachable by distance alone (Figure 28), so climb
+      // the escalation the way an unresponsive commuter actually would.
+      gps.add(fixAt(1000));
       await pumpEventQueue();
+      expect(vm.phase, TripPhase.alarmStage1);
+
+      gps.add(fixAt(500));
+      await pumpEventQueue();
+      expect(vm.phase, TripPhase.alarmStage2);
+
+      // Third snooze escalates straight to Stage 3.
+      await vm.snoozeAlarm();
+      await vm.snoozeAlarm();
+      await vm.snoozeAlarm();
       expect(vm.phase, TripPhase.alarmStage3);
 
       await vm.dismissAlarm();
@@ -171,6 +207,24 @@ void main() {
       expect(db.lastTrip?.status, 'arrived');
       expect(home.idleCount, greaterThan(0), reason: 'widget reset to idle');
       expect(lock.cancelCount, greaterThan(0));
+
+      vm.dispose();
+    });
+
+    test('reaching the destination auto-completes the trip as arrived',
+        () async {
+      final vm = newVm();
+      await vm.startTrip(buildTrip());
+
+      // Inside the 150 m arrival radius while still monitoring: the commuter is
+      // following the trip and has plainly arrived, so the trip completes
+      // itself instead of running on until the overshoot detector latches.
+      gps.add(fixAt(100));
+      await pumpEventQueue();
+
+      expect(vm.phase, TripPhase.arrived);
+      expect(db.lastTrip?.status, 'arrived');
+      expect(vm.overshotM, 0, reason: 'arriving is not overshooting');
 
       vm.dispose();
     });
@@ -276,7 +330,7 @@ void main() {
       });
     });
 
-    test('a snoozed alarm re-fires after the escalation window', () {
+    test('a snoozed alarm comes back ONE STAGE LOUDER', () {
       fakeAsync((async) {
         final vm = newVm();
         vm.startTrip(buildTrip());
@@ -291,15 +345,17 @@ void main() {
         expect(vm.phase, TripPhase.monitoring, reason: 'silenced by snooze');
 
         async.elapse(const Duration(seconds: 31));
-        expect(vm.phase, TripPhase.alarmStage1,
-            reason: 'a snoozed alarm must come back');
+        expect(vm.phase, TripPhase.alarmStage2,
+            reason: 'snoozing Stage 1 must bring back Stage 2, not Stage 1 - '
+                're-firing the same stage lets a commuter idle at the gentlest '
+                'alert while the vehicle keeps closing on the stop');
 
         vm.dispose();
         gps.close();
       });
     });
 
-    test('prolonged GPS loss raises the Signal Lost fallback alarm', () {
+    test('prolonged GPS loss raises a SILENT Signal Lost warning', () {
       fakeAsync((async) {
         final vm = newVm();
         vm.startTrip(buildTrip());
@@ -312,8 +368,10 @@ void main() {
 
         // UC-1 Exception 2: after 90 s without a fix the watchdog fires.
         async.elapse(const Duration(seconds: 120));
-        expect(vm.signalLostAlarm, isTrue);
-        expect(sound.stagesPlayed, contains(2));
+        expect(vm.signalLostAlarm, isTrue, reason: 'the warning still raises');
+        expect(sound.stagesPlayed, isEmpty,
+            reason: 'a GPS gap is not evidence the stop is near - the commuter '
+                'is told, not startled');
 
         vm.dispose();
         gps.close();
@@ -432,13 +490,16 @@ void main() {
       expect(vm.guide.currentLeg?.step.transportMode, 'walk');
       expect(vm.phase, TripPhase.alarmStage2);
 
-      // Arrive: the guide completes and Stage 3 fires.
+      // Arrive: the guide completes. The alarm does NOT jump to Stage 3 - an
+      // unanswered Stage 2 is still on screen, so the trip is not auto-completed
+      // either (that would stand the alarm down for a commuter who has not
+      // responded to it); Stage 3 is left to the escalation timer.
       gps.add(fixAt(100));
       await pumpEventQueue();
       expect(vm.guide.isComplete, isTrue);
-      expect(vm.phase, TripPhase.alarmStage3);
-      // The full ride sequence was sounded once each, in order.
-      expect(sound.stagesPlayed, [1, 2, 3]);
+      expect(vm.phase, TripPhase.alarmStage2);
+      // Each stage was sounded once, in order, with none skipped.
+      expect(sound.stagesPlayed, [1, 2]);
 
       await vm.stopTrip();
       vm.dispose();

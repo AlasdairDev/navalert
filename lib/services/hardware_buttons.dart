@@ -3,7 +3,13 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 /// Volume-button shortcuts (Specific Objective 4, R7/R8):
-/// triple-press Volume-Up → SOS, triple-press Volume-Down → Fake Call.
+/// triple-press Volume-Up → SOS, squeeze Volume-Up + Volume-Down → Fake Call.
+///
+/// Fake Call moved off triple-press-Volume-Down because the shortcuts are armed
+/// whenever the screen is off or NavAlert is backgrounded — the normal state
+/// during a commute — so ordinary volume adjustment kept launching it. Pressing
+/// both directions at once cannot happen while adjusting, which only ever
+/// travels one way. See `MediaButtonService.detectShortcut`.
 ///
 /// The press detection lives natively in `MediaButtonService`, so it works
 /// with the screen off and the phone in a pocket — an Activity cannot see the

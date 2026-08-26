@@ -40,10 +40,49 @@ class _SearchViewState extends State<SearchView> {
   }
 
   void _onChanged(String q) {
+    // Rebuild so the local "Current Location" match below re-evaluates on every
+    // keystroke. It costs no network call, so unlike the Nominatim search it
+    // does not wait for the debounce or the 3-character minimum.
+    setState(() {});
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 600), () {
       if (q.trim().length >= 3) context.read<HomeViewModel>().search(q);
     });
+  }
+
+  /// The commuter's own position, offered as a pickable search result.
+  ///
+  /// Where they are standing is a place like any other, but it was the one
+  /// place the search could not reach: the position sat in a read-only caption
+  /// above the field, so a commuter at PUP could search for every landmark
+  /// EXCEPT the one under their feet.
+  ///
+  /// Offered with an empty query as a shortcut, and matched locally against the
+  /// reverse-geocoded address plus the words people actually type when they
+  /// mean themselves. Local matching also means it appears instantly, before
+  /// Nominatim has answered.
+  PlaceResult? _currentLocationMatch(HomeViewModel vm) {
+    final lat = vm.currentLat;
+    final lng = vm.currentLng;
+    // A fallback position is a guess, not a fix (UC-4 Exception 2). Offering it
+    // as somewhere to travel to would hand back a place they never were.
+    if (lat == null || lng == null || vm.locationIsFallback) return null;
+
+    final label = vm.currentAddressShort ?? 'Current Location';
+    final q = _controller.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      const aliases = ['current location', 'my location', 'here', 'me'];
+      final haystack = '$label ${vm.currentAddress ?? ''}'.toLowerCase();
+      final matches = haystack.contains(q) ||
+          aliases.any((a) => a.startsWith(q) || a.contains(q));
+      if (!matches) return null;
+    }
+    return PlaceResult(
+      name: label,
+      displayName: vm.currentAddress ?? 'Where you are right now',
+      lat: lat,
+      lng: lng,
+    );
   }
 
   // DO NOT MODIFY LOGIC: in-flight guard, matching the one on the Favorites
@@ -236,6 +275,7 @@ class _SearchViewState extends State<SearchView> {
                 // tell a rider who has typed "SM" that their search found
                 // nothing when no search had run yet.
                 child: vm.results.isEmpty &&
+                        _currentLocationMatch(vm) == null &&
                         !vm.searching &&
                         vm.searchError == null
                     ? Padding(
@@ -318,15 +358,26 @@ class _SearchViewState extends State<SearchView> {
                           ),
                         ),
                       )
-                    : ListView.builder(
-                        itemCount: vm.results.length,
+                    : Builder(builder: (_) {
+                        final here = _currentLocationMatch(vm);
+                        final rows = <PlaceResult>[
+                          if (here != null) here,
+                          ...vm.results,
+                        ];
+                        return ListView.builder(
+                        itemCount: rows.length,
                         itemBuilder: (_, i) {
-                          final r = vm.results[i];
+                          final r = rows[i];
+                          final isHere = here != null && i == 0;
                           return ListTile(
-                            leading: const CircleAvatar(
+                            leading: CircleAvatar(
                               backgroundColor: NavAlertColors.surface,
-                              child: Icon(Icons.navigation,
-                                  color: NavAlertColors.accent, size: 20),
+                              child: Icon(
+                                  isHere
+                                      ? Icons.my_location
+                                      : Icons.navigation,
+                                  color: NavAlertColors.accent,
+                                  size: 20),
                             ),
                             title: Text(r.name),
                             subtitle: Text(r.displayName,
@@ -338,7 +389,8 @@ class _SearchViewState extends State<SearchView> {
                             onTap: () => _select(r),
                           );
                         },
-                      ),
+                        );
+                      }),
               ),
             ],
           ),

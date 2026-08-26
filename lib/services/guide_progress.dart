@@ -46,6 +46,21 @@ class GuideProgress {
     return true;
   }
 
+  /// Completes every remaining leg at once.
+  ///
+  /// Called when the trip's destination is actually reached. The final leg of a
+  /// commute guide is almost always a SYNTHETIC walking step ("Walk towards PUP
+  /// Sta. Mesa") which carries no coordinates, so [update] can never advance it
+  /// — [canAutoAdvance] is false and there is no alight stop to measure against.
+  /// That left the last step permanently unticked even though the commuter had
+  /// plainly arrived, and the trip then ran on until the overshoot detector
+  /// latched and announced a missed stop the commuter had not missed.
+  ///
+  /// Arriving at the destination IS the event that finishes that walk, so the
+  /// destination check completes the remainder rather than the guide trying to
+  /// infer an endpoint it was never given.
+  void completeAll() => _index = legs.length;
+
   /// Feeds a GPS fix in. Returns true if this fix completed the current leg.
   ///
   /// Advancement is monotonic: it only ever moves forward, one leg per fix, and

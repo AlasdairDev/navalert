@@ -733,7 +733,18 @@ class _EmergencyActionsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Builder(builder: (context) {
       final em = context.watch<EmergencyViewModel>();
-      return Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+      // At their designed sizes the pair measures 364.9 px (140 + 24 + 200.9),
+      // which is 4.9 px wider than a 360 dp phone — the commonest Android
+      // width — so the row struck the overflow stripe across the emergency
+      // controls. scaleDown is a no-op wherever the row already fits and only
+      // engages when it cannot: nothing below is altered, the whole row is
+      // simply drawn at 98.7% on screens too narrow for it. The 24 px
+      // separation scales with it (to ~23.7 px), staying far clear of the
+      // 14 px that caused the original mis-tap.
+      final row = Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
         ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
               backgroundColor: NavAlertColors.danger,
@@ -779,6 +790,7 @@ class _EmergencyActionsRow extends StatelessWidget {
           label: const Text('Fake Call'),
         ),
       ]);
+      return FittedBox(fit: BoxFit.scaleDown, child: row);
     });
   }
 }

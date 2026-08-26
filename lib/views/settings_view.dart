@@ -391,9 +391,11 @@ class _SettingsViewState extends State<SettingsView>
   }
 
   /// Figure 33 — Data Backup: pick a backup file from anywhere on the phone.
-  // DO NOT MODIFY LOGIC: Import OVERWRITES the user's current settings,
-  // contacts and favorites — the confirm dialog below is required. Keep the
-  // pick → confirm → importBackup flow; dialog copy/look are [EDIT].
+  // DO NOT MODIFY LOGIC: keep the pick → confirm → importBackup flow; dialog
+  // copy/look are [EDIT]. Import now MERGES rather than overwrites (see
+  // AppViewModel.importBackup), so nothing is destroyed — but the confirm step
+  // stays: importing still changes the commuter's emergency contacts, and that
+  // is never something to do on a stray tap.
   Future<void> _importBackup(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
     // A real "Choose File" dialog — the rider can import any backup saved
@@ -409,16 +411,15 @@ class _SettingsViewState extends State<SettingsView>
     final app = context.read<AppViewModel>();
     final file = File(path);
     final fileName = path.split(RegExp(r'[\\/]')).last;
-    // Importing overwrites the current data — confirm before applying.
+    // Importing merges — confirm anyway, because it still changes contacts.
     final confirmed = await showNavAlertConfirmDialog(
       context,
       title: 'Import this backup?',
       message: '$fileName\n\n'
-          'Your current contacts, favorites, trip history and settings '
-          'will be replaced by the data in this backup. This cannot be '
-          'undone.',
+          'Anything in this backup that you do not already have will be '
+          'added - contacts, favorites and settings you have not set '
+          'yourself. Nothing you have now is replaced or deleted.',
       confirmLabel: 'Import',
-      destructive: true,
     );
     if (confirmed != true) return;
     final err = await app.importBackup(file);

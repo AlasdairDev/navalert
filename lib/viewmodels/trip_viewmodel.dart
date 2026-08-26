@@ -59,6 +59,16 @@ class TripViewModel extends ChangeNotifier {
   /// Figure 26/27 — unresponsive window before the next stage fires.
   static const stageEscalationDelay = Duration(seconds: 30);
 
+  /// Shortened window used when the distance ALREADY justifies a later stage.
+  ///
+  /// Stages must be shown in order (see the eligibility note in _onFix), but a
+  /// commuter who set their destination late, or whose first fix only landed
+  /// after boarding, can begin a trip already inside the Stage-2 radius. Making
+  /// them sit through two full 30 s windows would put "WAKE UP" a minute away
+  /// from a stop that is seconds away. The sequence is preserved and simply
+  /// played at catch-up speed until it agrees with the distance again.
+  static const catchUpEscalationDelay = Duration(seconds: 5);
+
   /// UC-1 Exception 2 — prolonged GPS loss before the fallback alarm.
   static const signalLostThreshold = Duration(seconds: 90);
 
@@ -225,13 +235,15 @@ class TripViewModel extends ChangeNotifier {
       if (clock.now().difference(last) > signalLostThreshold) {
         signalLostAlarm = true;
         error = 'Signal Lost - GPS unavailable for a prolonged period.';
-        // Same rule as the overshoot prompt: the WARNING always appears, but a
-        // rider who disabled the alarm is not sounded at. The banner and its
-        // Dismiss action still show either way.
-        if (trip?.alarmEnabled ?? true) {
-          _sound.playAlarmStage(2, trip?.alarmSound ?? 'Digital Clock',
-              vibrationOnly: trip?.vibrationOnlyMode ?? false);
-        }
+        // SILENT by design. The warning banner, its Dismiss action and the
+        // logging all stay; only the alarm tone is gone.
+        //
+        // A GPS gap is not evidence that the stop is near — tunnels, urban
+        // canyons and a phone in a bag all produce one mid-trip — so sounding a
+        // Stage-2 alarm at it woke commuters for something that was not their
+        // destination and taught them to distrust the alarm that is. The
+        // commuter is still told the fix was lost; they are simply not startled
+        // by it.
         notifyListeners();
       }
     });
@@ -298,7 +310,27 @@ class TripViewModel extends ChangeNotifier {
         etaMinutes: etaMinutes);
     _pushHomeWidget();
 
-    // Overshoot detection first — a bypassed stop outranks staging.
+    // ARRIVAL outranks overshoot, which outranks staging.
+    //
+    // The paper defines an Overshoot as passing the destination "without the
+    // passenger waking up or getting off" — so a commuter who has arrived
+    // cannot, by definition, have overshot. Running the overshoot detector
+    // first meant a commuter who reached their stop, got off and walked on was
+    // told they had missed it, because nothing ever moved the trip to
+    // `arrived`: that phase was previously reachable ONLY by dismissing a
+    // Stage-3 alarm or stopping the trip by hand.
+    //
+    // Guarded on `monitoring` deliberately. If a stage is on screen the
+    // commuter has NOT responded to it, and auto-completing the trip under a
+    // sounding alarm would quietly stand down the one thing trying to wake a
+    // sleeping commuter at the exact moment it matters. In that case the
+    // escalation is left to run; dismissing Stage 3 still ends the trip as
+    // arrived, exactly as before.
+    if (phase == TripPhase.monitoring && distanceM <= engine.arrivalRadiusM) {
+      await _arriveAtDestination();
+      return;
+    }
+
     final past = engine.checkOvershoot(distanceM, accuracyM: pos.accuracy);
     if (past != null && phase != TripPhase.overshootConfirmed) {
       overshotM = past;
@@ -334,12 +366,23 @@ class TripViewModel extends ChangeNotifier {
     // ETA, the lock-screen widget, overshoot detection and the commute guide —
     // only the escalating stages are suppressed. The rider can arm it mid-trip
     // from the Active Trip screen, and stages then fire from the next fix.
-    final stage = engine.stageFor(distanceM);
-    if (t.alarmEnabled &&
-        stage > 0 &&
-        !_firedStages.contains(stage) &&
-        stage > highestStage) {
-      _fireStage(stage);
+    // Stages fire ONE AT A TIME, in order, and distance alone can never reach
+    // Stage 3.
+    //
+    // stageFor() returns the HIGHEST stage a distance qualifies for, and this
+    // used to fire that stage directly. A first fix already inside the
+    // Stage-2 or Stage-3 radius therefore opened on "Get Ready" or a
+    // full-screen "WAKE UP" and the gentler stages never played at all — the
+    // "minsan dumidiretso sa 3, minsan sa 2" report.
+    //
+    // Capping eligibility at 2 restores Figure 28, where Stage 3 has NO
+    // distance trigger: it activates only when the commuter "remains
+    // unresponsive after Stage 2, or upon the third snooze". Distance escalates
+    // to Stage 2; time and snoozes carry it to Stage 3.
+    final byDistance = engine.stageFor(distanceM);
+    final eligible = byDistance >= 2 ? 2 : byDistance;
+    if (t.alarmEnabled && eligible > highestStage) {
+      _fireStage(highestStage + 1);
     }
 
     // Commute guide LAST, and isolated. The guide is a convenience; the alarm
@@ -433,11 +476,43 @@ class TripViewModel extends ChangeNotifier {
   void _scheduleEscalation(int fromStage) {
     _cancelEscalation();
     if (fromStage >= 3) return;
-    _escalationTimer = Timer(stageEscalationDelay, () {
+    _escalationTimer = Timer(_escalationDelayFrom(fromStage), () {
       final expectedPhase =
           fromStage == 1 ? TripPhase.alarmStage1 : TripPhase.alarmStage2;
       if (phase == expectedPhase) _fireStage(fromStage + 1);
     });
+  }
+
+  /// 30 s normally; [catchUpEscalationDelay] while the sequence is behind the
+  /// distance. "Behind" means the commuter is already at least one radius
+  /// closer than the stage now showing: past the Stage-2 radius while Stage 1
+  /// is up, or inside the arrival radius while Stage 2 is up.
+  Duration _escalationDelayFrom(int fromStage) {
+    final engine = _engine;
+    if (engine == null) return stageEscalationDelay;
+    final byDistance = engine.stageFor(distanceM);
+    final behind = fromStage == 1 ? byDistance >= 2 : byDistance >= 3;
+    return behind ? catchUpEscalationDelay : stageEscalationDelay;
+  }
+
+  /// The trip reached its destination while the commuter was following it.
+  ///
+  /// Ticks off whatever guide steps remain — the last one is a synthetic walk
+  /// that cannot complete itself (see [GuideProgress.completeAll]) — then ends
+  /// the trip as arrived. Silence and timers are stood down first so nothing
+  /// can fire against a trip that is already over.
+  Future<void> _arriveAtDestination() async {
+    _cancelEscalation();
+    try {
+      await _sound.stopAll();
+    } catch (e) {
+      debugPrint('NavAlert: could not silence on arrival — $e');
+    }
+    guide.completeAll();
+    await _endTrip('arrived');
+    phase = TripPhase.arrived;
+    _pushHomeWidget(force: true);
+    notifyListeners();
   }
 
   void _cancelEscalation() {
@@ -491,12 +566,19 @@ class TripViewModel extends ChangeNotifier {
     }
     phase = TripPhase.monitoring;
     // Bring the alarm back after the snooze window — a snoozed alarm must
-    // return, otherwise a drowsy rider who taps Snooze once is never
+    // return, otherwise a drowsy commuter who taps Snooze once is never
     // warned again.
+    //
+    // It returns ONE STAGE LOUDER than the one snoozed: snoozing Stage 1 brings
+    // back Stage 2, snoozing Stage 2 brings back Stage 3. Re-firing the same
+    // stage let a commuter sit at the gentlest alert indefinitely while the
+    // vehicle kept moving, which is the opposite of an escalating alarm. This
+    // is the same direction of travel as the existing third-snooze rule above.
     if (snoozedStage > 0) {
+      final nextStage = (snoozedStage + 1).clamp(1, 3);
       _snoozeTimer = Timer(stageEscalationDelay, () {
         if (phase == TripPhase.monitoring && isActive) {
-          _fireStage(snoozedStage);
+          _fireStage(nextStage);
           notifyListeners();
         }
       });

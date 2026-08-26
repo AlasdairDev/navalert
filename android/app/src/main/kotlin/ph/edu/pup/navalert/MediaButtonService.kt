@@ -252,7 +252,7 @@ class MediaButtonService : Service() {
                 // foreground. While the app is open with the screen on (e.g.
                 // previewing an alarm sound in Settings), normal volume
                 // adjustments must NOT be read as a triple-press shortcut.
-                if (isShortcutContext()) detectTriplePress(direction)
+                if (isShortcutContext()) detectShortcut(direction)
             }
         }
     }
@@ -263,24 +263,59 @@ class MediaButtonService : Service() {
         return !screenOn || !MainActivity.activityResumed
     }
 
-    /** Native triple-press within [WINDOW_MS], per direction. */
-    private fun detectTriplePress(direction: Int) {
+    /**
+     * Routes a volume press to the right gesture.
+     *
+     * FAKE CALL is a SQUEEZE — Volume-Up and Volume-Down within [SQUEEZE_MS] of
+     * each other — not a triple-press of Volume-Down any more.
+     *
+     * Triple-press could not survive here. [isShortcutContext] deliberately arms
+     * the shortcuts whenever the screen is off OR NavAlert is backgrounded, and
+     * during an actual commute that is the normal state: phone in a pocket,
+     * music playing. Every ordinary "turn it down" of three quick taps therefore
+     * landed inside the 1.6 s window and launched a fake call — the
+     * "pag nag-aadjust ng volume, tinitrigger rin" report.
+     *
+     * A squeeze cannot be produced by adjusting volume, because adjusting only
+     * ever moves in ONE direction: nobody raises and lowers within half a second.
+     * It stays discreet and screen-off capable — one squeeze of the phone's side
+     * — which is what Specific Objective 4 actually needs the gesture to be.
+     */
+    private fun detectShortcut(direction: Int) {
         val now = SystemClock.elapsedRealtime()
+        val opposite = if (direction > 0) downPresses else upPresses
+        if (opposite.isNotEmpty() && now - opposite.last() <= SQUEEZE_MS) {
+            upPresses.clear()
+            downPresses.clear()
+            if (now - lastDispatchAt < COOLDOWN_MS) return
+            lastDispatchAt = now
+            dispatchShortcut("fakecall")
+            return
+        }
+        detectTriplePress(direction, now)
+    }
+
+    /**
+     * Native triple-press within [WINDOW_MS], per direction.
+     *
+     * SOS ONLY. Volume-Down no longer maps to anything here — its presses are
+     * still recorded so a squeeze can be recognised, but three of them do
+     * nothing on their own.
+     */
+    private fun detectTriplePress(direction: Int, now: Long) {
         val list = if (direction > 0) upPresses else downPresses
         list.addLast(now)
         while (list.isNotEmpty() && now - list.first() > WINDOW_MS) list.removeFirst()
-        if (list.size >= 3) {
+        if (direction > 0 && list.size >= 3) {
             list.clear()
             // Cooldown: a burst of presses (or a held key) must not fire twice
-            // — a double SOS would send duplicate SMS to every contact, and a
-            // double fake call would stack two call screens.
-            val now = SystemClock.elapsedRealtime()
+            // — a double SOS would send duplicate SMS to every contact.
             if (now - lastDispatchAt < COOLDOWN_MS) return
             lastDispatchAt = now
             // Clear the other direction too, so a mixed burst can't chain.
             upPresses.clear()
             downPresses.clear()
-            dispatchShortcut(if (direction > 0) "sos" else "fakecall")
+            dispatchShortcut("sos")
         }
     }
 
@@ -425,6 +460,15 @@ class MediaButtonService : Service() {
         private const val NOTIF_ID = 4242
         private const val FS_NOTIF_ID = 4243
         private const val WINDOW_MS = 1600L
+
+        /**
+         * How close Volume-Up and Volume-Down must land to count as one squeeze.
+         *
+         * Short on purpose. Adjusting volume only ever travels in one direction,
+         * so half a second is far longer than any accidental reversal and far
+         * shorter than a deliberate change of mind.
+         */
+        private const val SQUEEZE_MS = 500L
         private const val COOLDOWN_MS = 3000L
         private const val REASSERT_MS = 20_000L
     }
