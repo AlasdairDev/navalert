@@ -25,6 +25,10 @@
     <!-- R7/R8 discreet triggering: MediaButtonService hosts an active media
          session so the triple-Volume shortcuts fire with the screen off. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
+    <!-- Lets BootReceiver re-arm the shortcut service after a reboot or an
+         app update. Without it the volume shortcuts stay dead until the
+         commuter next opens the app, with nothing to indicate it. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
 
     <application
         android:label="NavAlert"
@@ -68,6 +72,19 @@
             android:name=".MediaButtonService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+        <!-- Re-arms the shortcut service after boot / app update. Exported
+             because BOOT_COMPLETED is a system broadcast; the intent-filter
+             restricts it to those three actions. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
         <!-- Home-screen App Widget (Batch 3): live trip status + one-tap SOS. -->
         <receiver
             android:name=".NavAlertWidgetProvider"
