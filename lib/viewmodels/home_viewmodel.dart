@@ -167,7 +167,7 @@ class HomeViewModel extends ChangeNotifier {
       }
       // Two-stage acquisition. bestForNavigation wants a real GNSS fix, which
       // frequently never arrives indoors or under a jeepney roof — on a real
-      // phone that meant a timeout and a silent drop to the PUP fallback. Fall
+      // phone that meant a timeout and a silent drop to the fallback. Fall
       // back to a coarser network/fused fix first: an approximate real position
       // is far more useful than a hardcoded one.
       // bestForNavigation is geolocator's highest accuracy; the reverse-geocoded
@@ -195,8 +195,8 @@ class HomeViewModel extends ChangeNotifier {
         // No fix at all. Keep the map centred somewhere sensible, but never
         // let this pass as the rider's real position: routes and fares would
         // be computed for a trip they are not taking.
-        currentLat = 14.5979;
-        currentLng = 121.0108;
+        currentLat = RouteEngine.ncrCenterLat;
+        currentLng = RouteEngine.ncrCenterLng;
         locationIsFallback = true;
         locationError = e is LocationServiceDisabledException
             ? 'Location is turned off. Enable GPS to set your starting point.'
@@ -348,7 +348,7 @@ class HomeViewModel extends ChangeNotifier {
     try {
       // Rank against the rider's OWN position so nearby places win ties.
       // DO NOT MODIFY LOGIC: null when the fix is a fallback. Ranking by the
-      // PUP placeholder would sort every result around a location the rider is
+      // placeholder centre would sort every result around a location the rider is
       // not at, which is worse than not ranking by distance at all.
       results = await _geocoder.search(query,
           nearLat: locationIsFallback ? null : currentLat,

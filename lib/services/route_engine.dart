@@ -41,6 +41,24 @@ class RouteEngine {
   static const double ncrMinLng = 120.88;
   static const double ncrMaxLng = 121.18;
 
+  /// Neutral centre of the service area, for framing a map before any GPS fix
+  /// exists.
+  ///
+  /// DO NOT MODIFY LOGIC: this is a CAMERA POSITION, never an origin. It exists
+  /// only so the map has somewhere to look while a fix is still being acquired.
+  /// [HomeViewModel.setDestination] refuses to plan a trip while the position is
+  /// flagged as a fallback, precisely so this value can never be mistaken for
+  /// where the commuter is.
+  ///
+  /// Derived from the bounds above rather than written out, so it cannot drift
+  /// away from the serviceable area. It replaced a hardcoded PUP Sta. Mesa
+  /// coordinate that was repeated in three files: with location off, the app
+  /// opened looking at the developers' campus, which reads as a positional claim
+  /// to anyone who does not know the code. The centre of the service area
+  /// claims nothing about anybody.
+  static const double ncrCenterLat = (ncrMinLat + ncrMaxLat) / 2;
+  static const double ncrCenterLng = (ncrMinLng + ncrMaxLng) / 2;
+
   /// Whether a point lies inside the serviceable Metro Manila area.
   static bool isWithinNcr(double lat, double lng) =>
       lat >= ncrMinLat &&

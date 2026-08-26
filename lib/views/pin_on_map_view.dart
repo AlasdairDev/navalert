@@ -8,6 +8,7 @@ import '../core/theme.dart';
 import '../models/models.dart';
 import '../services/geocoding_service.dart';
 import '../viewmodels/home_viewmodel.dart';
+import '../services/route_engine.dart';
 
 /// UC-4 (Search & Set Destination) — "pins the exact drop-off point on
 /// the map": lets the commuter drop a pin at the precise alighting spot
@@ -84,7 +85,8 @@ class _PinOnMapViewState extends State<PinOnMapView> {
   Widget build(BuildContext context) {
     final home = context.read<HomeViewModel>();
     final center = _picked ??
-        LatLng(home.currentLat ?? 14.5979, home.currentLng ?? 121.0108);
+        LatLng(home.currentLat ?? RouteEngine.ncrCenterLat,
+            home.currentLng ?? RouteEngine.ncrCenterLng);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Pin Drop-off Point')),

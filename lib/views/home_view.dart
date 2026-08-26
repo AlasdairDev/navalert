@@ -12,6 +12,7 @@ import '../services/sound_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
+import '../services/route_engine.dart';
 import 'onboarding_flow.dart';
 import 'search_view.dart';
 
@@ -201,7 +202,8 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<HomeViewModel>();
-    final center = LatLng(vm.currentLat ?? 14.5979, vm.currentLng ?? 121.0108);
+    final center = LatLng(vm.currentLat ?? RouteEngine.ncrCenterLat,
+        vm.currentLng ?? RouteEngine.ncrCenterLng);
     // `select`, NOT `watch`: TripViewModel notifies on every GPS tick during a
     // trip, and watching it here would rebuild this screen — map included —
     // several times a second. Only the on/off transition matters.
@@ -229,7 +231,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
               // these — they keep the map crisp and inside the service area.
               NavAlertMap.tiles(context),
               // DO NOT MODIFY LOGIC: the "you are here" dot renders ONLY for a
-              // real GPS fix. `center` falls back to PUP Sta. Mesa when there
+              // real GPS fix. `center` falls back to the service-area centre when there
               // is no fix, and drawing the blue dot there presented a hardcoded
               // location as the rider's own — visually identical to a working
               // fix, on the very screen where they choose where they are going.
@@ -333,7 +335,7 @@ class _HomeViewState extends State<HomeView> with TickerProviderStateMixin {
                   ),
                   // UC-4 Exception 2 — the map is showing a fallback position,
                   // not the rider's own. This MUST be visible here: Home is
-                  // where the map is, and silently centring on PUP Sta. Mesa
+                  // where the map is, and silently centring on a placeholder
                   // looks exactly like a working GPS fix.
                   if (vm.locationIsFallback && vm.locationError != null)
                     Padding(
