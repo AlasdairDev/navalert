@@ -15,13 +15,15 @@ class LegalText {
   static const _contactEmail = 'keithjustine57@gmail.com';
 
   static const terms = '''
+Effective Date: August 26, 2026
+
 1. Acceptance of Terms
 
 These Terms and Conditions ("Terms") govern your access to and use of the NavAlert mobile application ("NavAlert," "the App"), developed by $_groupName as part of a capstone project at the Polytechnic University of the Philippines. By downloading, installing, or using NavAlert, you agree to be bound by these Terms and by our Privacy Policy. If you do not agree, do not use the App.
 
 2. Description of Service
 
-NavAlert is a commuter-assistance application for public utility vehicle (PUV) riders in Metro Manila. It provides a built-in commute guide, a multi-stage destination alarm that adjusts to real-time GPS speed, an SOS button that shares your GPS location with pre-saved emergency contacts via SMS or push notification, and a fake call feature intended to help users appear occupied in uncomfortable situations.
+NavAlert is a commuter-assistance application for commuters riding public utility vehicles (PUVs) in Metro Manila. It provides a built-in commute guide, a multi-stage destination alarm that adjusts to real-time GPS speed, an SOS button that shares your GPS location with pre-saved emergency contacts by SMS, and a fake call feature intended to help users appear occupied in uncomfortable situations.
 
 3. Eligibility and Responsible Use
 
@@ -44,7 +46,6 @@ You agree not to:
 • Use the SOS feature to send false alarms or to harass, prank, or deceive your listed emergency contacts.
 • Attempt to reverse-engineer, decompile, or interfere with the App's normal operation or security features.
 • Use NavAlert for any unlawful purpose or in a way that infringes the rights of others.
-• Submit false or misleading crowdsourced route or stop information.
 
 6. Location and Device Permissions
 
@@ -56,7 +57,7 @@ The NavAlert application, including its design, source code, logos, and document
 
 8. Third-Party Services
 
-NavAlert relies on third-party services, including Google Maps API, Mapbox API, OpenStreetMap, Firebase (Firestore and Cloud Messaging), and mobile network SMS gateways. Your use of NavAlert is also subject to the applicable terms and privacy policies of these third-party providers, over which we have no control.
+NavAlert relies on third-party services: OpenStreetMap for map tiles, the OpenStreetMap Nominatim service for place search, the OSRM service for road-following route geometry, and your mobile network's SMS gateway for delivering SOS messages. NavAlert can also hand off to the Google Maps app installed on your device for return-route assistance, which is then governed by Google's own terms. Your use of NavAlert is also subject to the applicable terms and privacy policies of these third-party providers, over which we have no control.
 
 9. Disclaimer of Warranties
 
@@ -88,6 +89,8 @@ Polytechnic University of the Philippines
 Email: $_contactEmail''';
 
   static const privacy = '''
+Effective Date: August 26, 2026
+
 1. Introduction
 
 NavAlert ("NavAlert," "the App," "we," "us," or "our") is a mobile application developed by $_groupName, a student capstone project of the Polytechnic University of the Philippines, designed to help commuters using public utility vehicles (PUVs) in Metro Manila avoid missing their stops and stay safe while traveling. This Privacy Policy explains what information NavAlert collects, how it is used and stored, who it may be shared with, and the choices and rights available to users.
@@ -100,39 +103,40 @@ By downloading, installing, or using NavAlert, you agree to the collection and u
 
 • Emergency contact details - the names and phone numbers of up to three contacts you designate to receive SOS alerts.
 • Fake call configuration - the caller name and schedule preferences you set up for the simulated call feature.
-• Trip preferences - your chosen destination stop, preferred route, and any feedback or crowdsourced route information you submit.
+• Trip preferences - your chosen destination stop and preferred route.
+• Voice recordings - any audio you record inside the App to use as a custom fake-call voice. Recordings are saved on your device and are never uploaded.
 
 2.2 Information Collected Automatically
 
 • Real-time GPS location - used to detect your speed and proximity to your destination so the multi-stage alarm can trigger at the right time, and to determine your coordinates when you activate the SOS button.
 • Device and sensor data - general device information (such as OS version and device model) and motion/speed data derived from GPS, used to power the adaptive alarm timing.
 • Alert and usage logs - records of triggered alarms, SOS activations, and fake call activations, stored primarily on your device to support offline functionality and troubleshooting.
-• Network status - whether your device has an active internet or SMS connection, used to decide whether alerts are sent online (Firebase Cloud Messaging) or via native SMS.
+• Network status - whether your device has an active internet or SMS connection, used to decide whether an SOS can be delivered and to tell you plainly when it cannot.
 
 2.3 Information We Do Not Intentionally Collect
 
-NavAlert does not access your camera, microphone, photos, contacts list (beyond the emergency contacts you manually enter), or browsing history, and does not request permissions unrelated to its core location, notification, and SMS-based safety features.
+NavAlert does not access your camera, photos, contacts list (beyond the emergency contacts you manually enter), or browsing history, and does not request permissions unrelated to its core location, notification, recording, and SMS-based safety features. Microphone access is used only while you are actively recording a custom fake-call voice, never in the background and never during a trip.
 
 3. How We Use Your Information
 
 • To trigger destination alarms at the correct point in your trip based on real-time GPS speed and location.
-• To send your GPS coordinates via SMS or push notification to your designated emergency contacts when you activate the SOS button.
+• To send your GPS coordinates by SMS to your designated emergency contacts when you activate the SOS button.
 • To operate the fake call feature according to the settings you configure.
-• To improve route accuracy by combining crowdsourced data with public transportation and map data (Google Maps API, Mapbox API, OpenStreetMap).
+• To plan routes, by combining the public transport timetable data bundled with the App against map data from OpenStreetMap and the Nominatim and OSRM services.
 • To diagnose errors, maintain offline alarm reliability, and improve the App based on aggregated, de-identified usage patterns.
 
 4. How We Store and Protect Your Information
 
-NavAlert does not require you to create an account. Emergency contacts, fake call settings, trip preferences, and alert logs are stored locally on your device (for example, using Room/SQLite) so that core safety features continue to work without an internet connection. Where applicable, backup copies of these settings may be stored on cloud infrastructure such as Firebase Firestore and/or a PostgreSQL/MongoDB database maintained by the development team.
+NavAlert does not require you to create an account, and the development team operates no servers. Emergency contacts, fake call settings, trip preferences, voice recordings, and alert logs are stored only on your device, in an encrypted SQLite database, so that core safety features keep working without an internet connection. Backups are files you export yourself and save wherever you choose on your own device; no copy is ever sent to us.
 
-We apply reasonable technical safeguards to protect your information, including encryption of location data in transit and API key management to prevent unauthorized services from sending false alerts on your behalf. No method of electronic storage or transmission is completely secure, and we cannot guarantee absolute security.
+We apply reasonable technical safeguards, including encryption of the on-device database and the use of encrypted (HTTPS) connections to the map, search, and routing services the App contacts. No method of electronic storage or transmission is completely secure, and we cannot guarantee absolute security.
 
 5. Sharing and Disclosure of Information
 
 We do not sell your personal information. We share information only in the following circumstances:
 
 • With your designated emergency contacts, solely for the purpose of delivering SOS alerts containing your GPS location.
-• With service providers that help operate the App's core functions, such as mapping providers (Google Maps API, Mapbox, OpenStreetMap), push-notification services (Firebase Cloud Messaging), and mobile network carriers used to deliver SMS alerts.
+• With the mapping, place-search, and routing services the App contacts to draw the map and plan a trip (OpenStreetMap, Nominatim, and OSRM), which necessarily receive the locations being looked up, and with the mobile network carrier that carries your SOS message.
 • If required by law, legal process, or a lawful government request, or to protect the rights, safety, or property of users or the public.
 • With the capstone research team and academic advisers, in aggregated or de-identified form, for evaluation of the project.
 
@@ -140,11 +144,11 @@ We do not sell your personal information. We share information only in the follo
 
 As a user based in the Philippines, you have rights under the Data Privacy Act of 2012 (Republic Act No. 10173) and its Implementing Rules and Regulations, including the right to be informed, the right to access your personal data, the right to correct inaccurate data, the right to object to processing, the right to data portability, and the right to file a complaint with the National Privacy Commission (NPC).
 
-You may exercise these rights by contacting us using the details in Section 11. You may also delete your emergency contacts and fake call settings, or clear all locally stored data, at any time from within the App.
+You may exercise these rights by contacting us using the details in Section 11. You may delete individual emergency contacts, voice recordings, favorites, and trip records at any time from within the App. To remove everything at once, use your device's Settings > Apps > NavAlert > Storage > Clear storage, or uninstall the App.
 
 7. Data Retention
 
-Emergency contact details, fake call settings, and trip preferences are retained on your device for as long as the App remains installed and you have not cleared them. Locally stored alert logs remain on your device until you clear them or uninstall the App. If you clear your data or uninstall the App, any corresponding backup copies stored on our servers will be deleted or de-identified within a reasonable period, except where retention is required for legal, security, or legitimate research purposes related to this capstone project.
+Emergency contact details, fake call settings, and trip preferences are retained on your device for as long as the App remains installed and you have not cleared them. Locally stored alert logs remain on your device until you clear them or uninstall the App. Because NavAlert operates no servers, clearing your data or uninstalling the App removes it completely - there are no server-side copies for us to delete. Any backup file you exported yourself stays where you saved it until you delete it.
 
 8. Location Permissions
 
