@@ -12,6 +12,19 @@ import '../services/route_engine.dart';
 import '../services/routing_isolate.dart';
 import '../services/route_path_service.dart';
 
+/// Thrown when a trip cannot be planned because the commuter's own position is
+/// not actually known — only the hardcoded map-centre fallback is available.
+///
+/// Carries a message written for the commuter, not a stack trace: the UI shows
+/// [message] verbatim, so it must name what to do (turn GPS on, drop a pin)
+/// rather than describe what failed.
+class UnknownOriginException implements Exception {
+  const UnknownOriginException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 /// Home / destination-search / commute-guide ViewModel
 /// (Use Case UC-4 — Search & Set Destination and View Commute Guide).
 class HomeViewModel extends ChangeNotifier {
@@ -357,7 +370,32 @@ class HomeViewModel extends ChangeNotifier {
   Future<void> setDestination(
       PlaceResult place, TransportPreferences prefs) async {
     destination = place;
-    if (currentLat == null) await refreshCurrentLocation();
+
+    // DO NOT MODIFY LOGIC: a FALLBACK position must never become the trip
+    // origin.
+    //
+    // When no fix can be obtained at all, refreshCurrentLocation parks the map
+    // on a hardcoded Metro Manila centre so the screen is not blank, and flags
+    // it with locationIsFallback. That flag was honoured when biasing search
+    // results and when drawing the blue dot, but NOT here — so a commuter with
+    // GPS off picked a destination and got a complete, confident-looking plan
+    // measured from a place they had never been: wrong distance, wrong
+    // boarding points, wrong fare, and a Trip row written to history saying
+    // they started there.
+    //
+    // Retry once, because the usual cause is a cold GPS that simply had not
+    // fixed yet when the screen opened. If it still cannot place them, refuse
+    // to plan and say why. A commuter who is told to turn GPS on can act; one
+    // handed a plausible route from the wrong origin cannot tell anything is
+    // wrong until they are on the vehicle.
+    if (currentLat == null || locationIsFallback) {
+      await refreshCurrentLocation();
+    }
+    if (currentLat == null || locationIsFallback) {
+      throw UnknownOriginException(locationError ??
+          'Could not get your location. Turn on GPS, or drop a pin to set '
+              'your starting point.');
+    }
 
     final distanceKm = _routeEngine.haversineKm(
         currentLat!, currentLng!, place.lat, place.lng);

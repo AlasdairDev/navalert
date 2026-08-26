@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:navalert/models/models.dart';
 import 'package:navalert/viewmodels/home_viewmodel.dart';
 
 /// R2 / UC-4 — the "you are here" dot must FOLLOW the rider.
@@ -155,6 +156,59 @@ void main() {
       // "used after being disposed"; this must stay silent.
       controller.add(fix(14.70, 121.09));
       await pumpEventQueue();
+    });
+  });
+
+  group('a fallback position must never become the trip origin', () {
+    // The hardcoded Metro Manila centre exists so the map is not blank when no
+    // fix can be obtained. It is NOT the commuter's position, and planning from
+    // it produces a complete, confident-looking route measured from a place
+    // they have never been - wrong distance, wrong boarding points, wrong fare,
+    // and a history row claiming they started there.
+    test('setDestination refuses to plan while the position is a fallback',
+        () async {
+      final vm = HomeViewModel();
+      vm.currentLat = 14.5979; // the hardcoded centre
+      vm.currentLng = 121.0108;
+      vm.locationIsFallback = true;
+      vm.locationError = 'Location is turned off.';
+
+      await expectLater(
+        vm.setDestination(
+          PlaceResult(
+              name: 'SM Megamall',
+              displayName: 'EDSA, Mandaluyong',
+              lat: 14.5851,
+              lng: 121.0568),
+          TransportPreferences(),
+        ),
+        throwsA(isA<UnknownOriginException>()),
+        reason: 'a hardcoded centre must never be used as the origin',
+      );
+
+      expect(vm.plannedTrip, isNull,
+          reason: 'no trip may be written from an unknown origin');
+    });
+
+    test('the thrown message tells the commuter what to do', () async {
+      final vm = HomeViewModel();
+      vm.currentLat = 14.5979;
+      vm.currentLng = 121.0108;
+      vm.locationIsFallback = true;
+      vm.locationError = 'Location is turned off. Enable GPS to set your '
+          'starting point.';
+
+      try {
+        await vm.setDestination(
+          PlaceResult(
+              name: 'X', displayName: 'Y', lat: 14.5, lng: 121.0),
+          TransportPreferences(),
+        );
+        fail('expected UnknownOriginException');
+      } on UnknownOriginException catch (e) {
+        // The UI prints this verbatim, so it has to name an action.
+        expect(e.message.toLowerCase(), anyOf(contains('gps'), contains('pin')));
+      }
     });
   });
 }

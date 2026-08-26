@@ -114,10 +114,17 @@ class _SearchViewState extends State<SearchView> {
     // tapped a destination and the app just sat on the search screen with no
     // error and no route — indistinguishable from a dead results list.
     var planned = true;
+    // Why the plan failed decides what the commuter can DO about it. A routing
+    // or storage fault is worth retrying; not knowing where they are is not —
+    // retrying forever will not turn GPS on. Carry the reason out so the
+    // snackbar can say the useful thing.
+    var failure = 'Could not plan a route to that destination - '
+        'please try again.';
     try {
       await home.setDestination(place, app.transportPrefs);
-    } catch (_) {
+    } catch (e) {
       planned = false;
+      if (e is UnknownOriginException) failure = e.message;
     } finally {
       if (mounted) Navigator.of(context).pop(); // close loader
       // Released unconditionally so a transient routing/storage failure cannot
@@ -127,9 +134,7 @@ class _SearchViewState extends State<SearchView> {
     }
     if (!mounted) return;
     if (!planned) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Could not plan a route to that destination - '
-              'please try again.')));
+      messenger.showSnackBar(SnackBar(content: Text(failure)));
       return;
     }
     Navigator.of(context)

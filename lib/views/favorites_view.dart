@@ -53,23 +53,26 @@ class _FavoritesViewState extends State<FavoritesView> {
     // to propagate straight out of this method — the loader closed and nothing
     // else happened, so tapping a favourite silently did nothing at all.
     var planned = true;
+    // Same reasoning as the search screen: not knowing where the commuter is
+    // is not a retryable fault, so say what it actually is.
+    var failure = 'Could not plan a route from that favorite - '
+        'please try again.';
     try {
       await home.refreshCurrentLocation();
       await home.setDestination(
           PlaceResult(
               name: f.name, displayName: f.address, lat: f.lat, lng: f.lng),
           app.transportPrefs);
-    } catch (_) {
+    } catch (e) {
       planned = false;
+      if (e is UnknownOriginException) failure = e.message;
     } finally {
       if (mounted) navigator.pop(); // close loader
       _starting = false;
     }
     if (!mounted) return;
     if (!planned) {
-      messenger.showSnackBar(const SnackBar(
-          content: Text('Could not plan a route from that favorite - '
-              'please try again.')));
+      messenger.showSnackBar(SnackBar(content: Text(failure)));
       return;
     }
     navigator.push(MaterialPageRoute(builder: (_) => const RouteView()));
