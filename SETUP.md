@@ -100,6 +100,11 @@ not need Claude Code to run them.** Users of it get the same thing as
 `/setup-navalert`, which also walks the installs, and `/run-navalert` to launch
 the app.
 
+Both skills are committed under `.claude/skills/`, so they are available the
+moment you open the cloned repo in Claude Code. **There is nothing to install
+and nothing to copy into `~/.claude/`** — if `/setup-navalert` does not appear,
+you have opened a folder other than the repository root.
+
 On **Aurora DX** or another Fedora Atomic image, `install-aurora.sh` beside them
 installs everything into `$HOME`. Do not `rpm-ostree install` the toolchain:
 `/usr` is read-only there and layering slows every later image update, whereas
