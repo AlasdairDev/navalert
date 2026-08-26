@@ -66,7 +66,15 @@ PKG=ph.edu.pup.navalert
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 adb shell pm grant $PKG android.permission.ACCESS_FINE_LOCATION
 adb shell pm grant $PKG android.permission.ACCESS_COARSE_LOCATION
-adb emu geo fix 121.0244 14.5547     # Ayala Ave, Metro Manila — gives the map/blue-dot UI a location
+# LONGITUDE FIRST. The emulator has no GPS until you set one, and the app now
+# refuses to plan a trip from an unknown position rather than substituting a
+# placeholder — so without this you get "turn on GPS", not a map.
+#
+# This is also the ONLY place PUP belongs. The emulator reports it as a real
+# GPS fix, so the app treats it as the commuter's actual location and plans
+# from it — no build variant, no debug flag, and the APK you demo is byte-for-
+# byte the one you release.
+adb emu geo fix 121.0108 14.5979     # PUP Sta. Mesa — the usual demo origin
 
 # On-screen 3-button nav (Back/Home/Recents) instead of the gesture pill,
 # hide the buggy side toolbar, and make the device a floating/draggable window.
