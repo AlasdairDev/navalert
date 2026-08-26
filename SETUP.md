@@ -1,7 +1,7 @@
 # NavAlert — Setup & Defense Preparation
 
 Installation and verification guide for developers and Capstone panelists
-testing **v1.0.0** on physical hardware.
+testing **v1.1.0** on physical hardware.
 
 > **Note on filename.** This repository is developed on a case-insensitive
 > filesystem, where `setup.md` and `SETUP.md` are the same file. Git tracks it
@@ -84,7 +84,7 @@ Everything else is optional and the app runs if you deny it.
 
 ### Toolchain
 
-| Tool | Version used for v1.0.0 |
+| Tool | Version used for v1.1.0 |
 |---|---|
 | Flutter SDK | **3.41.9** (stable) |
 | Dart SDK | 3.11.5 — ships with Flutter |
@@ -111,7 +111,7 @@ flutter build apk --release
 packages. Nothing is downloaded by hand.
 
 > **Do not run `flutter pub upgrade`.** `pubspec.lock` pins the exact versions
-> v1.0.0 was built and tested against.
+> v1.1.0 was built and tested against.
 
 The build produces two byte-identical copies:
 

@@ -8,7 +8,7 @@
 ![Kotlin](https://img.shields.io/badge/native-Kotlin-7F52FF)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM-7C6BC4)
 ![Tests](https://img.shields.io/badge/tests-284%20passing-success)
-![Version](https://img.shields.io/badge/release-v1.0.0-B39DDB)
+![Version](https://img.shields.io/badge/release-v1.1.0-B39DDB)
 
 > Capstone Project — BSIT, Polytechnic University of the Philippines.
 >
@@ -255,7 +255,7 @@ Planning a trip needs a connection. Riding it does not.
 | Emergency SMS | Native **`SmsManager`** with sent-intent delivery tracking |
 | Min / target SDK | Android 8.0 (API 26) / Android 16 (API 36) |
 
-Package id: `ph.edu.pup.navalert` · Version **1.0.0+1**
+Package id: `ph.edu.pup.navalert` · Version **1.1.0+2**
 
 ### Native Kotlin integrations
 
