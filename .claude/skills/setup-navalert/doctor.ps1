@@ -157,7 +157,7 @@ if ($flutter) {
 Write-Host ''
 if ($script:Missing.Count -eq 0) {
     Write-Host 'Everything the project needs is present.' -ForegroundColor Green
-    Write-Host 'Next: flutter pub get && flutter test    (expect 284 passing)'
+    Write-Host 'Next: flutter pub get && flutter test    (expect 286 passing)'
     exit 0
 }
 

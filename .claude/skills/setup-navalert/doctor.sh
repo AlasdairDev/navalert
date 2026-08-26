@@ -164,7 +164,7 @@ fi
 echo
 if [ ${#MISSING[@]} -eq 0 ]; then
   echo "${G}Everything the project needs is present.${N}"
-  echo 'Next: flutter pub get && flutter test    (expect 284 passing)'
+  echo 'Next: flutter pub get && flutter test    (expect 286 passing)'
   exit 0
 fi
 

@@ -117,14 +117,35 @@ Two things the script will stop and ask you about rather than decide for you:
 
 ```bash
 flutter pub get
-flutter test          # expect 284 passing
+flutter test          # expect 286 passing
 ```
 
 If the tests pass, the machine is genuinely ready — that exercises the analyzer,
 the full dependency graph and the whole `TripViewModel` state machine.
 
-To launch the app, use **run-navalert**, which handles the per-machine emulator
-quirks (the Aurora laptop needs `-gpu host` or qemu segfaults on boot).
+### A fresh emulator has no GPS — set one
+
+```bash
+adb emu geo fix 121.0108 14.5979     # PUP Sta. Mesa — LONGITUDE FIRST
+```
+
+Without it the app says *"turn on GPS"* and will not plan a trip, which looks
+like a broken install on a machine you have just set up. It is correct
+behaviour: the app refuses to plan from a position it cannot verify rather than
+substituting a placeholder, so a commute is never measured from the wrong place.
+
+Longitude comes first and it is the usual mistake — reversed, the coordinate
+lands in the Indian Ocean and the app reports the trip as outside its service
+area.
+
+This is also the **only** place a fixed demo location belongs. The emulator
+reports it as a genuine GPS fix, so the app treats it as the commuter's real
+location with no build variant and no debug flag — the APK you demonstrate is
+byte-for-byte the one you release.
+
+To launch the app, use **run-navalert**, which sets this automatically and
+handles the per-machine emulator quirks (the Aurora laptop needs `-gpu host` or
+qemu segfaults on boot).
 
 ## Common failures
 

@@ -166,7 +166,7 @@ Next steps:
   source ~/.bashrc                 # or open a new terminal
   cd <the navalert repo>
   flutter pub get
-  flutter test                     # expect 284 passing
+  flutter test                     # expect 286 passing
 
 Then use /run-navalert to launch the app. Note that on this machine the
 emulator must start with `-gpu host` or qemu segfaults on boot - run-navalert

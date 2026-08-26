@@ -124,7 +124,7 @@ The build produces two byte-identical copies:
 
 ```bash
 flutter analyze     # expect: No issues found
-flutter test        # expect: 284 passing
+flutter test        # expect: 286 passing
 ```
 
 Respect every `// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block —

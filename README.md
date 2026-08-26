@@ -7,7 +7,7 @@
 ![Dart](https://img.shields.io/badge/Dart-3.11-0175C2)
 ![Kotlin](https://img.shields.io/badge/native-Kotlin-7F52FF)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM-7C6BC4)
-![Tests](https://img.shields.io/badge/tests-284%20passing-success)
+![Tests](https://img.shields.io/badge/tests-286%20passing-success)
 ![Version](https://img.shields.io/badge/release-v1.1.0-B39DDB)
 
 > Capstone Project — BSIT, Polytechnic University of the Philippines.
@@ -283,10 +283,10 @@ flutter run
 
 ```bash
 flutter analyze   # expect: No issues found
-flutter test      # expect: 284/284 passing
+flutter test      # expect: 286/286 passing
 ```
 
-**20 suites, 284 tests**, covering the adaptive alarm engine, the fare matrix
+**20 suites, 286 tests**, covering the adaptive alarm engine, the fare matrix
 and NCR bounds, the Dijkstra router against the real production GTFS feed, the
 full `TripViewModel` state machine driven from a mock GPS stream on a virtual
 clock, the commute-guide overlay geometry measured against a mounted widget
