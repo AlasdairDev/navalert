@@ -82,6 +82,35 @@ Everything else is optional and the app runs if you deny it.
 
 ## 3. Building from source
 
+### Check the machine first
+
+The repo ships an environment checker. It is read-only — it installs nothing and
+changes nothing — and it reports every gap with the command that closes it:
+
+```bash
+# macOS / Linux
+.claude/skills/setup-navalert/doctor.sh
+
+# Windows
+powershell -ExecutionPolicy Bypass -File .claude\skills\setup-navalert\doctor.ps1
+```
+
+Exit code 0 means the machine is ready. **These are ordinary scripts — you do
+not need Claude Code to run them.** Users of it get the same thing as
+`/setup-navalert`, which also walks the installs, and `/run-navalert` to launch
+the app.
+
+On **Aurora DX** or another Fedora Atomic image, `install-aurora.sh` beside them
+installs everything into `$HOME`. Do not `rpm-ostree install` the toolchain:
+`/usr` is read-only there and layering slows every later image update, whereas
+nothing NavAlert needs has to live outside your home directory.
+
+Two results the doctor deliberately does **not** flag, because neither is a
+fault — do not "fix" them:
+
+- `java -version` reporting an old JRE. Gradle uses `JAVA_HOME`, not PATH.
+- `ANDROID_HOME` being unset. Flutter finds the SDK at the default path anyway.
+
 ### Toolchain
 
 | Tool | Version used for v1.1.0 |
@@ -92,6 +121,10 @@ Everything else is optional and the app runs if you deny it.
 | JDK | 17 recommended |
 
 Gradle 8.14 is fetched by the wrapper — do not install it separately.
+
+**Match the Flutter version.** It is pinned because it decides how
+`pubspec.lock` resolves: a machine on a different Flutter rewrites the lockfile
+on every `pub get`, and it then collides on every merge.
 
 ```bash
 flutter --version     # expect 3.41.9

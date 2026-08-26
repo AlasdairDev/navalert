@@ -277,6 +277,17 @@ flutter pub get
 flutter run
 ```
 
+New machine? Check it first — read-only, and no Claude Code required:
+
+```bash
+.claude/skills/setup-navalert/doctor.sh                       # macOS / Linux
+powershell -File .claude\skills\setup-navalert\doctor.ps1     # Windows
+```
+
+It reports every missing or mismatched tool with the command that fixes it, and
+covers Aurora DX / Fedora Atomic, where the toolchain must be installed into
+`$HOME` rather than layered onto the read-only system image.
+
 ---
 
 ## Testing
