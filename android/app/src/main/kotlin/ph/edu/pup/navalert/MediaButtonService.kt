@@ -406,7 +406,7 @@ class MediaButtonService : Service() {
         }
         val notif: Notification = Notification.Builder(this, CHANNEL)
             .setContentTitle("NavAlert safety shortcuts active")
-            .setContentText("Volume-Up ×3 for SOS · Volume-Down ×3 for a fake call")
+            .setContentText("Volume-Up ×3 for SOS · both volume buttons for a fake call")
             .setSmallIcon(android.R.drawable.ic_menu_call)
             .setOngoing(true)
             // Set on the builder as well as the channel: the channel governs

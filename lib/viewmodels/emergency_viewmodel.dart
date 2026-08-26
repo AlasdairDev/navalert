@@ -202,7 +202,7 @@ class EmergencyViewModel extends ChangeNotifier {
   ///
   /// DO NOT MODIFY LOGIC: the `fakeCallActive` gate is a panic-tap guard. All
   /// three entry points (the Emergency recording list, the trip screen's Fake
-  /// Call button, and the triple-Volume-Down shortcut) used to push FakeCallView
+  /// Call button, and the volume-squeeze shortcut) used to push FakeCallView
   /// unconditionally, so five taps stacked five call screens over five
   /// overlapping ringtones — each needing its own dismissal, at precisely the
   /// moment the rider is trying to look calm and get out.

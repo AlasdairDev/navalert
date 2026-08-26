@@ -23,7 +23,7 @@ import 'settings_view.dart';
 /// Main navigation shell (Figure 19) — bottom bar with
 /// History · Favorites · Home · Emergency · Settings.
 /// Also wires the volume-button emergency shortcuts:
-/// triple Volume-Up → SOS, triple Volume-Down → Fake Call.
+/// triple Volume-Up → SOS, Volume-Up + Volume-Down squeeze → Fake Call.
 ///
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] IndexedStack of the 5 tabs · BottomNavigationBar onTap (index +
@@ -131,7 +131,7 @@ class _ShellViewState extends State<ShellView> {
 
   Future<void> _launchFakeCall() async {
     final em = context.read<EmergencyViewModel>();
-    // Repeated triple-Volume-Down presses must not stack call screens — push
+    // Repeated squeeze presses must not stack call screens — push
     // only when this trigger actually started the call.
     final started = await em.startFakeCall(
         callerName: context.read<AppViewModel>().fakeCallConfig.callerName);
