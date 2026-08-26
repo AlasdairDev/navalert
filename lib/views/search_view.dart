@@ -57,9 +57,13 @@ class _SearchViewState extends State<SearchView> {
   /// above the field, so a commuter at PUP could search for every landmark
   /// EXCEPT the one under their feet.
   ///
-  /// Offered with an empty query as a shortcut, and matched locally against the
-  /// reverse-geocoded address plus the words people actually type when they
-  /// mean themselves. Local matching also means it appears instantly, before
+  /// A SEARCH RESULT and nothing else. With an empty box this returns null so
+  /// the screen shows its prompt: a commuter opening Search has not asked for
+  /// anywhere yet, and the one place they cannot be travelling to is the one
+  /// they are standing on.
+  ///
+  /// Matched locally against the reverse-geocoded address plus the words people
+  /// actually type when they mean themselves, so it appears instantly, before
   /// Nominatim has answered.
   PlaceResult? _currentLocationMatch(HomeViewModel vm) {
     final lat = vm.currentLat;
@@ -70,13 +74,12 @@ class _SearchViewState extends State<SearchView> {
 
     final label = vm.currentAddressShort ?? 'Current Location';
     final q = _controller.text.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      const aliases = ['current location', 'my location', 'here', 'me'];
-      final haystack = '$label ${vm.currentAddress ?? ''}'.toLowerCase();
-      final matches = haystack.contains(q) ||
-          aliases.any((a) => a.startsWith(q) || a.contains(q));
-      if (!matches) return null;
-    }
+    if (q.isEmpty) return null;
+    const aliases = ['current location', 'my location', 'here', 'me'];
+    final haystack = '$label ${vm.currentAddress ?? ''}'.toLowerCase();
+    final matches = haystack.contains(q) ||
+        aliases.any((a) => a.startsWith(q) || a.contains(q));
+    if (!matches) return null;
     return PlaceResult(
       name: label,
       displayName: vm.currentAddress ?? 'Where you are right now',
