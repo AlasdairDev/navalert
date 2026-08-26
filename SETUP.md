@@ -107,7 +107,7 @@ flutter pub get
 flutter build apk --release
 ```
 
-`flutter pub get` reads `pubspec.yaml` + `pubspec.lock` and fetches all 141
+`flutter pub get` reads `pubspec.yaml` + `pubspec.lock` and fetches all 152
 packages. Nothing is downloaded by hand.
 
 > **Do not run `flutter pub upgrade`.** `pubspec.lock` pins the exact versions
@@ -124,7 +124,7 @@ The build produces two byte-identical copies:
 
 ```bash
 flutter analyze     # expect: No issues found
-flutter test        # expect: 280 passing
+flutter test        # expect: 284 passing
 ```
 
 Respect every `// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block —
@@ -171,16 +171,37 @@ move.
 - Missing from the moment the screen opens → cold-start GPS seeding.
 - Disappears only after you touch the map → the 12 s follow re-arm.
 
-### 4.3 Fake call volume
+### 4.3 Volume shortcuts
 
-1. Trigger a fake call (Emergency screen, or triple Volume-Down with the screen
-   off).
+The fake call fires on a **squeeze** — Volume-Up and Volume-Down within 500 ms —
+not a triple Volume-Down. The shortcuts only arm while the screen is off **or**
+NavAlert is backgrounded, so press Home first.
+
+1. With the app backgrounded, **press both volume buttons together**.
+
+**Expect:** the fake call screen appears.
+
+2. Now press **Volume Down** three times quickly, as if turning music down.
+
+**Expect:** nothing happens — only the volume changes. This is the regression
+being guarded: three taps in one direction used to launch a fake call, and on a
+real commute the phone is always pocketed or backgrounded, so ordinary volume
+adjustment kept triggering it.
+
+3. Press **Volume Up** three times quickly.
+
+**Expect:** SOS fires. This one is still a triple-press, so **use a test contact**
+— it sends a real SMS.
+
+### 4.4 Fake call volume
+
+1. Trigger a fake call (Emergency screen, or the squeeze above).
 2. While it rings, press **Volume Down** several times.
 
 **Expect:** the volume lowers and **stays** lowered. No slider flashing
 repeatedly, no level running up and down on its own.
 
-### 4.4 SMS delivery and offline fallback
+### 4.5 SMS delivery and offline fallback
 
 Enable **Airplane Mode**, then hold SOS for 3 seconds.
 
@@ -197,7 +218,7 @@ this feature exists to eliminate.
 Also worth confirming: with no prepaid load, the failure names the load rather
 than blaming the signal.
 
-### 4.5 Restricted settings (fresh sideload only)
+### 4.6 Restricted settings (fresh sideload only)
 
 Only reproducible if the install was flagged as sideloaded — see
 [§2](#2-installation-over-usb).
