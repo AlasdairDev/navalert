@@ -19,4 +19,4 @@ if [ -n "$MARK" ]; then
   journalctl --user _COMM=kwin_wayland --no-pager --since '5 seconds ago' 2>/dev/null \
     | grep -oE "$MARK.*" | tail -1
 fi
-gdbus call "${DEST[@]}".unloadScript
+gdbus call "${DEST[@]}".unloadScript "$NAME" >/dev/null 2>&1

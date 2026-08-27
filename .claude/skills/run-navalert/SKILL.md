@@ -48,7 +48,22 @@ DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) \
 - **Why `-gpu host` and windowed:** with any software renderer (`swiftshader_indirect`, `guest`, `angle_indirect`, or headless `-no-window`) the emulator crashes ~20s into boot inside SwiftShader's `libGLESv2.so` JIT. `-gpu host` uses the real Intel GPU and never loads SwiftShader. It needs a visible window, so **do not** add `-no-window`.
 - **Emulator window layout is managed by two persistent KWin rules** (`install-toolbar-hide-rule.sh`, installed at boot; KDE-only, no-ops on Windows):
   - The **side toolbar** (a `NET::Utility` window) renders a buggy white/black strip on this KWin+Wayland+scaling setup, so it's forced **off-screen**. You navigate with the phone's own **on-screen 3-button nav** instead (`set-3button-nav.sh` → Back/Home/Recents). `hide-emulator-toolbar.sh` re-hides it after launch (launching can raise it; and minimize does NOT stick on this window — off-screen position does).
-  - The **device window** kept getting tiled/snapped to a **left tile by Kröhnkite** (notably when the screenshot tool opened a window). Kröhnkite's `ignoreClass`/`ignoreTitle` do NOT match the emulator on this Wayland setup (it reads the window class too early), and a Force **position** rule can't beat Kröhnkite (script moves bypass rules). What works: Kröhnkite's per-window **Toggle-Float** action — `float-emulator.sh` focuses the device window and fires `KrohnkiteToggleFloat` (via `qdbus-qt6 org.kde.kglobalaccel /component/kwin invokeShortcut KrohnkiteToggleFloat`), making it a **free-floating, draggable** window Kröhnkite ignores, then places it on the right. A guard skips the toggle if it's already floating (so re-running never un-floats it). Run it AFTER launch (fresh launch starts tiled). **Update (2026-08-19):** `ignoreClass` in `~/.config/kwinrc` `[Script-krohnkite]` now *does* list `Emulator,qemu-system-x86_64` (plus `ignoreTitle=Emulator`), and with that in place the window is no longer re-tiled — programmatic geometry held exactly across dozens of trials. The float toggle is kept as belt-and-braces. Note the guard's heuristic is weak (it treats any `x >= 100` as "already floating"), so it would misread a right-hand tile as floating.
+  - The **device window** kept getting tiled/snapped to a **left tile by Kröhnkite** (notably when the screenshot tool opened a window). Kröhnkite's `ignoreClass`/`ignoreTitle` do NOT match the emulator on this Wayland setup (it reads the window class too early), and a Force **position** rule can't beat Kröhnkite (script moves bypass rules). What works: Kröhnkite's per-window **Toggle-Float** action — `float-emulator.sh` focuses the device window and fires `KrohnkiteToggleFloat` (via `qdbus-qt6 org.kde.kglobalaccel /component/kwin invokeShortcut KrohnkiteToggleFloat`), making it a **free-floating, draggable** window Kröhnkite ignores, then places it on the right. A guard skips the toggle if it's already floating (so re-running never un-floats it). Run it AFTER launch (fresh launch starts tiled). **Correction (2026-08-27):** the 2026-08-19 note claimed `ignoreClass` was already
+set — it was **not** present in `~/.config/kwinrc` at all, so Kröhnkite kept
+re-tiling the emulator to the left zone (`screenGapLeft=8`, hence "tiled at x=8").
+Set it explicitly; it does not appear on its own:
+
+```bash
+kwriteconfig6 --file kwinrc --group Script-krohnkite \
+  --key ignoreClass "Emulator,qemu-system-x86_64"
+kwriteconfig6 --file kwinrc --group Script-krohnkite --key ignoreTitle "Emulator"
+gdbus call --session --dest org.kde.KWin --object-path /KWin \
+  --method org.kde.KWin.reconfigure
+```
+
+Verify with `grep -A4 '^\[Script-krohnkite\]' ~/.config/kwinrc` — if `ignoreClass`
+is missing, the window *will* be re-tiled no matter what the rest of this says.
+The float toggle is kept as belt-and-braces. Note the guard's heuristic is weak (it treats any `x >= 100` as "already floating"), so it would misread a right-hand tile as floating.
   - The toolbar rule matches on window **type** (Utility=256) + class `Emulator`, NOT title (both windows briefly share the title `Emulator` at boot).
   - **Resizing the device window used to "shift sizes"/jitter — that is a fractional-scaling bug, NOT Kröhnkite.** The emulator's bundled Qt ships only the `xcb` platform plugin (`~/Android/Sdk/emulator/lib64/qt/plugins/platforms/` has no Wayland plugin), so it is **always an XWayland client**. This display runs **scale 1.15 = 23/20**, and XWayland rounds logical->device pixels: only logical sizes that are **multiples of 20** convert exactly. In between the rounding is *non-monotonic* — measured logical width `503->568`, `504->570` (skips 569), `509->575`, `510->577` — so a smooth 1px drag steps the client buffer unevenly by 1-2px and the device framebuffer re-letterboxes on every step. Kröhnkite is cleared: `ignoreClass` already lists `Emulator,qemu-system-x86_64`, and programmatic geometry is stable across dozens of trials.
     - **`resize-emulator.sh [fill|large|medium|small|<height>]`** sets a size that is an exact multiple of the scale denominator *and* matches the device aspect, so there is no rounding and no letterbox. `fill` gives 400x900 here. This is the reliable way to resize — prefer it over dragging.
@@ -175,6 +190,38 @@ adb emu geo fix 121.0108 14.5979     # PUP Sta. Mesa
   `content-desc` lookup is identical.
 
 ---
+
+## Emulator window flickers / black bar / torn diagonal edges (Linux, KDE)
+
+**Symptom:** the device paints in a narrow strip and the rest of the window is
+black with diagonal garbage that flickers.
+
+**Cause:** KWin (or Kröhnkite) *tiled* the window. A tile is ~955px wide but the
+device is 1080x2400 (aspect 0.45), so the emulator letterboxes inside the tile
+and the leftover region is never painted — that undrawn buffer is the black area
+and the tearing. It is not a GPU fault and `-gpu host` does not prevent it.
+
+**Fix — float it, then set an exact size:**
+```bash
+.claude/skills/run-navalert/float-emulator.sh
+.claude/skills/run-navalert/resize-emulator.sh fill   # prints the applied geometry
+```
+A correct result looks like `resize: applied 471x1046 at 1448,34` — width/height
+must match the device aspect. Make it stick with the two steps above
+(`ignoreClass`) plus `install-resize-snap.sh`, which clears `w.tile` on drag.
+
+**Two script bugs that made this hard to diagnose (fixed 2026-08-27):**
+- `kwin-run.sh` called `unloadScript` with **no argument** on its last line, so
+  every helper ended in `No such method 'unloadScript' ... (signature '')`.
+- `resize-emulator.sh` captured KWin's reply into `res` and never printed it, so
+  a failed resize looked exactly like a successful one. It now reports, and
+  exits non-zero when no emulator window is found.
+- `install-resize-snap.sh` was **truncated** mid-command on its final line and
+  died with `unexpected EOF` after doing its work.
+
+**Note on display scale:** this laptop now runs **scale 1** (1920x1080), so the
+fractional-scaling rounding described below no longer applies here — `resize`
+reports `snap=1px`. The section is kept for machines still on 1.15.
 
 ## Facts (all three machines)
 - **Package / activity:** `ph.edu.pup.navalert` / `.MainActivity`

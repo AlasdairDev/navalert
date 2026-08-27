@@ -81,3 +81,11 @@ throw new Error("R>>> no-emulator-window");
 JS
 res="$("$(dirname "$0")/kwin-run.sh" "$S" 'R>>>')"
 rm -f "$S"
+
+# Report what actually happened. This used to be captured and silently dropped,
+# so a failed resize looked identical to a successful one.
+case "$res" in
+  *no-emulator-window*) echo "resize: no emulator device window found — is it running?"; exit 1 ;;
+  R\>\>\>*)             echo "resize: applied ${res#R>>> }" ;;
+  *)                    echo "resize: FAILED (no reply from KWin)"; exit 1 ;;
+esac

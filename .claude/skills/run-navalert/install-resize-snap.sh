@@ -116,4 +116,4 @@ kwriteconfig6 --file kwinrc --group Plugins --key "${ID}Enabled" true
 reconfigure
 sleep 1
 echo "snap: installed (snap=${SNAP}px, aspect=${DEV_W}x${DEV_H})"
-echo "snap: enabled=$(kreadconfig6 --file kwinrc --gro
+echo "snap: enabled=$(kreadconfig6 --file kwinrc --group Plugins --key "${ID}Enabled")"
