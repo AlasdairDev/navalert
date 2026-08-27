@@ -429,6 +429,21 @@ class MediaButtonService : Service() {
             // devices from Android 8 up, the builder covers the notification
             // itself and is what older/OEM lock screens actually read.
             .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .apply {
+                // Android 12+ DEFERS a foreground-service notification whose
+                // channel is below IMPORTANCE_DEFAULT — ours is IMPORTANCE_LOW
+                // on purpose, so it never chimes. The deferral is why the
+                // notification did not appear when BootReceiver re-armed the
+                // service in the background after an update or a reboot: the
+                // service was genuinely running and the shortcuts worked, but
+                // the only thing telling the commuter so was invisible.
+                // FOREGROUND_SERVICE_IMMEDIATE opts out of the delay without
+                // raising importance, so it shows at once and still stays
+                // silent.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+                }
+            }
             .build()
 
         // Guarded because BootReceiver can start this from BOOT_COMPLETED /
