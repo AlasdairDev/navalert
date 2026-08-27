@@ -129,6 +129,65 @@ Two things the script will stop and ask you about rather than decide for you:
   Google's licences on someone's behalf is not this script's call.
 - **The sudo for KVM.** It prints the command; you run it.
 
+## Low-RAM machines (the Aurora ThinkPad) — read before your first build
+
+**The laptop freezing mid-build is a configuration problem, not bad luck.**
+
+`android/gradle.properties` asks for `-Xmx8G` with `-XX:MaxMetaspaceSize=4G`.
+That file is committed and was written on a high-RAM Windows machine. On the
+8 GB ThinkPad it lets the Gradle daemon grow past everything the machine has,
+and because the only swap here is **zram — compressed RAM, not disk** — there
+is no real overflow to spill into. The kernel ends up reclaiming pages inside
+RAM it does not have and the session **livelocks**: no cursor, no OOM kill, no
+entry in the journal. A hard OOM would be kinder.
+
+Do **not** edit the committed file — the Windows machine legitimately wants the
+larger heap. Gradle reads `$GRADLE_USER_HOME/gradle.properties` *after* the
+project's, so a host-level file wins without touching the repo:
+
+```bash
+mkdir -p ~/.gradle && cat > ~/.gradle/gradle.properties <<'EOF'
+org.gradle.jvmargs=-Xmx2g -XX:MaxMetaspaceSize=768m -XX:ReservedCodeCacheSize=256m
+org.gradle.workers.max=3
+org.gradle.parallel=false
+org.gradle.caching=true
+kotlin.daemon.jvmargs=-Xmx1g
+EOF
+```
+
+Any machine under roughly 16 GB wants this, macOS included.
+
+### Budget the memory, not just the heap
+
+Measured on the ThinkPad (8 GB total): VS Code alone held **3.25 GB**, the
+emulator takes **~2 GB**, and Gradle wants whatever the heap allows. Those three
+do not fit at once.
+
+| Lever | Where | Effect |
+|---|---|---|
+| Gradle heap 8G → 2g | `~/.gradle/gradle.properties` | the single biggest win |
+| Emulator cores 4 → 2 | `~/.android/avd/<avd>.avd/config.ini` | leaves CPU for the compiler |
+| Don't run both at once | habit | build, *then* boot the emulator |
+| Close spare editor windows | habit | reclaims GBs immediately |
+
+`boot-emulator.sh` now warns when under 2600 MB is available rather than letting
+you add 2 GB to a machine that has none.
+
+### Add real swap
+
+zram is not a substitute for disk swap on a machine this size — it buys about
+2× on compressible pages and then thrashes. Real swap turns a freeze into
+"slow", which is recoverable:
+
+```bash
+sudo btrfs filesystem mkswapfile --size 8g /var/swapfile   # ext4: fallocate + mkswap
+sudo swapon /var/swapfile
+```
+
+Check with `swapon --show`: a `file` row alongside `/dev/zram0` means it worked.
+
+---
+
 ## After the doctor is green
 
 ```bash

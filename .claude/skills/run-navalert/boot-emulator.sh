@@ -65,7 +65,21 @@ if adb devices | grep -qE 'emulator-[0-9]+\s+device'; then
   exit 0
 fi
 
-echo "Booting $AVD with -gpu host (log: $LOG) ..."
+# Low-memory guard. This laptop has 8 GB and its only swap is zram (compressed
+# RAM, NOT disk), so there is no real overflow: an emulator started on top of a
+# Gradle build pushes the kernel into reclaiming pages inside RAM it does not
+# have, and the machine LIVELOCKS rather than OOM-killing anything. Warn before
+# adding ~2 GB rather than after the freeze.
+AVAIL_MB=$(awk '/MemAvailable/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 9999)
+if [ "$AVAIL_MB" -lt 2600 ]; then
+  echo "WARNING: only ${AVAIL_MB} MB available; the emulator needs ~2 GB." >&2
+  echo "         Close editor windows or stop the Gradle daemon first:" >&2
+  echo "           ./gradlew --stop   (or: pkill -f GradleDaemon)" >&2
+  echo "         Continuing in 5s — Ctrl-C to abort." >&2
+  sleep 5
+fi
+
+echo "Booting $AVD with -gpu host (log: $LOG, ${AVAIL_MB} MB free) ..."
 DISPLAY="${DISPLAY:-:0}" \
 WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
