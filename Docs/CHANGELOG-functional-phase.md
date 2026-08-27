@@ -308,6 +308,40 @@ screen is on (content and full-screen intents target the same activity).
 
 ---
 
+### 7.6 Gesture Revision — Volume Squeeze Replaces Triple Volume-Down
+
+**Defect.** `isShortcutContext()` arms the shortcuts whenever the screen is off
+**or** NavAlert is backgrounded. On a commute that is the normal state — phone
+pocketed, music playing — so an ordinary "turn it down" of three quick taps fell
+inside the 1.6 s triple-press window and launched a fake call. This was the
+reported *"pag nag-aadjust ng volume, tinitrigger rin"* defect.
+
+**Resolution.** The fake call was moved from a triple Volume-Down to a
+**squeeze** — Volume-Up and Volume-Down registered within `SQUEEZE_MS` (500 ms)
+of each other. The gesture is immune to the defect by construction: volume
+adjustment only ever travels in **one** direction, so no sequence of raising or
+lowering can produce an opposed pair. SOS remains a triple Volume-Up, which was
+never affected because raising volume three times is not how a commuter lowers
+a ringtone.
+
+**Implementation.** `detectShortcut()` inspects the opposite direction's press
+history before delegating to `detectTriplePress()`; a match clears both queues
+and dispatches `fakecall` under the same `COOLDOWN_MS` (3 s) guard that prevents
+a duplicate SOS. Volume-Down presses are still recorded so a squeeze can be
+recognised, but three of them no longer trigger anything on their own.
+
+**Outstanding — reliability under field use.** The squeeze is reported as
+firing **inconsistently** on physical hardware. The gesture is sound in
+software, but it assumes both volume keys can be depressed within 500 ms of
+each other; on a device with a single volume *rocker* that is physically
+awkward, and some OEM skins intercept a simultaneous Volume-Up + Volume-Down
+combination before it reaches an application. This is recorded as an open item:
+the failure has not yet been isolated to key delivery versus gesture timing,
+which requires on-device `logcat` instrumentation rather than emulator testing
+(see Appendix B, Verification Boundary).
+
+---
+
 ## 8. Additional Correctness Hardening
 
 The following defects were identified and resolved during systematic review and

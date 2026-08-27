@@ -16,6 +16,7 @@ import android.media.VolumeProvider
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.Build
+import android.util.Log
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
@@ -194,6 +195,21 @@ class MediaButtonService : Service() {
             override fun onAdjustVolume(direction: Int) {
                 if (direction == 0) return // key release — ignore
 
+                // Timestamp the key HERE, on arrival — not after the relay
+                // below. adjustStreamVolume is a binder call into AudioService
+                // and FLAG_SHOW_UI raises the volume panel; on a locked screen
+                // that can take a long time. Every press is serialised on this
+                // one handler thread, so reading the clock afterwards charged
+                // each press with that delay and inflated the measured gap
+                // between Volume-Up and Volume-Down. A genuine squeeze then
+                // measured well over SQUEEZE_MS and was silently dropped — the
+                // "sometimes it doesn't fire" report. Arrival time is the only
+                // honest measure of how far apart the two keys actually were.
+                val at = SystemClock.elapsedRealtime()
+                if (Log.isLoggable(SHORTCUT_TAG, Log.DEBUG)) Log.d(
+                    SHORTCUT_TAG, "key dir=$direction at=$at armed=${isShortcutContext()}"
+                )
+
                 // ╔══════════════════════════════════════════════════════════╗
                 // ║ DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:         ║
                 // ║ RELAY THE EXPLICIT STREAM, NEVER THE "SUGGESTED" ONE.    ║
@@ -252,7 +268,7 @@ class MediaButtonService : Service() {
                 // foreground. While the app is open with the screen on (e.g.
                 // previewing an alarm sound in Settings), normal volume
                 // adjustments must NOT be read as a triple-press shortcut.
-                if (isShortcutContext()) detectShortcut(direction)
+                if (isShortcutContext()) detectShortcut(direction, at)
             }
         }
     }
@@ -281,14 +297,14 @@ class MediaButtonService : Service() {
      * It stays discreet and screen-off capable — one squeeze of the phone's side
      * — which is what Specific Objective 4 actually needs the gesture to be.
      */
-    private fun detectShortcut(direction: Int) {
-        val now = SystemClock.elapsedRealtime()
+    private fun detectShortcut(direction: Int, now: Long) {
         val opposite = if (direction > 0) downPresses else upPresses
         if (opposite.isNotEmpty() && now - opposite.last() <= SQUEEZE_MS) {
             upPresses.clear()
             downPresses.clear()
             if (now - lastDispatchAt < COOLDOWN_MS) return
             lastDispatchAt = now
+            if (Log.isLoggable(SHORTCUT_TAG, Log.DEBUG)) Log.d(SHORTCUT_TAG, "SQUEEZE -> fakecall")
             dispatchShortcut("fakecall")
             return
         }
@@ -415,12 +431,24 @@ class MediaButtonService : Service() {
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            startForeground(NOTIF_ID, notif)
+        // Guarded because BootReceiver can start this from BOOT_COMPLETED /
+        // MY_PACKAGE_REPLACED. The receiver wraps its own start call, but the
+        // rejection surfaces HERE, inside the service, where that catch cannot
+        // reach it: on Android 12+ a background-started FGS throws
+        // ForegroundServiceStartNotAllowedException, and on 14+ a typed FGS can
+        // be refused as well. Uncaught, that is a crash at boot in a safety
+        // app. Opening the app still arms the shortcuts, so log and stand down.
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                )
+            } else {
+                startForeground(NOTIF_ID, notif)
+            }
+        } catch (e: Exception) {
+            Log.w("NavAlertShortcuts", "startForeground refused; shortcuts arm on next app launch", e)
+            stopSelf()
         }
     }
 
@@ -459,6 +487,7 @@ class MediaButtonService : Service() {
         private const val FS_CHANNEL = "navalert_trigger"
         private const val NOTIF_ID = 4242
         private const val FS_NOTIF_ID = 4243
+        private const val SHORTCUT_TAG = "NavAlertShortcuts"
         private const val WINDOW_MS = 1600L
 
         /**
