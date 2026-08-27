@@ -15,8 +15,13 @@ set -uo pipefail
 
 PINNED_FLUTTER='3.41.9'
 PINNED_JDK='17'
+DEFAULT_AVD='Pixel_6'   # the name run-navalert boots unless given another
 
-MISSING=()
+# NOTE: deliberately a counter + text buffer, NOT an array. macOS still ships
+# bash 3.2, where reading an empty array (${#arr[@]}) under `set -u` aborts with
+# "unbound variable" - which fired only when the machine was perfectly set up.
+MISSING_COUNT=0
+MISSING_TEXT=''
 
 case "$(uname -s)" in
   Darwin) OS=macos ;;
@@ -47,7 +52,8 @@ report() { # status name detail fix
   esac
   printf '%s%s %-22s %s%s\n' "$colour" "$mark" "$name" "$detail" "$N"
   if [ "$status" != ok ] && [ -n "$fix" ]; then
-    MISSING+=("$name"$'\n      '"$fix")
+    MISSING_COUNT=$((MISSING_COUNT + 1))
+    MISSING_TEXT="${MISSING_TEXT}  - ${name}"$'\n'"      ${fix}"$'\n'
   fi
 }
 
@@ -130,11 +136,29 @@ else
 fi
 
 # ---------- AVD ----------
-avd_count=$(find "$HOME/.android/avd" -maxdepth 1 -name '*.ini' 2>/dev/null | wc -l | tr -d ' ')
-if [ "${avd_count:-0}" -gt 0 ]; then
-  report ok 'AVD' "$avd_count defined"
+# Report NAMES, not a count. run-navalert boots an AVD *by name*, so a machine
+# holding one AVD under some other name passes a count check and then dies with
+# "Unknown AVD name" - the check looked green while running was broken.
+AVD_NAMES=''
+if [ -n "${SDK:-}" ] && [ -x "$SDK/emulator/emulator" ]; then
+  AVD_NAMES=$("$SDK/emulator/emulator" -list-avds 2>/dev/null | tr -d '\r' | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+fi
+if [ -z "$AVD_NAMES" ]; then
+  AVD_NAMES=$(find "$HOME/.android/avd" -maxdepth 1 -name '*.ini' 2>/dev/null \
+                | sed 's|.*/||; s|\.ini$||' | tr '\n' ' ')
+fi
+AVD_NAMES=$(echo $AVD_NAMES)   # collapse whitespace
+
+if [ -z "$AVD_NAMES" ]; then
+  report fail 'AVD' 'none defined' \
+    "flutter emulators --create --name $DEFAULT_AVD"
 else
-  report fail 'AVD' 'none defined' 'flutter emulators --create --name Pixel_6'
+  # Any AVD boots, because boot-emulator.sh falls back to the only one present.
+  # Name it so a mismatch with the skill's default is obvious at a glance.
+  case " $AVD_NAMES " in
+    *" $DEFAULT_AVD "*) report ok 'AVD' "$AVD_NAMES" ;;
+    *) report ok 'AVD' "$AVD_NAMES (skill default '$DEFAULT_AVD' absent - pass the name: boot-emulator.sh <name>)" ;;
+  esac
 fi
 
 # ---------- Hardware acceleration ----------
@@ -162,16 +186,14 @@ fi
 
 # ---------- Result ----------
 echo
-if [ ${#MISSING[@]} -eq 0 ]; then
+if [ "$MISSING_COUNT" -eq 0 ]; then
   echo "${G}Everything the project needs is present.${N}"
   echo 'Next: flutter pub get && flutter test    (expect 286 passing)'
   exit 0
 fi
 
-echo "${Y}${#MISSING[@]} item(s) need attention:${N}"
-for m in "${MISSING[@]}"; do
-  echo "  - $m"
-done
+echo "${Y}${MISSING_COUNT} item(s) need attention:${N}"
+printf '%s' "$MISSING_TEXT"
 echo
 echo 'Run /setup-navalert and Claude will walk these through with you.'
 exit 1

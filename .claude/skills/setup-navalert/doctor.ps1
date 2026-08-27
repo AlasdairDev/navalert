@@ -14,6 +14,7 @@ $ErrorActionPreference = 'SilentlyContinue'
 
 $PINNED_FLUTTER = '3.41.9'
 $PINNED_JDK     = '17'
+$DEFAULT_AVD    = 'Pixel_6'   # the name the run skill boots unless given another
 
 $script:Missing = @()
 
@@ -43,8 +44,15 @@ if (-not $flutter) {
     Report 'fail' 'Flutter' 'not on PATH' `
         "Download Flutter $PINNED_FLUTTER (see SKILL.md - there is NO winget package for Flutter)"
 } else {
-    $v = (flutter --version 2>&1 | Select-String -Pattern 'Flutter (\d+\.\d+\.\d+)').Matches.Groups[1].Value
-    if ($v -eq $PINNED_FLUTTER) {
+    # Guard the match: with $ErrorActionPreference='SilentlyContinue' a failed
+    # parse silently yields $null and the version then reports as blank, which
+    # reads as "wrong version" on a machine that is actually fine.
+    $m = flutter --version 2>&1 | Select-String -Pattern 'Flutter (\d+\.\d+\.\d+)' | Select-Object -First 1
+    $v = if ($m) { $m.Matches.Groups[1].Value } else { '' }
+    if (-not $v) {
+        Report 'warn' 'Flutter' 'on PATH but version unreadable' `
+            "Run 'flutter --version' by hand; project pins $PINNED_FLUTTER"
+    } elseif ($v -eq $PINNED_FLUTTER) {
         Report 'ok' 'Flutter' "$v (pinned)" ''
     } else {
         Report 'warn' 'Flutter' "$v - project pins $PINNED_FLUTTER" `
@@ -118,13 +126,19 @@ if (-not (Test-Path $sdk)) {
 }
 
 # ---------- AVD ----------
+# Report NAMES, not a count: the run skill boots an AVD *by name*, so a machine
+# with one AVD under a different name passes a count check and then dies with
+# "Unknown AVD name".
 $avdDir = Join-Path $env:USERPROFILE '.android\avd'
-$avds = @(Get-ChildItem -Path $avdDir -Filter '*.ini' -ErrorAction SilentlyContinue)
-if ($avds.Count -gt 0) {
-    Report 'ok' 'AVD' "$($avds.Count) defined" ''
-} else {
+$avds = @(Get-ChildItem -Path $avdDir -Filter '*.ini' -ErrorAction SilentlyContinue |
+          ForEach-Object { $_.BaseName })
+if ($avds.Count -eq 0) {
     Report 'fail' 'AVD' 'none defined' `
-        'flutter emulators --create --name Pixel_6'
+        "flutter emulators --create --name $DEFAULT_AVD"
+} elseif ($avds -contains $DEFAULT_AVD) {
+    Report 'ok' 'AVD' ($avds -join ' ') ''
+} else {
+    Report 'ok' 'AVD' (("{0} (skill default '{1}' absent - pass the name)" -f ($avds -join ' '), $DEFAULT_AVD)) ''
 }
 
 # ---------- Hardware acceleration ----------

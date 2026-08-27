@@ -1,14 +1,20 @@
 ---
 name: run-navalert
-description: Launch and drive the NavAlert Android app on either dev machine — the Linux (Aurora DX / Fedora atomic) laptop or the Windows machine. Use when asked to run, start, screenshot, or verify the app in a real emulator/device. Handles the machine-specific emulator GPU crash and the missing-Flutter-on-Linux case automatically.
+description: Launch and drive the NavAlert Android app on any dev machine — Linux (Aurora DX / Fedora atomic), Windows, or macOS. Use when asked to run, start, screenshot, or verify the app in a real emulator/device. Handles the Linux-only emulator GPU crash, picks a usable AVD by name, and covers a fresh clone that has no prebuilt APK.
 ---
 
-# Running NavAlert on either machine
+# Running NavAlert on Linux, Windows or macOS
 
-This project is developed on **two machines that need different launch paths**:
+Three platforms, three launch paths. What differs is the renderer and the
+window manager, not the app.
 
-- **Linux laptop** (Aurora DX / Fedora 44 atomic, Wayland, Intel Iris Xe): **no Flutter SDK installed.** Run a prebuilt APK on the emulator, and the emulator **must** use `-gpu host` or its qemu SIGSEGVs on boot (SwiftShader's software-GL JIT faults on this host).
-- **Windows machine**: Flutter **is** installed. Use the normal `flutter run` toolchain; the emulator's default renderer works fine.
+- **Linux laptop** (Aurora DX / Fedora 44 atomic, Wayland, Intel Iris Xe): the emulator **must** use `-gpu host` or its qemu SIGSEGVs on boot (SwiftShader's software-GL JIT faults on this host). Flutter **is** installed here now (3.41.9, via `/setup-navalert`), so this machine can build — the prebuilt-APK route below is still the fastest path when an APK is already on the drive.
+- **Windows machine**: Flutter installed. Normal `flutter run`; the default renderer works fine.
+- **macOS**: Flutter installed. Normal `flutter run`; Hypervisor.framework needs no setup. **UNVERIFIED — nobody has run this project on a Mac yet.**
+
+**First run on a fresh clone?** `build/` is gitignored, so there is **no APK** —
+use `flutter run`, which builds one. The prebuilt-APK steps only apply on a
+machine where someone has already built.
 
 **Step 0 — detect the OS**, then follow the matching section.
 ```bash
@@ -25,8 +31,14 @@ Flutter is not on this host, so **do not** try `flutter run`. Boot the emulator,
 ### 1. Boot the emulator (the `-gpu host` fix is mandatory)
 If `adb devices` already shows an `emulator-5554  device`, skip to step 2. Otherwise run the bundled helper (idempotent — no-ops if one is already up, waits for boot, fails loudly if qemu dies):
 ```bash
-.claude/skills/run-navalert/boot-emulator.sh
+.claude/skills/run-navalert/boot-emulator.sh          # auto-picks the AVD
+.claude/skills/run-navalert/boot-emulator.sh <name>   # or name one explicitly
 ```
+**On AVD names:** the helper prefers `Pixel_6`, falls back to the only AVD on the
+machine, and with several present it stops and lists them. It validates the name
+*before* launching — a wrong one used to exit qemu instantly while
+`adb wait-for-device` blocked forever, which looked like a slow boot rather than
+a failure. `emulator -list-avds` shows what you have.
 Inline equivalent (what the helper runs):
 ```bash
 DISPLAY=:0 WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u) \
@@ -86,7 +98,26 @@ adb emu geo fix 121.0108 14.5979     # PUP Sta. Mesa — the usual demo origin
 ```
 
 ### 4. Drive & verify
-Onboarding is 3 gates before the home map: **Permissions**, **Add 3 Emergency Contacts**, **Fake Call Setup** — each has a "Skip for now". Flutter doesn't expose text to `uiautomator`, so tap by coordinate: dump bounds with
+Onboarding is a **6-panel tutorial carousel** ("Welcome to NavAlert.", Skip/Next)
+and then 3 gates before the home map: **Permissions**, **Add 3 Emergency
+Contacts**, **Fake Call Setup** — each with a "Skip for now". Expect an
+**SOS Warning** dialog and an **Incomplete Setup** banner on the home screen if
+you skipped the gates; Close and Dismiss clear them.
+
+**Flutter DOES expose its labels to `uiautomator` — as `content-desc`, not
+`text`.** Look them up by name instead of guessing coordinates (guessing missed
+on the first try; every bounds lookup landed):
+
+```bash
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+# every tappable label on screen:
+adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -oE 'content-desc="[^"]+"'
+# bounds for one label -> tap its centre:
+adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep 'Skip for now' \
+  | grep -oE 'bounds="\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]"'
+```
+
+If you must fall back to raw coordinates, dump bounds with
 ```bash
 adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml | tr '>' '\n' | grep -oE 'bounds="[^"]*"'
 ```
@@ -97,7 +128,7 @@ adb exec-out screencap -p > /tmp/navalert-shot.png
 
 ---
 
-## Windows path (the other machine) — Flutter present
+## Windows path — Flutter present
 
 Flutter builds and installs directly; no APK juggling and no GPU workaround needed.
 ```powershell
@@ -112,9 +143,43 @@ flutter run                                       # builds, installs, launches, 
 
 ---
 
-## Facts (both machines)
+## macOS path — UNVERIFIED
+
+> Nobody has run NavAlert on a Mac yet. Written from the Flutter and Android
+> tooling docs; treat any failure as a bug in this file and report it.
+
+Flutter builds and installs directly — no APK juggling, and none of the Linux
+GPU or window-manager workarounds apply (those are KWin/Wayland-specific and
+simply do not exist here).
+
+```bash
+flutter devices                                   # anything connected?
+flutter emulators                                 # list AVDs
+flutter emulators --launch Pixel_6                # or your AVD's name
+flutter run                                       # build, install, launch, hot-reload
+```
+
+Then give it a position, exactly as on Linux — **longitude first**:
+
+```bash
+adb emu geo fix 121.0108 14.5979     # PUP Sta. Mesa
+```
+
+- **Apple silicon needs an `arm64-v8a` system image**, not `x86_64`; an x86_64
+  AVD either refuses to start or crawls under emulation.
+- The SDK lives at `~/Library/Android/sdk`, not `~/Android/Sdk`. `adb` is at
+  `~/Library/Android/sdk/platform-tools/adb` — add it to `PATH` or call it by
+  full path. `boot-emulator.sh` resolves this per-OS, but it is otherwise a
+  **Linux** script (it drives KWin) — on macOS use `flutter run` above.
+- Screenshot and drive the UI with the same `adb` commands as the Linux path;
+  `content-desc` lookup is identical.
+
+---
+
+## Facts (all three machines)
 - **Package / activity:** `ph.edu.pup.navalert` / `.MainActivity`
 - **AVD:** `Pixel_6` (android-35 google_apis x86_64)
 - **Debug APK:** `build/app/outputs/flutter-apk/app-debug.apk`
+- **APK is gitignored** (`.gitignore: /build/`) — a fresh clone has none; `flutter run` builds one.
 - **Display scale on the Linux laptop:** 1.15 (1920x1080 panel -> 1670x940 logical). Window sizes must be multiples of **20** logical px to avoid XWayland rounding jitter.
 - Full root-cause notes on the Linux emulator crash live in Claude's project me

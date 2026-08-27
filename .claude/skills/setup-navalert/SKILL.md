@@ -65,8 +65,12 @@ with* Flutter, not the SDK. Flutter is installed by hand; the rest is winget.
 > **UNVERIFIED.** Written from Homebrew and Flutter documentation; nobody has
 > run it on a Mac yet. Treat failures as bugs in this file and report them.
 
+Homebrew is the same route Aurora uses, so the JDK command is identical on both
+— only the Android SDK and emulator differ. Match `doctor.sh`, which checks for
+`openjdk@17`:
+
 ```bash
-brew install --cask temurin@17          # JDK 17
+brew install openjdk@17                 # JDK 17 — same formula as Aurora
 brew install --cask android-commandlinetools
 sdkmanager --licenses
 sdkmanager "platform-tools" "emulator" "platforms;android-36" \
@@ -82,6 +86,18 @@ export PATH="$PATH:$HOME/flutter/bin"
 
 Apple silicon needs the `arm64-v8a` system image, not `x86_64`. No hypervisor
 setup — macOS uses Hypervisor.framework directly.
+
+`openjdk@17` is keg-only, so Homebrew does not put it on `PATH` or set
+`JAVA_HOME` — and `JAVA_HOME` is what Gradle and the doctor read. Export it:
+
+```bash
+echo 'export JAVA_HOME="$(brew --prefix openjdk@17)"' >> ~/.zshrc
+echo 'export PATH="$JAVA_HOME/bin:$PATH"'             >> ~/.zshrc
+```
+
+macOS ships **bash 3.2**, which `doctor.sh` is written to tolerate — do not
+"modernise" it with `${arr[@]}` on a possibly-empty array, which aborts there
+under `set -u`.
 
 ## Aurora DX / Fedora Atomic
 
@@ -117,10 +133,24 @@ Two things the script will stop and ask you about rather than decide for you:
 
 ```bash
 flutter pub get
-flutter test          # expect 286 passing
+flutter test          # 286 passing as of v1.1.1 build 4
 ```
 
-If the tests pass, the machine is genuinely ready — that exercises the analyzer,
+### The AVD's *name* matters, not just that one exists
+
+`run-navalert` boots an AVD by name and defaults to `Pixel_6`. The doctor prints
+the names it finds, so a mismatch is visible immediately:
+
+```
+[ OK ] AVD    flutter_phone (skill default 'Pixel_6' absent - pass the name)
+```
+
+That is fine — `boot-emulator.sh` falls back to the only AVD present. With two
+or more under other names, pass one: `boot-emulator.sh <name>`. To create the
+default outright: `flutter emulators --create --name Pixel_6`.
+
+The count rises as tests are added — what matters is that they all pass, not
+that the number still reads 286. If they pass, the machine is genuinely ready — that exercises the analyzer,
 the full dependency graph and the whole `TripViewModel` state machine.
 
 ### A fresh emulator has no GPS — set one
