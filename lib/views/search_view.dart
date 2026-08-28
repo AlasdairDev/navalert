@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme.dart';
+import '../core/geo.dart';
 import '../models/models.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
@@ -367,16 +368,42 @@ class _SearchViewState extends State<SearchView> {
                         ),
                       )
                     : Builder(builder: (_) {
-                        final here = _currentLocationMatch(vm);
+                        // Two independent ways of recognising "where I am
+                        // standing", because each covers the other's blind
+                        // spot. Text matching reads the reverse-geocoded
+                        // ADDRESS, so it catches a house or a street the
+                        // commuter types. Proximity reads COORDINATES, so it
+                        // catches a named place — "PUP", a mall, an LRT
+                        // station — that a street address never mentions, and
+                        // it keeps working when the address lookup failed.
+                        //
+                        // A real result wins over the synthetic one: it is the
+                        // same place, but carries the name the map knows it
+                        // by. Showing both would list the commuter's position
+                        // twice.
+                        final nearby = vm.results.indexWhere(
+                          (r) => isAtLocation(
+                              vm.currentLat, vm.currentLng, r.lat, r.lng),
+                        );
+                        final hasNearby = nearby >= 0 && !vm.locationIsFallback;
+                        final here = hasNearby ? null : _currentLocationMatch(vm);
+                        final rest = hasNearby
+                            ? [
+                                for (var i = 0; i < vm.results.length; i++)
+                                  if (i != nearby) vm.results[i]
+                              ]
+                            : vm.results;
                         final rows = <PlaceResult>[
                           if (here != null) here,
-                          ...vm.results,
+                          if (hasNearby) vm.results[nearby],
+                          ...rest,
                         ];
+                        final hereIsFirst = here != null || hasNearby;
                         return ListView.builder(
                         itemCount: rows.length,
                         itemBuilder: (_, i) {
                           final r = rows[i];
-                          final isHere = here != null && i == 0;
+                          final isHere = hereIsFirst && i == 0;
                           return ListTile(
                             leading: CircleAvatar(
                               backgroundColor: NavAlertColors.surface,
