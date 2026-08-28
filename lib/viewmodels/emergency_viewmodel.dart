@@ -8,6 +8,7 @@ import 'package:record/record.dart';
 import '../services/fake_call_screen_service.dart';
 import '../services/sos_service.dart';
 import '../services/sound_service.dart';
+import '../services/sos_result_notification.dart';
 
 /// Emergency ViewModel (Use Cases UC-7 Trigger SOS Alert and
 /// UC-8 Activate Fake Call).
@@ -189,6 +190,15 @@ class EmergencyViewModel extends ChangeNotifier {
     } finally {
       sending = false;
       notifyListeners();
+      // Deliver the SAME outcome outside the app. statusMessage is only ever
+      // seen by someone looking at the Emergency screen; the volume shortcut
+      // is used with the phone pocketed and the screen off, where a sent SOS
+      // and one that failed for want of a saved contact look identical.
+      // Silent by construction — see SosResultNotification.
+      if (statusMessage != null) {
+        SosResultNotification.instance
+            .show(message: statusMessage!, isError: statusIsError);
+      }
     }
   }
 

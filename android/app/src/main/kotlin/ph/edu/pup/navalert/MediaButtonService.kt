@@ -394,19 +394,39 @@ class MediaButtonService : Service() {
     private fun startForegroundNotification() {
         val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // IMPORTANCE_LOW is deliberate and stays. This notification is
-            // permanent — it exists only to keep the volume-shortcut service
-            // alive — so raising it to DEFAULT would chime every time the
-            // service starts and file a never-dismissable notice among the
-            // rider's real alerts. What it DID lack is lock-screen visibility:
-            // without it Android falls back to VISIBILITY_PRIVATE on a secured
-            // lock screen and hides the content behind "Contents hidden".
+            // IMPORTANCE_DEFAULT, with the sound explicitly removed.
+            //
+            // This was IMPORTANCE_LOW, on the reasoning that DEFAULT "would
+            // chime every time the service starts". That reasoning was right
+            // about the chime and wrong about the fix: setSound(null, null)
+            // plus enableVibration(false) silences it outright, so DEFAULT
+            // costs nothing here.
+            //
+            // LOW had a price that only showed on a real phone. Android 12+
+            // DEFERS a foreground-service notification below DEFAULT, and
+            // OEM skins (HyperOS/MIUI) file anything below DEFAULT into a
+            // collapsed "silent" bucket that is hidden on the lock screen.
+            // Measured on a HyperOS device: the service ran, the shortcuts
+            // fired, and the notification was nowhere — which is the one
+            // thing that tells the commuter the shortcuts are armed.
+            //
+            // The ID is versioned because a NotificationChannel is IMMUTABLE
+            // once created: on any phone that already ran an older build,
+            // re-creating "navalert_shortcuts" with new settings is silently
+            // ignored and it keeps its old importance forever. A new ID is
+            // the only way the change reaches an existing install. Delete the
+            // old one so it does not linger in the app's notification
+            // settings as a dead entry.
+            mgr.deleteNotificationChannel("navalert_shortcuts")
             mgr.createNotificationChannel(
                 NotificationChannel(
-                    CHANNEL, "Safety shortcuts", NotificationManager.IMPORTANCE_LOW
+                    CHANNEL, "Safety shortcuts", NotificationManager.IMPORTANCE_DEFAULT
                 ).apply {
                     description = "Keeps the volume-button SOS shortcut active."
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    setSound(null, null)      // visible, never audible
+                    enableVibration(false)
+                    setShowBadge(false)
                 }
             )
             // High importance so the full-screen intent actually fires when a
@@ -498,7 +518,7 @@ class MediaButtonService : Service() {
         var instance: MediaButtonService? = null
 
         const val EXTRA_SHORTCUT = "navalert_shortcut"
-        private const val CHANNEL = "navalert_shortcuts"
+        private const val CHANNEL = "navalert_shortcuts_v2"
         private const val FS_CHANNEL = "navalert_trigger"
         private const val NOTIF_ID = 4242
         private const val FS_NOTIF_ID = 4243
