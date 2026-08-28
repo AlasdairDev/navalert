@@ -484,6 +484,42 @@ class MediaButtonService : Service() {
         } catch (e: Exception) {
             Log.w("NavAlertShortcuts", "startForeground refused; shortcuts arm on next app launch", e)
             stopSelf()
+            return
+        }
+
+        mirrorForOemsThatHideForegroundNotices(mgr, notif)
+    }
+
+    /**
+     * Re-posts the same notice through the ORDINARY notification path on OEM
+     * skins that hide foreground-service notifications.
+     *
+     * MIUI/HyperOS manages FGS notices itself and does not display them. The
+     * evidence is a clean differential, measured on a HyperOS device running
+     * this exact build: NavAlert's SOS-result notification — same app, same
+     * importance, posted with NotificationManager.notify() — appears, while
+     * this one, posted with startForeground(), does not. So it is neither the
+     * channel nor a blocked app; it is specifically the foreground-service
+     * kind that is suppressed.
+     *
+     * That notice is the only thing telling the commuter the shortcuts are
+     * armed. Without it there is no way to know Volume-Up x3 will do anything
+     * until an emergency proves it will not.
+     *
+     * Gated on the manufacturer on purpose: where the FGS notification is shown
+     * normally, a mirror would be a duplicate. Cancelled in onDestroy.
+     */
+    private fun mirrorForOemsThatHideForegroundNotices(
+        mgr: NotificationManager, notif: Notification
+    ) {
+        val vendor = Build.MANUFACTURER.lowercase()
+        val hides = vendor == "xiaomi" || vendor == "redmi" || vendor == "poco" ||
+            vendor == "blackshark" || !System.getProperty("ro.miui.ui.version.name").isNullOrBlank()
+        if (!hides) return
+        try {
+            mgr.notify(MIRROR_NOTIF_ID, notif)
+        } catch (e: Exception) {
+            Log.w(SHORTCUT_TAG, "could not mirror the shortcut notice", e)
         }
     }
 
@@ -496,6 +532,11 @@ class MediaButtonService : Service() {
 
     override fun onDestroy() {
         instance = null
+        try {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(MIRROR_NOTIF_ID)
+        } catch (_: Exception) {
+        }
         main.removeCallbacks(reassert)
         bgThread.quitSafely()
         try {
@@ -521,6 +562,9 @@ class MediaButtonService : Service() {
         private const val CHANNEL = "navalert_shortcuts_v2"
         private const val FS_CHANNEL = "navalert_trigger"
         private const val NOTIF_ID = 4242
+
+        /** Mirror of [NOTIF_ID] for OEMs that hide foreground-service notices. */
+        private const val MIRROR_NOTIF_ID = 4244
         private const val FS_NOTIF_ID = 4243
         private const val SHORTCUT_TAG = "NavAlertShortcuts"
         private const val WINDOW_MS = 1600L
