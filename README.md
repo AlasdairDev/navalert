@@ -7,7 +7,7 @@
 ![Dart](https://img.shields.io/badge/Dart-3.11-0175C2)
 ![Kotlin](https://img.shields.io/badge/native-Kotlin-7F52FF)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM-7C6BC4)
-![Tests](https://img.shields.io/badge/tests-286%20passing-success)
+![Tests](https://img.shields.io/badge/tests-295%20passing-success)
 ![Version](https://img.shields.io/badge/release-v1.1.0-B39DDB)
 
 > Capstone Project — BSIT, Polytechnic University of the Philippines.
@@ -187,12 +187,39 @@ restore that silently dropped them was the wrong default.
 
 ### Your own location is searchable
 
-The destination search offers the commuter's current position as a pickable
-result, matched locally against the reverse-geocoded address and the words
-people actually type for themselves. Because the match is local it appears
-instantly, before Nominatim answers. A fallback position is never offered — that
+Search recognises "where I am standing" **two ways**, because each covers the
+other's blind spot.
+
+**By address text**, matched locally against the reverse-geocoded address and
+the words people actually type for themselves — `here`, `me`, `my location`.
+Because the match is local it appears instantly, before Nominatim answers. This
+is what catches a house or a street: reverse geocoding returns exactly that
+kind of string.
+
+**By position.** A street address names the *road*, never the place. Standing
+inside PUP the address still reads *Anonas Street, Santa Mesa, Manila*, so
+typing `PUP` matched nothing at all. Search now also compares each result's
+coordinates against the current fix and flags anything within
+`kAtLocationRadiusM` (100 m) as the commuter's own position. Because it reads
+coordinates rather than text, it recognises a named place the address never
+mentions, and it keeps working when the reverse lookup failed — that lookup is
+best-effort and silently leaves the generic label behind when the network is
+down.
+
+Distance was added *alongside* the text match rather than replacing it. A
+street's map point can sit hundreds of metres from the house on it, so distance
+alone would have made the home case worse, not better.
+
+Where a real result **is** the commuter's position, that result is flagged and
+raised rather than adding a second row — same place, but carrying the name the
+map knows it by.
+
+A fallback position is never offered, and an unknown one never matches — that
 is a guess, not a fix, and handing it back as a destination would name a place
 the commuter was never at.
+
+Search opens on the prompt, not on the commuter's own address: an empty box
+matches nothing.
 
 ### Proactive permission UI
 
@@ -294,15 +321,16 @@ covers Aurora DX / Fedora Atomic, where the toolchain must be installed into
 
 ```bash
 flutter analyze   # expect: No issues found
-flutter test      # expect: 286/286 passing
+flutter test      # expect: 295/295 passing
 ```
 
-**20 suites, 286 tests**, covering the adaptive alarm engine, the fare matrix
+**21 suites, 295 tests**, covering the adaptive alarm engine, the fare matrix
 and NCR bounds, the Dijkstra router against the real production GTFS feed, the
 full `TripViewModel` state machine driven from a mock GPS stream on a virtual
 clock, the commute-guide overlay geometry measured against a mounted widget
 tree, the SOS failure-code contract, the three-second accidental-trigger guard,
-and the disk tile cache.
+the disk tile cache, and the distance rule behind current-location matching —
+including that an unknown position never counts as a match.
 
 They do **not** cover pixel rendering or radio behaviour. Those are verified on
 hardware — see the checklist in [SETUP.md](SETUP.md).
