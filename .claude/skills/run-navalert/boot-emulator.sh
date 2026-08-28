@@ -80,11 +80,37 @@ if [ "$AVAIL_MB" -lt 2600 ]; then
 fi
 
 echo "Booting $AVD with -gpu host (log: $LOG, ${AVAIL_MB} MB free) ..."
-DISPLAY="${DISPLAY:-:0}" \
-WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
-XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
-  nohup "$EMU" -avd "$AVD" -no-snapshot -no-boot-anim -no-audio -gpu host \
-  >"$LOG" 2>&1 &
+# Launch in its OWN systemd scope, not as a child of whatever started this.
+#
+# WHY: run from a terminal inside VS Code, qemu lands in VS Code's cgroup
+# (app-code-NNNN.scope). When the machine hit a global OOM the kernel killed
+# qemu - the largest process - and systemd then tore down the WHOLE scope for
+# failing with oom-kill, taking the editor and every unsaved buffer with it:
+#
+#   kernel: Out of memory: Killed process (qemu-system-x86)
+#           task_memcg=/user.slice/.../app.slice/app-code-3305.scope
+#   systemd: app-code-3305.scope: Failed with result 'oom-kill'.
+#
+# Its own scope confines that blast radius to the emulator. MemoryMax caps it
+# so it is reclaimed before the machine goes global-OOM at all, and
+# it is killed alone rather than dragging the session down with it if the
+# machine ever does go global-OOM.
+if command -v systemd-run >/dev/null 2>&1; then
+  systemd-run --user --scope --quiet \
+    --unit="navalert-emulator-$$" \
+    -p MemoryMax=3G -p MemorySwapMax=1G \
+    --setenv=DISPLAY="${DISPLAY:-:0}" \
+    --setenv=WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+    --setenv=XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+    "$EMU" -avd "$AVD" -no-snapshot -no-boot-anim -no-audio -gpu host \
+    >"$LOG" 2>&1 &
+else
+  DISPLAY="${DISPLAY:-:0}" \
+  WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+  XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+    nohup "$EMU" -avd "$AVD" -no-snapshot -no-boot-anim -no-audio -gpu host \
+    >"$LOG" 2>&1 &
+fi
 
 EMU_PID=$!
 echo -n "Waiting for boot"

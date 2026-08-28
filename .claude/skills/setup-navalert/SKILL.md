@@ -173,6 +173,35 @@ do not fit at once.
 `boot-emulator.sh` now warns when under 2600 MB is available rather than letting
 you add 2 GB to a machine that has none.
 
+### An OOM can take your editor down with the emulator
+
+Launching the emulator from a terminal **inside VS Code** puts qemu in VS Code's
+own cgroup (`app-code-NNNN.scope`). When the machine went global-OOM the kernel
+killed qemu — the largest process — and systemd then tore down the *whole scope*
+for failing with `oom-kill`, closing the editor and every unsaved buffer:
+
+```
+kernel:  Out of memory: Killed process (qemu-system-x86)
+         task_memcg=/user.slice/.../app.slice/app-code-3305.scope
+systemd: app-code-3305.scope: Failed with result 'oom-kill'.
+```
+
+The OOM only targeted the emulator; systemd's scope-level cleanup is what took
+the editor. `boot-emulator.sh` now launches into its own scope so the blast
+radius stops at the emulator:
+
+```bash
+systemd-run --user --scope -p MemoryMax=3G -p MemorySwapMax=1G ...
+```
+
+The cap also means the emulator is reclaimed *before* the machine goes
+global-OOM. Verify with `cat /proc/$(pgrep -f qemu-system-x86_64)/cgroup` — it
+must read `navalert-emulator-*.scope`, not `app-code-*.scope`.
+
+**This protects the emulator path only.** A Gradle build started from a VS Code
+terminal is still inside VS Code's scope, so a build-triggered OOM can do the
+same thing. Run builds from a separate terminal, or rely on the heap cap above.
+
 ### Add real swap
 
 zram is not a substitute for disk swap on a machine this size — it buys about
