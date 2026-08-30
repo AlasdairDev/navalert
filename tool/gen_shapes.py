@@ -35,6 +35,7 @@ wrong otherwise, which is worse than a straight line: a straight line at least
 looks like an approximation.
 """
 import argparse
+import hashlib
 import gzip
 import json
 import math
@@ -157,9 +158,25 @@ def route_shape(server, stops, throttle):
     return out or None
 
 
+def feed_fingerprint(routes):
+    """Identifies the exact feed these shapes were generated from.
+
+    Resume is keyed on route INDEX. Point the script at a different feed with
+    an old shapes.db in place and index 5 is a different route: the old shape
+    is kept under the new index and the database silently becomes a mix of two
+    feeds. The fingerprint makes that refuse instead.
+    """
+    h = hashlib.sha256()
+    for r in routes:
+        h.update(r["n"].encode("utf-8"))
+        h.update(b"\x00")
+    return f"{len(routes)}:{h.hexdigest()[:16]}"
+
+
 def open_db(path):
     db = sqlite3.connect(path)
     db.executescript("""
+        CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT);
         CREATE TABLE IF NOT EXISTS shapes(
             id       INTEGER PRIMARY KEY,
             name     TEXT NOT NULL,
@@ -209,6 +226,25 @@ def main():
         routes = routes[:args.limit]
 
     db = open_db(args.out)
+
+    # Refuse to resume across a feed change (see feed_fingerprint).
+    fp = feed_fingerprint(routes) if not (args.limit or args.only) else None
+    stored = db.execute(
+        "SELECT value FROM meta WHERE key='feed'").fetchone()
+    if fp and stored and stored[0] != fp:
+        print(
+            f"REFUSING: {args.out} was generated from a DIFFERENT feed\n"
+            f"  stored: {stored[0]}\n"
+            f"  now:    {fp}\n"
+            "Resume is keyed on route index, so continuing would keep old "
+            "shapes under new indices and silently mix two feeds.\n"
+            f"Delete it and regenerate:  rm {args.out}",
+            file=sys.stderr)
+        return 3
+    if fp and not stored:
+        db.execute("INSERT OR REPLACE INTO meta VALUES('feed', ?)", (fp,))
+        db.commit()
+
     done = {r[0] for r in db.execute("SELECT id FROM shapes")}
     if done:
         print(f"resuming — {len(done)} routes already stored")
