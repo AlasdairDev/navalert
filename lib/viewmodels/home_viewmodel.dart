@@ -546,27 +546,30 @@ class HomeViewModel extends ChangeNotifier {
   }
 
 
-  /// A bundled PUV shape that runs past BOTH ends of the trip, if one exists.
+  /// The bundled road geometry for the PUV leg the commuter was actually told
+  /// to ride, trimmed to the part they ride.
   ///
-  /// Requiring both ends is the point: a route near the origin alone says
-  /// nothing about where the commuter is going, and drawing it would put a
-  /// road path on the map that does not lead to the destination. Returning
-  /// null hands the decision back to the network, then to the straight line.
+  /// Keyed on the SELECTED suggestion, not on proximity. Matching by proximity
+  /// drew whichever route happened to pass within range of both ends of the
+  /// trip - so a walking suggestion drew a jeepney route nobody was riding,
+  /// offset from both the origin and the destination. A shape is only honest
+  /// here if it is the route the guide names.
+  ///
+  /// Returns null for a walk-only suggestion. There is no PUV geometry to draw
+  /// for a walk, and drawing one would assert a ride that was never suggested.
   Future<List<List<double>>?> _localRoadPath(Trip trip) async {
     try {
-      final atOrigin = await RouteShapeService.instance
-          .near(trip.originLat, trip.originLng, radiusM: 400, limit: 25);
-      if (atOrigin.isEmpty) return null;
-      for (final r in atOrigin) {
-        final d = distanceToPolylineM(
-            trip.destinationLat, trip.destinationLng, r.path);
-        if (d <= 400) {
-          // Only the ridden portion. A stored shape is the whole route,
-          // terminal to terminal; drawing all of it runs the line off both
-          // edges of the map and says nothing about this trip.
-          return trimPolyline(r.path, trip.originLat, trip.originLng,
-              trip.destinationLat, trip.destinationLng);
-        }
+      final steps = selectedSuggestion?.steps;
+      if (steps == null || steps.isEmpty) return null;
+
+      for (final step in steps) {
+        if (step.transportMode == 'walk') continue;
+        final name = routeNameFromInstruction(step.instruction);
+        if (name == null) continue;
+        final path = await RouteShapeService.instance.pathForName(name);
+        if (path == null || path.length < 2) continue;
+        return trimPolyline(path, trip.originLat, trip.originLng,
+            trip.destinationLat, trip.destinationLng);
       }
       return null;
     } catch (e) {

@@ -8,6 +8,23 @@ import 'package:sqflite_sqlcipher/sqflite.dart';
 
 import '../core/geo.dart';
 
+/// The route name a commute-guide step tells the commuter to ride, or null
+/// for a walking step.
+///
+/// RouteEngine writes the name in quotes — `Ride jeepney "BACLARAN - DAPITAN
+/// via TAFT" and alight at ...` — so the quoted span is the route as the
+/// bundled feed names it, which is exactly the key the shapes table uses.
+///
+/// Reading the name matters because matching a shape by PROXIMITY alone draws
+/// whichever route happens to run near both ends of the trip, not the one the
+/// commuter was told to board. On a walking suggestion it drew a jeepney route
+/// nobody was riding.
+String? routeNameFromInstruction(String instruction) {
+  final m = RegExp(r'"([^"]+)"').firstMatch(instruction);
+  final name = m?.group(1)?.trim();
+  return (name == null || name.isEmpty) ? null : name;
+}
+
 /// One PUV route whose road path passes near a point.
 class NearbyRoute {
   final int id;
@@ -122,6 +139,26 @@ class RouteShapeService {
     } catch (e) {
       debugPrint('NavAlert: route shape query failed — $e');
       return const [];
+    }
+  }
+
+  /// The stored road geometry for the route with this exact name, or null.
+  ///
+  /// Names come from the same bundled feed that generated the shapes, so this
+  /// is an exact match by design. Duplicates exist in the feed (the same
+  /// corridor filed more than once); any of them is the same road, so the
+  /// first is taken.
+  Future<List<List<double>>?> pathForName(String name) async {
+    final db = await _open();
+    if (db == null) return null;
+    try {
+      final rows = await db.rawQuery(
+          'SELECT polyline FROM shapes WHERE name = ? LIMIT 1', [name]);
+      if (rows.isEmpty) return null;
+      return decodePolyline(rows.first['polyline'] as String);
+    } catch (e) {
+      debugPrint('NavAlert: route shape lookup by name failed — $e');
+      return null;
     }
   }
 
