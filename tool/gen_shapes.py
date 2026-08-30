@@ -182,6 +182,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--server", default=DEMO)
     ap.add_argument("--limit", type=int, default=0, help="spike on N routes")
+    ap.add_argument("--only", default="", help="comma-separated route indices, "
+                    "for generating a targeted test set")
     ap.add_argument("--throttle", type=float, default=None,
                     help="seconds between requests (default: 1.0 on the demo "
                          "server, 0 on a local one)")
@@ -191,7 +193,7 @@ def main():
     throttle = args.throttle
     if throttle is None:
         throttle = 1.0 if args.server.rstrip("/") == DEMO else 0.0
-    if args.server.rstrip("/") == DEMO and not args.limit:
+    if args.server.rstrip("/") == DEMO and not (args.limit or args.only):
         print("REFUSING: a full 1,711-route run against the public demo server "
               "would be rate-limited and is outside its acceptable-use policy.\n"
               "Use --limit for a spike, or --server with a local OSRM.",
@@ -200,7 +202,10 @@ def main():
 
     with gzip.open(ROUTES, "rt", encoding="utf-8") as f:
         routes = json.load(f)
-    if args.limit:
+    if args.only:
+        want = {int(x) for x in args.only.split(",") if x.strip()}
+        routes = [r if i in want else None for i, r in enumerate(routes)]
+    elif args.limit:
         routes = routes[:args.limit]
 
     db = open_db(args.out)
@@ -211,7 +216,7 @@ def main():
     ok = failed = 0
     t0 = time.time()
     for idx, r in enumerate(routes):
-        if idx in done:
+        if r is None or idx in done:
             continue
         stops = r.get("s") or []
         geom = route_shape(args.server, stops, throttle)

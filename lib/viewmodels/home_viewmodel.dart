@@ -11,6 +11,8 @@ import '../services/geocoding_service.dart';
 import '../services/route_engine.dart';
 import '../services/routing_isolate.dart';
 import '../services/route_path_service.dart';
+import '../core/geo.dart';
+import '../services/route_shape_service.dart';
 
 /// Thrown when a trip cannot be planned because the commuter's own position is
 /// not actually known — only the hardcoded map-centre fallback is available.
@@ -516,6 +518,19 @@ class HomeViewModel extends ChangeNotifier {
       [trip.destinationLat, trip.destinationLng],
     ];
     notifyListeners();
+
+    // Bundled shapes first. They are pre-computed at build time
+    // (tool/gen_shapes.py), so this is the only path that works on a commute
+    // with no signal — which is precisely when the network is worst and the
+    // map used to degrade to the straight line above without saying so.
+    final local = await _localRoadPath(trip);
+    if (local != null) {
+      routePath = local;
+      loadingPath = false;
+      notifyListeners();
+      return;
+    }
+
     try {
       routePath = await _routePath.roadPath(
         fromLat: trip.originLat,
@@ -524,10 +539,34 @@ class HomeViewModel extends ChangeNotifier {
         toLng: trip.destinationLng,
       );
     } catch (_) {
-      // Offline — keep the straight-line fallback.
+      // Offline and no bundled shape — keep the straight-line fallback.
     }
     loadingPath = false;
     notifyListeners();
+  }
+
+
+  /// A bundled PUV shape that runs past BOTH ends of the trip, if one exists.
+  ///
+  /// Requiring both ends is the point: a route near the origin alone says
+  /// nothing about where the commuter is going, and drawing it would put a
+  /// road path on the map that does not lead to the destination. Returning
+  /// null hands the decision back to the network, then to the straight line.
+  Future<List<List<double>>?> _localRoadPath(Trip trip) async {
+    try {
+      final atOrigin = await RouteShapeService.instance
+          .near(trip.originLat, trip.originLng, radiusM: 400, limit: 25);
+      if (atOrigin.isEmpty) return null;
+      for (final r in atOrigin) {
+        final d = distanceToPolylineM(
+            trip.destinationLat, trip.destinationLng, r.path);
+        if (d <= 400) return r.path;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('NavAlert: bundled road path unavailable — $e');
+      return null;
+    }
   }
 
   /// Re-generates suggestions after the rider changes mode priority.
