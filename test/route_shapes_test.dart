@@ -87,4 +87,46 @@ void main() {
       expect(distanceToPolylineM(14.6029, 121.0203, zig), lessThan(120));
     });
   });
+
+  /// Trimming a stored shape to the ridden portion. A shape is the WHOLE
+  /// route, terminal to terminal — drawing all of it for a short trip runs the
+  /// line off both edges of the map, which is exactly what the first on-device
+  /// test showed.
+  group('trimPolyline', () {
+    // A straight west->east chain, ~100 m between vertices.
+    final path = [
+      for (var i = 0; i < 10; i++) [14.5979, 121.0100 + i * 0.0009]
+    ];
+
+    test('keeps only the ridden middle', () {
+      final t = trimPolyline(path, 14.5979, 121.0127, 14.5979, 121.0154);
+      expect(t.length, lessThan(path.length));
+      expect(t.first[1], closeTo(121.0127, 0.0005));
+      expect(t.last[1], closeTo(121.0154, 0.0005));
+    });
+
+    test('reverses when the commuter rides against the stored direction', () {
+      final t = trimPolyline(path, 14.5979, 121.0154, 14.5979, 121.0127);
+      expect(t.first[1], greaterThan(t.last[1]),
+          reason: 'must run origin -> destination, not the stored order');
+    });
+
+    test('returns the whole path when both ends hit the same vertex', () {
+      final t = trimPolyline(path, 14.5979, 121.0100, 14.5979, 121.0100);
+      expect(t.length, path.length);
+    });
+
+    test('a degenerate path is returned untouched', () {
+      expect(trimPolyline(const [], 0, 0, 1, 1), isEmpty);
+      final one = [
+        [14.0, 121.0]
+      ];
+      expect(trimPolyline(one, 0, 0, 1, 1).length, 1);
+    });
+
+    test('endpoints of the trim are the nearest vertices', () {
+      expect(nearestVertexIndex(14.5979, 121.0100, path), 0);
+      expect(nearestVertexIndex(14.5979, 121.0181, path), 9);
+    });
+  });
 }

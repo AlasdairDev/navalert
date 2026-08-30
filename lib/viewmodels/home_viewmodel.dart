@@ -560,7 +560,13 @@ class HomeViewModel extends ChangeNotifier {
       for (final r in atOrigin) {
         final d = distanceToPolylineM(
             trip.destinationLat, trip.destinationLng, r.path);
-        if (d <= 400) return r.path;
+        if (d <= 400) {
+          // Only the ridden portion. A stored shape is the whole route,
+          // terminal to terminal; drawing all of it runs the line off both
+          // edges of the map and says nothing about this trip.
+          return trimPolyline(r.path, trip.originLat, trip.originLng,
+              trip.destinationLat, trip.destinationLng);
+        }
       }
       return null;
     } catch (e) {

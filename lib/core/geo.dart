@@ -105,3 +105,48 @@ double distanceToPolylineM(double lat, double lng, List<List<double>> path) {
   }
   return best;
 }
+
+/// Index of the vertex on [path] nearest to the point.
+int nearestVertexIndex(double lat, double lng, List<List<double>> path) {
+  var best = double.infinity, bestI = 0;
+  const ky = 111320.0;
+  final kx = ky * math.cos(lat * math.pi / 180.0);
+  for (var i = 0; i < path.length; i++) {
+    final dx = (path[i][1] - lng) * kx, dy = (path[i][0] - lat) * ky;
+    final d = dx * dx + dy * dy;                 // squared: ordering only
+    if (d < best) {
+      best = d;
+      bestI = i;
+    }
+  }
+  return bestI;
+}
+
+/// The portion of [path] between the points nearest [fromLat]/[fromLng] and
+/// [toLat]/[toLng], in travel order.
+///
+/// A stored shape is the WHOLE route, terminal to terminal. Drawing all of it
+/// for a two-kilometre trip runs the line off both edges of the map and tells
+/// the commuter nothing about their own journey — the map should show the ride
+/// they are taking, not the route's entire length.
+List<List<double>> trimPolyline(
+  List<List<double>> path,
+  double fromLat,
+  double fromLng,
+  double toLat,
+  double toLng,
+) {
+  if (path.length < 2) return path;
+  var a = nearestVertexIndex(fromLat, fromLng, path);
+  var b = nearestVertexIndex(toLat, toLng, path);
+  if (a == b) return path;
+  // Routes are stored in travel order, but a commuter may ride either way.
+  final reversed = a > b;
+  if (reversed) {
+    final t = a;
+    a = b;
+    b = t;
+  }
+  final seg = path.sublist(a, b + 1);
+  return reversed ? seg.reversed.toList() : seg;
+}
