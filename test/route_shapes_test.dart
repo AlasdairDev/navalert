@@ -168,4 +168,43 @@ void main() {
           isNull);
     });
   });
+
+  /// Picking between shapes that share a route name. The bundled feed files
+  /// most corridors several times - 798 names carry multiple shapes, covering
+  /// 1,622 of 1,711 routes - and the variants genuinely differ. One name was
+  /// measured with 342, 287, 13 and 9 point versions; taking the first would
+  /// sometimes draw a nine-point stub 12.7 km from the trip.
+  group('variantScoreM', () {
+    final good = [
+      for (var i = 0; i < 10; i++) [14.5979, 121.0100 + i * 0.0009]
+    ];
+    // A stub near the origin only, nowhere near the destination.
+    final stub = [
+      [14.5979, 121.0100],
+      [14.5979, 121.0105],
+    ];
+
+    test('scores the WORSE end, so one good end cannot carry a variant', () {
+      final from = [14.5979, 121.0100];
+      final to = [14.5979, 121.0181];
+      expect(variantScoreM(good, from[0], from[1], to[0], to[1]),
+          closeTo(0, 5));
+      // The stub sits on the origin but is ~800 m from the destination.
+      final stubScore =
+          variantScoreM(stub, from[0], from[1], to[0], to[1]);
+      expect(stubScore, greaterThan(500));
+    });
+
+    test('the fuller variant wins on a real trip', () {
+      final from = [14.5979, 121.0118];
+      final to = [14.5979, 121.0163];
+      expect(variantScoreM(good, from[0], from[1], to[0], to[1]),
+          lessThan(variantScoreM(stub, from[0], from[1], to[0], to[1])));
+    });
+
+    test('an empty candidate is infinitely bad, never zero', () {
+      expect(variantScoreM(const [], 14.6, 121.0, 14.6, 121.01),
+          equals(double.infinity));
+    });
+  });
 }

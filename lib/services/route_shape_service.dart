@@ -142,20 +142,50 @@ class RouteShapeService {
     }
   }
 
-  /// The stored road geometry for the route with this exact name, or null.
+  /// The stored road geometry for the named route that actually serves this
+  /// trip, or null.
   ///
-  /// Names come from the same bundled feed that generated the shapes, so this
-  /// is an exact match by design. Duplicates exist in the feed (the same
-  /// corridor filed more than once); any of them is the same road, so the
-  /// first is taken.
-  Future<List<List<double>>?> pathForName(String name) async {
+  /// A NAME IS NOT UNIQUE. The bundled feed files most corridors more than
+  /// once: 798 names carry several shapes, covering 1,622 of the 1,711 routes,
+  /// and those shapes genuinely differ — one name was measured with variants of
+  /// 342, 287, 13 and 9 points. Taking the first match would sometimes draw a
+  /// nine-point stub in place of the real route.
+  ///
+  /// So the variants are ranked by how well each serves THIS trip: the one
+  /// whose road passes closest to the origin and the destination wins, scored
+  /// on the worse of the two ends so a shape cannot qualify on one end alone.
+  /// Ties break toward the more detailed shape.
+  Future<List<List<double>>?> pathForName(
+    String name, {
+    required double fromLat,
+    required double fromLng,
+    required double toLat,
+    required double toLng,
+    double maxEndDistanceM = 500,
+  }) async {
     final db = await _open();
     if (db == null) return null;
     try {
-      final rows = await db.rawQuery(
-          'SELECT polyline FROM shapes WHERE name = ? LIMIT 1', [name]);
+      final rows = await db
+          .rawQuery('SELECT polyline FROM shapes WHERE name = ?', [name]);
       if (rows.isEmpty) return null;
-      return decodePolyline(rows.first['polyline'] as String);
+
+      List<List<double>>? best;
+      var bestScore = double.infinity;
+      for (final r in rows) {
+        final path = decodePolyline(r['polyline'] as String);
+        if (path.length < 2) continue;
+        final score = variantScoreM(path, fromLat, fromLng, toLat, toLng);
+        if (score < bestScore ||
+            (score == bestScore && best != null && path.length > best.length)) {
+          bestScore = score;
+          best = path;
+        }
+      }
+      // A shape that comes nowhere near the trip is the wrong variant, and
+      // drawing it would put the commuter on a road they are not travelling.
+      if (best == null || bestScore > maxEndDistanceM) return null;
+      return best;
     } catch (e) {
       debugPrint('NavAlert: route shape lookup by name failed — $e');
       return null;

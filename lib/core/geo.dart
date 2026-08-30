@@ -150,3 +150,23 @@ List<List<double>> trimPolyline(
   final seg = path.sublist(a, b + 1);
   return reversed ? seg.reversed.toList() : seg;
 }
+
+/// How well a candidate shape serves a trip: the distance from the WORSE of
+/// its two ends to the road.
+///
+/// The worse end decides on purpose. A route name in the bundled feed is not
+/// unique — most corridors are filed several times, and the variants genuinely
+/// differ — so a variant must serve BOTH ends of the trip to be the right one.
+/// Scoring on the better end alone would let a shape that merely brushes the
+/// origin win over the route the commuter is actually riding.
+double variantScoreM(
+  List<List<double>> path,
+  double fromLat,
+  double fromLng,
+  double toLat,
+  double toLng,
+) {
+  final a = distanceToPolylineM(fromLat, fromLng, path);
+  final b = distanceToPolylineM(toLat, toLng, path);
+  return a > b ? a : b;
+}

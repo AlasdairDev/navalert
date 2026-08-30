@@ -566,7 +566,13 @@ class HomeViewModel extends ChangeNotifier {
         if (step.transportMode == 'walk') continue;
         final name = routeNameFromInstruction(step.instruction);
         if (name == null) continue;
-        final path = await RouteShapeService.instance.pathForName(name);
+        final path = await RouteShapeService.instance.pathForName(
+          name,
+          fromLat: trip.originLat,
+          fromLng: trip.originLng,
+          toLat: trip.destinationLat,
+          toLng: trip.destinationLng,
+        );
         if (path == null || path.length < 2) continue;
         return trimPolyline(path, trip.originLat, trip.originLng,
             trip.destinationLat, trip.destinationLng);
