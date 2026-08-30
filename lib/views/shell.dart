@@ -19,6 +19,7 @@ import 'favorites_view.dart';
 import 'history_view.dart';
 import 'home_view.dart';
 import 'settings_view.dart';
+import '../services/notification_permission_guard.dart';
 
 /// Main navigation shell (Figure 19) — bottom bar with
 /// History · Favorites · Home · Emergency · Settings.
@@ -40,7 +41,8 @@ class ShellView extends StatefulWidget {
   State<ShellView> createState() => _ShellViewState();
 }
 
-class _ShellViewState extends State<ShellView> {
+class _ShellViewState extends State<ShellView>
+    with WidgetsBindingObserver {
   int _index = 2; // Home
   bool _resuming = false; // guards the "trip in progress" resume bar
   StreamSubscription? _sosSub;
@@ -50,6 +52,14 @@ class _ShellViewState extends State<ShellView> {
   @override
   void initState() {
     super.initState();
+    // The shortcut notification is the only sign the volume shortcuts are
+    // armed, and Android will not draw it without POST_NOTIFICATIONS. That
+    // permission was requested once, in a skippable onboarding gate — and app
+    // hibernation revokes it again after a spell of not opening NavAlert. So
+    // re-check on every launch AND every resume, not once per install.
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback(
+        (_) => NotificationPermissionGuard.instance.ensure());
     _wireHomeWidgetShortcuts();
     _wireLockScreenSos();
     // ─── DO NOT MODIFY LOGIC (entire block) ───────────────────────────────
@@ -142,10 +152,21 @@ class _ShellViewState extends State<ShellView> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sosSub?.cancel();
     _fakeSub?.cancel();
     _widgetSub?.cancel();
     super.dispose();
+  }
+
+  /// Coming back from Settings — or from anywhere — is exactly when a revoked
+  /// permission gets fixed, so re-read it rather than trusting the value from
+  /// launch.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      NotificationPermissionGuard.instance.ensure();
+    }
   }
 
   @override

@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
 import 'fake_call_view.dart';
+import '../services/notification_permission_guard.dart';
 
 /// Figure 32 — Emergency screen: press-and-hold SOS (3 s) and the
 /// fake-call recording list.
@@ -240,6 +241,41 @@ class _EmergencyViewState extends State<EmergencyView>
             // anything modal raised from here would surface over them. It also
             // has to be seen BEFORE an emergency — discovering the SOS cannot
             // send at the moment it is needed is the failure this prevents.
+            // Notifications off means the "safety shortcuts active" notice
+            // cannot be drawn — and that notice is the only sign the volume
+            // shortcuts are armed. Re-prompting is useless once permanently
+            // denied, so say so plainly and offer the only route that works.
+            ListenableBuilder(
+              listenable: NotificationPermissionGuard.instance,
+              builder: (context, _) {
+                final guard = NotificationPermissionGuard.instance;
+                if (guard.granted) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Card(
+                    color: const Color(0xFF4A2A00),
+                    child: ListTile(
+                      leading: const Icon(Icons.notifications_off,
+                          color: NavAlertColors.warning),
+                      title: const Text('Shortcut alert is hidden',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 14)),
+                      subtitle: const Text(
+                          'Notifications are off, so nothing shows that the '
+                          'volume shortcuts are armed. They still work.',
+                          style: TextStyle(fontSize: 11)),
+                      trailing: ElevatedButton(
+                        onPressed: () async {
+                          await guard.openSettings();
+                          await guard.refresh();
+                        },
+                        child: const Text('Fix'),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
             if (em.smsPermanentlyDenied)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
