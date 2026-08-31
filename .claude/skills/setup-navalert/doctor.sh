@@ -133,6 +133,27 @@ else
         "sdkmanager --install 'platform-tools' 'emulator'  (or Android Studio > SDK Manager)"
     fi
   done
+
+  # ---------- native build toolchain ----------
+  # Flutter's plugins pull in a native build (ndkVersion is set in
+  # app/build.gradle.kts). Neither of these is installed by default with the
+  # command-line tools, and their absence does NOT surface until a release
+  # build fails several minutes in with:
+  #   [CXX1300] CMake '3.22.1' was not found in SDK, PATH, or by cmake.dir
+  # which reads as a project fault rather than a missing SDK component.
+  if [ -d "$SDK/cmake" ] && [ -n "$(ls -A "$SDK/cmake" 2>/dev/null)" ]; then
+    report ok 'CMake' "$(ls "$SDK/cmake" | tr '\n' ' ')"
+  else
+    report fail 'CMake' 'not installed (Gradle needs it for the native build)' \
+      "sdkmanager --install 'cmake;3.22.1'"
+  fi
+
+  if [ -d "$SDK/ndk" ] && [ -n "$(ls -A "$SDK/ndk" 2>/dev/null)" ]; then
+    report ok 'NDK' "$(ls "$SDK/ndk" | tr '\n' ' ')"
+  else
+    report fail 'NDK' 'not installed' \
+      'Android Studio > SDK Manager > SDK Tools > NDK (Side by side)'
+  fi
 fi
 
 # ---------- AVD ----------

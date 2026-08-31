@@ -327,3 +327,5 @@ runbook does this.
 | Gradle picks the wrong Java | `JAVA_HOME` points at a JRE or the wrong major version | Point `JAVA_HOME` at a real JDK 17 |
 | Emulator boots then dies (Aurora) | Software GL segfaults on this hardware | Launch with `-gpu host` — run-navalert does this |
 | `flutter pub get` fails offline | Planning a trip needs a network; the SDK fetch does too | Connect, then re-run |
+| Build fails: `[CXX1300] CMake '3.22.1' was not found` | Flutter's plugins need a native build; CMake is not installed with the command-line tools by default | `sdkmanager --install 'cmake;3.22.1'` — the doctor now checks for this |
+| `flutter test` dies with exit 137, no failing test | OOM-killed: the parallel run needs more memory than the machine has | `flutter test -j 1` |

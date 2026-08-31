@@ -123,6 +123,25 @@ if (-not (Test-Path $sdk)) {
                 "Android Studio > SDK Manager > SDK Tools, install the matching component"
         }
     }
+
+    # ---------- native build toolchain ----------
+    # Flutter's plugins pull in a native build (ndkVersion is set in
+    # app/build.gradle.kts). Neither ships with the command-line tools by
+    # default, and their absence does not surface until a release build fails
+    # minutes in with "[CXX1300] CMake '3.22.1' was not found", which reads as
+    # a project fault rather than a missing SDK component.
+    foreach ($c in @(
+        @('CMake', 'cmake', "sdkmanager --install 'cmake;3.22.1'"),
+        @('NDK',   'ndk',   'Android Studio > SDK Manager > SDK Tools > NDK (Side by side)')
+    )) {
+        $label = $c[0]; $dir = Join-Path $sdk $c[1]; $fix = $c[2]
+        $found = @(Get-ChildItem -Path $dir -Directory -ErrorAction SilentlyContinue)
+        if ($found.Count -gt 0) {
+            Report 'ok' $label (($found | ForEach-Object { $_.Name }) -join ' ') ''
+        } else {
+            Report 'fail' $label 'not installed' $fix
+        }
+    }
 }
 
 # ---------- AVD ----------
