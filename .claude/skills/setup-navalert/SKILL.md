@@ -221,7 +221,7 @@ Check with `swapon --show`: a `file` row alongside `/dev/zram0` means it worked.
 
 ```bash
 flutter pub get
-flutter test          # 286 passing as of v1.1.1 build 4
+flutter test          # 321 passing as of v1.1.2 build 5
 ```
 
 ### The AVD's *name* matters, not just that one exists
@@ -238,7 +238,7 @@ or more under other names, pass one: `boot-emulator.sh <name>`. To create the
 default outright: `flutter emulators --create --name Pixel_6`.
 
 The count rises as tests are added — what matters is that they all pass, not
-that the number still reads 286. If they pass, the machine is genuinely ready — that exercises the analyzer,
+that the number still reads 321. If they pass, the machine is genuinely ready — that exercises the analyzer,
 the full dependency graph and the whole `TripViewModel` state machine.
 
 ### A fresh emulator has no GPS — set one
@@ -264,6 +264,33 @@ byte-for-byte the one you release.
 To launch the app, use **run-navalert**, which sets this automatically and
 handles the per-machine emulator quirks (the Aurora laptop needs `-gpu host` or
 qemu segfaults on boot).
+
+## Regenerating the bundled route shapes (maintainers only)
+
+**You do not need this to build or run NavAlert.** `assets/gtfs/shapes.db` is
+committed, so a fresh clone has the road geometry already. This is only for
+refreshing it when the GTFS feed changes.
+
+It needs a **local OSRM**, not the public demo server: the full feed is 1,711
+multi-waypoint requests, which the demo server rate-limits and its acceptable
+use does not cover. `tool/gen_shapes.py` refuses that run rather than getting
+you blocked mid-preparation.
+
+```bash
+tool/update_gtfs.sh <path-to-new-gtfs-dir>
+```
+
+That regenerates `routes.json.gz` and `shapes.db` **together** — they are
+coupled, and refreshing one alone makes every shape lookup miss silently — then
+runs the consistency test. If no OSRM graph exists it prints the one-time
+build (podman or docker, ~10 minutes).
+
+**Clip the OSM extract to NCR first on any machine under ~16 GB.** The full
+Philippines extract is 577 MB; clipped to the app's own NCR bounds it is 89 MB,
+and the graph build then peaks at 683 MB instead of exhausting the machine. The
+runbook does this.
+
+---
 
 ## Common failures
 

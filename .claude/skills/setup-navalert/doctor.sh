@@ -188,7 +188,7 @@ fi
 echo
 if [ "$MISSING_COUNT" -eq 0 ]; then
   echo "${G}Everything the project needs is present.${N}"
-  echo 'Next: flutter pub get && flutter test    (expect 286 passing)'
+  echo 'Next: flutter pub get && flutter test    (expect 321 passing)'
   exit 0
 fi
 

@@ -7,7 +7,7 @@
 ![Dart](https://img.shields.io/badge/Dart-3.11-0175C2)
 ![Kotlin](https://img.shields.io/badge/native-Kotlin-7F52FF)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM-7C6BC4)
-![Tests](https://img.shields.io/badge/tests-295%20passing-success)
+![Tests](https://img.shields.io/badge/tests-321%20passing-success)
 ![Version](https://img.shields.io/badge/release-v1.1.0-B39DDB)
 
 > Capstone Project — BSIT, Polytechnic University of the Philippines.
@@ -250,6 +250,68 @@ return.
 
 ---
 
+## Offline road geometry (bundled PUV shapes)
+
+The route polyline used to come from OSRM at runtime and fell back to a
+straight line when the request failed. A commute is when the network is worst,
+so the map stopped showing the real road exactly when it mattered, and said
+nothing about it.
+
+Road geometry for **all 1,711 routes** in the bundled feed is now pre-computed
+at build time and shipped inside the app.
+
+**Phase 1 — `tool/gen_shapes.py`, on a laptop.** Every stop of a route is sent
+to OSRM as a waypoint. Routing terminal-to-terminal instead would return the
+*fastest* road between the endpoints, not the road the jeepney drives — a
+43-stop route through side streets comes back as a run down the highway. That
+shape is confidently wrong, which is worse than a straight line, because a
+straight line is visibly an approximation.
+
+Simplified with Douglas–Peucker at 8 m and stored as encoded polylines:
+
+| | |
+|---|---|
+| Routes | 1,711 (0 failed) |
+| Points | 396,316 (avg 231/route) |
+| Database | **1.9 MB** |
+| Generation | 81.6 s against a local OSRM |
+
+**Phase 2 — at runtime.** The shape is looked up by the route name the commute
+guide tells the rider to board, then trimmed to the portion actually ridden. A
+stored shape runs terminal to terminal; drawing all of it puts tens of
+kilometres of line on the map for a two-kilometre trip.
+
+Two details that are not obvious:
+
+- **A route name is not unique.** The feed files most corridors more than once:
+  798 names carry several shapes, covering 1,622 of the 1,711 routes, and they
+  genuinely differ — one name has variants of 342, 287, 13 and 9 points.
+  Variants are ranked by distance from the *worse* of the trip's two ends, so a
+  shape must serve both. Taking the first match would sometimes draw a
+  nine-point stub twelve kilometres away.
+- **A walking suggestion draws no PUV shape at all.** Matching by proximity
+  drew whichever route ran near both ends, asserting a ride that was never
+  suggested.
+
+Verified on a device in **airplane mode**: a *Jeep: CUBAO DIVISORIA* trip drew
+its real road geometry with the network unreachable and map tiles blank.
+
+### Regenerating
+
+`routes.json.gz` and `shapes.db` are **coupled** — the shapes are keyed on the
+feed's route names. Refresh one without the other and every lookup misses
+silently, falling back to straight lines with nothing on screen to say so. Use:
+
+```bash
+tool/update_gtfs.sh <path-to-new-gtfs-dir>
+```
+
+which regenerates both in order and runs the consistency test. The generator
+also refuses to resume across a feed change: resume is keyed on route index, so
+continuing would keep old shapes under new indices and mix two feeds.
+
+---
+
 ## What actually works offline
 
 | Capability | Offline? |
@@ -260,10 +322,11 @@ return.
 | SOS SMS | ✅ (native `SmsManager`, no data required) |
 | Encrypted trip history / contacts / favourites | ✅ |
 | Destination **search** (Nominatim) | ❌ needs network |
-| Road **geometry** for the polyline (OSRM) | ❌ needs network |
+| Road **geometry** for the route polyline | ✅ (bundled shapes) |
 | **First** download of a given map tile | ❌ needs network |
 
-Planning a trip needs a connection. Riding it does not.
+Planning a trip needs a connection **for search only**. Riding it does not, and
+neither does drawing the road it follows.
 
 ---
 
@@ -321,16 +384,19 @@ covers Aurora DX / Fedora Atomic, where the toolchain must be installed into
 
 ```bash
 flutter analyze   # expect: No issues found
-flutter test      # expect: 295/295 passing
+flutter test      # expect: 321/321 passing
 ```
 
-**21 suites, 295 tests**, covering the adaptive alarm engine, the fare matrix
+**23 suites, 321 tests**, covering the adaptive alarm engine, the fare matrix
 and NCR bounds, the Dijkstra router against the real production GTFS feed, the
 full `TripViewModel` state machine driven from a mock GPS stream on a virtual
 clock, the commute-guide overlay geometry measured against a mounted widget
 tree, the SOS failure-code contract, the three-second accidental-trigger guard,
-the disk tile cache, and the distance rule behind current-location matching —
-including that an unknown position never counts as a match.
+the disk tile cache, the distance rule behind current-location matching —
+including that an unknown position never counts as a match — and the offline
+route-shape geometry: polyline decoding against the Google reference vector and
+a real generated shape, trimming to the ridden portion, and picking between
+same-named route variants.
 
 They do **not** cover pixel rendering or radio behaviour. Those are verified on
 hardware — see the checklist in [SETUP.md](SETUP.md).
