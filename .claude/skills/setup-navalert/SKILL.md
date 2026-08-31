@@ -169,6 +169,8 @@ do not fit at once.
 | Emulator cores 4 → 2 | `~/.android/avd/<avd>.avd/config.ini` | leaves CPU for the compiler |
 | Don't run both at once | habit | build, *then* boot the emulator |
 | Close spare editor windows | habit | reclaims GBs immediately |
+| `./gradlew --stop` before booting the emulator | habit | measured: 3027 → 4090 MB free |
+| `flutter test -j 1` | flag | avoids an exit-137 OOM kill on the suite |
 
 `boot-emulator.sh` now warns when under 2600 MB is available rather than letting
 you add 2 GB to a machine that has none.
@@ -201,6 +203,29 @@ must read `navalert-emulator-*.scope`, not `app-code-*.scope`.
 **This protects the emulator path only.** A Gradle build started from a VS Code
 terminal is still inside VS Code's scope, so a build-triggered OOM can do the
 same thing. Run builds from a separate terminal, or rely on the heap cap above.
+
+### `flutter test` gets killed — run it with `-j 1`
+
+The suite runs test files in parallel, one Dart VM per job. On this laptop that
+is enough to exhaust memory on its own, and the run dies with **exit code 137**
+— SIGKILL from the OOM killer, with no failing test named, which reads like a
+broken toolchain rather than a memory problem:
+
+```bash
+flutter test -j 1        # one file at a time
+```
+
+It is slower (about 25 s instead of 16 s for 321 tests) and it always finishes.
+Measured cause: an editor holding 3–4 GB leaves under 2 GB free, and the
+parallel run wants more than that.
+
+Kill the emulator first if one is up — it is another ~2.8 GB, and the two
+together will not fit:
+
+```bash
+adb emu kill
+cd android && ./gradlew --stop      # reclaims ~1 GB more
+```
 
 ### Add real swap
 
