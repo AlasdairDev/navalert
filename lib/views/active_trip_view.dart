@@ -13,6 +13,7 @@ import 'commute_guide_sheet.dart';
 import 'commute_sheet_layout.dart';
 import 'fake_call_view.dart';
 import 'trip_map.dart';
+import 'overshoot_button_layout.dart';
 
 /// Figures 24–29 — Active Trip (Monitoring Mode), the three alarm
 /// stages, and Overshoot Detected.
@@ -1054,26 +1055,34 @@ class _OvershootPromptState extends State<_OvershootPrompt> {
                       style: const TextStyle(
                           color: NavAlertColors.textSecondary)),
                   const SizedBox(height: 18),
-                  Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                    // Matched to the Alarm Stage 1/2 Snooze/Dismiss buttons'
-                    // measured natural size (146.7 x 48 under the app theme)
-                    // so this pair renders at exactly the same size.
-                    SizedBox(
-                      width: 147,
-                      height: 48,
-                      child: ElevatedButton(
-                          onPressed: () => _answer(false),
-                          child: const Text('No')),
-                    ),
-                    const SizedBox(width: 14),
-                    SizedBox(
-                      width: 147,
-                      height: 48,
-                      child: ElevatedButton(
-                          onPressed: () => _answer(true),
-                          child: const Text('Yes')),
-                    ),
-                  ]),
+                  // Sized against the space the card actually offers, not a
+                  // fixed 147: that matched the Snooze/Dismiss pair but needed
+                  // 400 dp of screen, so "Yes" overflowed the card on a 360 dp
+                  // phone — the size the mockups are drawn against. See
+                  // OvershootButtonLayout.
+                  LayoutBuilder(builder: (context, constraints) {
+                    final w = OvershootButtonLayout.buttonWidth(
+                        constraints.maxWidth);
+                    return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: w,
+                            height: OvershootButtonLayout.height,
+                            child: ElevatedButton(
+                                onPressed: () => _answer(false),
+                                child: const Text('No')),
+                          ),
+                          const SizedBox(width: OvershootButtonLayout.gap),
+                          SizedBox(
+                            width: w,
+                            height: OvershootButtonLayout.height,
+                            child: ElevatedButton(
+                                onPressed: () => _answer(true),
+                                child: const Text('Yes')),
+                          ),
+                        ]);
+                  }),
                 ]),
               ),
             ),
