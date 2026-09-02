@@ -59,6 +59,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   home_widget: ^0.9.3
   flutter_map_cache: ^2.1.0
+  # Declared explicitly, not leaned on as a transitive of flutter_map_cache:
+  # the route tile prefetcher reuses the tile layer's own Dio client so warmed
+  # tiles land under the same cache keys the map reads.
+  dio: ^5.10.0
   dio_cache_interceptor: ^4.0.7
 
 dev_dependencies:

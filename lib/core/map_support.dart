@@ -3,6 +3,7 @@ import 'dart:math' show Point;
 import 'package:dio_cache_interceptor/dio_cache_interceptor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_map_cache/flutter_map_cache.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:path_provider/path_provider.dart';
@@ -101,8 +102,22 @@ class NavAlertMap {
         // OSM blocks clients without a valid identifying User-Agent. The
         // default provider derives one from `userAgentPackageName`; a custom
         // provider must carry it itself.
-        headers: {'User-Agent': 'ph.edu.pup.navalert (flutter_map)'},
+        // A MUTABLE COPY, deliberately. flutter_map's TileProvider writes into
+        // the map it is given (it fills in a User-Agent from
+        // userAgentPackageName when one is absent), so handing it the const
+        // below throws "Cannot modify unmodifiable map" the first time a map is
+        // built. Caught by commute_guide_overlay_test, which mounts the real
+        // tile layer rather than a stub.
+        headers: Map<String, String>.of(tileHeaders),
       );
+
+  /// Identifying headers OSM requires. Also passed explicitly by the
+  /// prefetcher: `TileProvider.headers` are applied by flutter_map when it
+  /// builds an image, NOT by the Dio client, so a direct `dio.get` carries none
+  /// of them and would be refused.
+  static const Map<String, String> tileHeaders = {
+    'User-Agent': 'ph.edu.pup.navalert (flutter_map)',
+  };
 
   /// One tile layer for every map.
   ///
@@ -152,17 +167,51 @@ class NavAlertMap {
   /// own distinct hues, so a veil on top tints without erasing that.
   static const _mapTilerKey = 'JD7g3DlG0AI6ritolVpP';
 
+  /// The tile URL template for a basemap, and the one place either is written.
+  ///
+  /// Shared with the prefetcher, which must ask for the BYTE-IDENTICAL url the
+  /// layer will later request: the disk cache is keyed on it, so a template
+  /// that drifts by one character warms tiles the map will never look for.
+  static String urlTemplate({required bool dark}) => dark
+      ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}{r}.png?key=$_mapTilerKey'
+      : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+  /// Whether this device and basemap take the native @2x path — see the retina
+  /// note above. Shared for the same reason as [urlTemplate].
+  static bool retinaFor(BuildContext context, {required bool dark}) =>
+      dark && RetinaMode.isHighDensity(context);
+
+  /// A client for the route prefetcher: its OWN Dio, writing into the SAME
+  /// disk store, with the same default key builder.
+  ///
+  /// DO NOT MODIFY LOGIC: separate client, shared store. Reusing the tile
+  /// layer's own Dio looks tidier and shares the key builder for free, but it
+  /// puts dozens of warm-up requests through the exact connection pool the live
+  /// map depends on — and flutter_map DISPOSES a TileProvider when its layer
+  /// goes away, which can close that client underneath the next screen. The
+  /// cache key is a pure function of the URL
+  /// (`CacheOptions.defaultCacheKeyBuilder`), so a separate client still lands
+  /// its tiles exactly where the map looks for them.
+  static Dio buildPrefetchDio() => Dio()
+    ..interceptors.add(DioCacheInterceptor(
+      options: CacheOptions(
+        store: _store,
+        policy: CachePolicy.forceCache,
+        maxStale: const Duration(days: 30),
+        keyBuilder: CacheOptions.defaultCacheKeyBuilder,
+        allowPostMethod: true,
+      ),
+    ));
+
   static Widget tiles(BuildContext context) {
     final dark = context.watch<AppViewModel>().mapDarkMode;
     final layer = TileLayer(
-        urlTemplate: dark
-            ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}{r}.png?key=$_mapTilerKey'
-            : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        urlTemplate: urlTemplate(dark: dark),
         userAgentPackageName: 'ph.edu.pup.navalert',
         // Only where the source has native @2x. See the note above: without a
         // `{r}` placeholder this flag does not mean "sharper", it means "four
         // times as many requests".
-        retinaMode: dark && RetinaMode.isHighDensity(context),
+        retinaMode: retinaFor(context, dark: dark),
         maxNativeZoom: 19,
         maxZoom: 20,
         // Disk-cached AND cancellable: CachedTileProvider reports

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
@@ -8,6 +10,7 @@ import '../core/map_support.dart';
 import '../core/theme.dart';
 import '../models/models.dart';
 import '../services/sound_service.dart';
+import '../services/tile_prefetch_service.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/home_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
@@ -164,7 +167,11 @@ class _RouteViewState extends State<RouteView> {
               ]),
             );
         return Padding(
-          padding: const EdgeInsets.all(20),
+          // Same edge-to-edge rule as the routes panel above: a modal sheet is
+          // not inset for the navigation bar on its own, so its final row of
+          // buttons ("Cancel" / "Start Trip") sits underneath one.
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, 20 + MediaQuery.paddingOf(ctx).bottom),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const _SheetHandle(),
             const Text('Mode Priority',
@@ -225,7 +232,11 @@ class _RouteViewState extends State<RouteView> {
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) => StatefulBuilder(builder: (ctx, setSheet) {
         return Padding(
-          padding: const EdgeInsets.all(20),
+          // Same edge-to-edge rule as the routes panel above: a modal sheet is
+          // not inset for the navigation bar on its own, so its final row of
+          // buttons ("Cancel" / "Start Trip") sits underneath one.
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, 20 + MediaQuery.paddingOf(ctx).bottom),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             const _SheetHandle(),
             const Text('Trip Settings',
@@ -580,7 +591,21 @@ class _RouteViewState extends State<RouteView> {
               color: NavAlertColors.background,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+            // DO NOT MODIFY LOGIC (the bottom inset): this panel is the LAST
+            // thing in a Scaffold body, and from Android 15 an app draws
+            // edge-to-edge by default — so the body extends BEHIND the
+            // navigation bar unless it says otherwise. With a flat 16 dp here,
+            // "Show Commute Guide", "Close" and "Start Trip" were all drawn
+            // underneath it: clipped to read, and in the lower part of their
+            // own hit box the tap went to the system bar instead of the button.
+            // Seen on the emulator, where tapping the visible label opened the
+            // launcher.
+            //
+            // The panel is not wrapped in SafeArea because it must keep
+            // painting its background all the way down to the screen edge;
+            // only the CONTENT needs lifting clear.
+            padding: EdgeInsets.fromLTRB(
+                20, 12, 20, 16 + MediaQuery.paddingOf(context).bottom),
             child:
                 _showGuide ? _buildCommuteGuide(home) : _buildSuggestions(home),
           ),
@@ -638,10 +663,43 @@ class _RouteViewState extends State<RouteView> {
       ElevatedButton(
         onPressed: home.selectedSuggestion == null
             ? null
-            : () => setState(() => _showGuide = true),
+            : () {
+                // Opening the guide is the first moment a rider has actually
+                // committed to a route, and they are still on the planning
+                // screen — which is the last moment the phone is reliably
+                // online. Warm the map along it now, or the trip map is grey
+                // for the whole journey. Not awaited and never blocking: it is
+                // an optimisation, not a precondition for starting a trip.
+                _warmRouteTiles(home);
+                setState(() => _showGuide = true);
+              },
         child: const Text('Show Commute Guide'),
       ),
     ]);
+  }
+
+  /// The route path the tile cache has already been warmed for, so flicking
+  /// between the two suggestions does not re-warm the same corridor.
+  List<List<double>>? _warmedPath;
+
+  /// Pre-caches map tiles along the planned route (see [TilePrefetchService]).
+  void _warmRouteTiles(HomeViewModel home) {
+    final path = home.routePath;
+    if (path.isEmpty || identical(path, _warmedPath)) return;
+    _warmedPath = path;
+    final dark = context.read<AppViewModel>().mapDarkMode;
+    unawaited(TilePrefetchService.instance
+        .warmRoute(
+          path: path,
+          template: NavAlertMap.urlTemplate(dark: dark),
+          retina: NavAlertMap.retinaFor(context, dark: dark),
+          dio: NavAlertMap.buildPrefetchDio(),
+          headers: NavAlertMap.tileHeaders,
+        )
+        .catchError((Object e) {
+          debugPrint('NavAlert: route tile warm failed — $e');
+          return 0;
+        }));
   }
 
   Widget _suggestionCard(HomeViewModel home, RouteSuggestion s) {
