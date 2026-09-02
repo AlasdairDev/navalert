@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:navalert/core/map_support.dart';
 import 'package:navalert/services/tile_prefetch_service.dart';
 
 /// Pre-caching map tiles along a planned route.
@@ -105,6 +106,54 @@ void main() {
         [cubaoLat, cubaoLng],
       ]);
       expect(tiles, isNotEmpty);
+    });
+  });
+
+  group('the warmed zoom is the zoom the trip map asks for', () {
+    // THE bug this whole service exists to close, and the one it first got
+    // wrong. flutter_map does not request the camera's zoom — it requests
+    // `zoom.round()` — so the trip map following at 16.5 asks for tile zoom 17.
+    // The first version of the prefetcher warmed a hardcoded 15 and 16, filling
+    // the cache with tiles that screen would never request, and the offline
+    // trip map stayed blank with a full cache sitting next to it.
+    test('the trip map resolves to a tile zoom one step deeper than it looks',
+        () {
+      expect(NavAlertMap.tileZoomFor(NavAlertMap.tripFollowZoom), 17,
+          reason: '16.5.round() is 17 — Dart rounds half away from zero');
+    });
+
+    test('the prefetch warms exactly that zoom', () {
+      expect(NavAlertMap.prefetchZooms,
+          contains(NavAlertMap.tileZoomFor(NavAlertMap.tripFollowZoom)),
+          reason: 'the offline trip map renders nothing without it');
+    });
+
+    test('it also warms one step out, for the first thing a lost rider does',
+        () {
+      expect(NavAlertMap.prefetchZooms,
+          contains(NavAlertMap.tileZoomFor(NavAlertMap.tripFollowZoom) - 1));
+    });
+
+    test('changing the follow zoom cannot silently orphan the cache', () {
+      // The drift guard. If someone retunes the trip camera, the warmed zooms
+      // must follow it — they are derived from the same constant, not typed in
+      // beside it.
+      for (final camera in [14.0, 15.4, 16.5, 17.6]) {
+        final z = NavAlertMap.tileZoomFor(camera);
+        expect(z, camera.round());
+      }
+    });
+
+    test('a corridor built for those zooms carries them', () {
+      final tiles = TilePrefetchService.corridor(
+        [
+          [cubaoLat, cubaoLng],
+          [cubaoLat - 0.01, cubaoLng - 0.01],
+        ],
+        zooms: NavAlertMap.prefetchZooms,
+      );
+      expect(tiles.map((t) => t.z).toSet(),
+          NavAlertMap.prefetchZooms.toSet());
     });
   });
 

@@ -181,6 +181,36 @@ class NavAlertMap {
   static bool retinaFor(BuildContext context, {required bool dark}) =>
       dark && RetinaMode.isHighDensity(context);
 
+  /// The zoom the ACTIVE TRIP map follows the rider at.
+  ///
+  /// Lives here, beside the tile configuration, because the prefetcher has to
+  /// warm the zoom this screen will actually ask for — and flutter_map does not
+  /// ask for this number. It asks for `zoom.round()`
+  /// (`TileLayer._clampToNativeZoom`), so 16.5 requests tile zoom **17**.
+  ///
+  /// DO NOT MODIFY LOGIC: that rounding is the whole reason the offline trip
+  /// map was blank. Every other screen sits on a whole number — Home opens at
+  /// 14 — so every other screen cached the zoom it displayed and worked offline.
+  /// The trip map alone asked for 17, which nothing had ever cached, and it
+  /// therefore rendered street detail online and nothing at all in a dead zone:
+  /// the one screen whose whole purpose is a commute through a dead zone.
+  static const double tripFollowZoom = 16.5;
+
+  /// The tile zoom a camera zoom resolves to, by flutter_map's own rule.
+  static int tileZoomFor(double cameraZoom) => cameraZoom.round();
+
+  /// Zooms the route prefetcher warms.
+  ///
+  /// Derived, never hardcoded: the trip map's tile zoom, plus one step out for
+  /// the first thing a lost commuter does. Hardcoding these is exactly the bug
+  /// this replaces — the first version warmed 15 and 16 against a screen that
+  /// was asking for 17, so the cache filled with tiles nothing would ever
+  /// request.
+  static List<int> get prefetchZooms {
+    final z = tileZoomFor(tripFollowZoom);
+    return [z - 1, z];
+  }
+
   /// A client for the route prefetcher: its OWN Dio, writing into the SAME
   /// disk store, with the same default key builder.
   ///

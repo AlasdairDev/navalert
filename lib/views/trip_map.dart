@@ -101,7 +101,11 @@ class _TripMapViewState extends State<TripMapView>
 
   /// [EDIT] Zoom the camera holds while following. Street-level: close enough
   /// to read which corner is coming, wide enough to see the next turn.
-  static const double _followZoom = 16.5;
+  ///
+  /// DEFINED IN NavAlertMap, not here, because the route tile prefetcher has to
+  /// warm whatever this resolves to. Changing it changes which tiles are cached
+  /// for an offline commute; the two must never drift apart.
+  static const double _followZoom = NavAlertMap.tripFollowZoom;
 
   /// The fix the camera has already been moved to. Without this the camera
   /// re-animates on EVERY rebuild — and this widget rebuilds on every GPS tick,

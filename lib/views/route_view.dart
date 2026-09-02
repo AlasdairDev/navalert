@@ -691,6 +691,7 @@ class _RouteViewState extends State<RouteView> {
     unawaited(TilePrefetchService.instance
         .warmRoute(
           path: path,
+          zooms: NavAlertMap.prefetchZooms,
           template: NavAlertMap.urlTemplate(dark: dark),
           retina: NavAlertMap.retinaFor(context, dark: dark),
           dio: NavAlertMap.buildPrefetchDio(),

@@ -144,12 +144,13 @@ class TilePrefetchService {
     required String template,
     required bool retina,
     required Dio dio,
+    List<int>? zooms,
     Map<String, String> headers = const {},
   }) async {
     if (_busy || path.isEmpty) return 0;
     _busy = true;
     try {
-      final tiles = corridor(path);
+      final tiles = corridor(path, zooms: zooms ?? TilePrefetchService.zooms);
       var done = 0;
       for (var i = 0; i < tiles.length; i += concurrency) {
         final batch = tiles.skip(i).take(concurrency).map((t) async {
