@@ -109,11 +109,27 @@ class NavAlertMap {
   /// DO NOT MODIFY LOGIC (the buffer values): they control how many tiles are
   /// fetched, and OSM's public server is rate-limited.
   ///
-  /// `retinaMode` keeps the map sharp on high-density screens, but flutter_map
-  /// has no @2x OSM endpoint to use, so it *simulates* retina by fetching one
-  /// zoom level deeper — that is 4x the tiles for the same area. It stays
-  /// CONDITIONAL on the device: forcing it true would quadruple the tile count
-  /// on a low-density screen that cannot show the extra detail. `panBuffer`
+  /// `retinaMode` keeps the map sharp on high-density screens, and flutter_map
+  /// has TWO ways of delivering it. Given a `{r}` placeholder it substitutes
+  /// the provider's own @2x endpoint: the SAME number of tiles, at twice the
+  /// resolution. Given no placeholder it falls back to *simulating* retina by
+  /// fetching one zoom level deeper — 4x the tiles for the same area, every one
+  /// of them a separate request against a rate-limited server.
+  ///
+  /// So retina is decided PER SOURCE, not per device. MapTiler serves @2x
+  /// natively (verified: the `{r}` URL returns a real 2x PNG), so dark mode
+  /// takes the cheap path and stays sharp. OSM has no @2x endpoint at all, so
+  /// on the light basemap "retina" could only ever mean the 4x simulation —
+  /// which is why it is OFF there. The cost is slightly softer labels on a
+  /// high-density screen; the benefit is a QUARTER of the requests on the
+  /// connection a commuter actually has.
+  ///
+  /// Measured before changing anything, because the intuition was wrong: from
+  /// this network OSM answers in ~35 ms and MapTiler in ~550 ms, so moving the
+  /// light basemap to MapTiler — which looked like the obvious fix for a slow
+  /// map — would have made it about fifteen times worse. The slow path was
+  /// never the server; it was asking it for four times as many tiles.
+  /// `panBuffer`
   /// multiplies on top of that: every extra ring widens the grid in BOTH
   /// directions, so panBuffer 2 turned a ~3x5 viewport (15 tiles) into 7x9
   /// (63) — about 250 tiles per load once retina is applied, which is why the
@@ -140,10 +156,13 @@ class NavAlertMap {
     final dark = context.watch<AppViewModel>().mapDarkMode;
     final layer = TileLayer(
         urlTemplate: dark
-            ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}.png?key=$_mapTilerKey'
+            ? 'https://api.maptiler.com/maps/basic-v2-dark/256/{z}/{x}/{y}{r}.png?key=$_mapTilerKey'
             : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         userAgentPackageName: 'ph.edu.pup.navalert',
-        retinaMode: RetinaMode.isHighDensity(context),
+        // Only where the source has native @2x. See the note above: without a
+        // `{r}` placeholder this flag does not mean "sharper", it means "four
+        // times as many requests".
+        retinaMode: dark && RetinaMode.isHighDensity(context),
         maxNativeZoom: 19,
         maxZoom: 20,
         // Disk-cached AND cancellable: CachedTileProvider reports
