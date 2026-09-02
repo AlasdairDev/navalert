@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:navalert/core/theme.dart';
 import 'package:navalert/models/guide_leg.dart';
@@ -281,6 +282,215 @@ void main() {
         reason: 'the final step cannot be scrolled clear of the seam — it '
             'stays cut off against the footer no matter how far the rider '
             'scrolls');
+  });
+
+  // ── Arming the alarm must not take the tracking away ──────────────────
+  //
+  // Reported after v2.0.0: "the real time commuter tracking is not showing when
+  // the alarm is enabled... the commute guide that shows real time tracking
+  // cannot be seen anywhere."
+  //
+  // It was accurate. The monitoring screen picked its layout off
+  // trip.alarmEnabled alone, so arming the alarm swapped the whole map-and-
+  // guide layout out for the resting Figure 24 face and there was no way back
+  // to it. The two features were mutually exclusive, which neither the
+  // requirements nor the mockups ever asked for: Figure 24 is the screen for a
+  // rider who is asleep, not the only screen a rider with an alarm may have.
+  group('with the alarm armed', () {
+    setUp(() => trip.trip!.alarmEnabled = true);
+
+    testWidgets('the resting face opens first, and offers the way to the map',
+        (t) async {
+      await pumpGuide(t);
+
+      // Figure 24, unchanged — this is still what an alarm-armed trip opens on.
+      expect(find.text('Get some rest. We got you.'), findsOneWidget);
+      expect(find.byType(FlutterMap), findsNothing);
+      // ...but the tracking is now reachable, which is the whole report.
+      expect(find.text('Live map'), findsOneWidget);
+    });
+
+    testWidgets('opening the live map keeps the alarm armed', (t) async {
+      await pumpGuide(t);
+      await t.tap(find.text('Live map'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      expect(find.byType(FlutterMap), findsOneWidget,
+          reason: 'the tracking map is what the rider went looking for');
+      expect(find.byType(CommuteGuideSheet), findsOneWidget);
+      expect(find.text('Guide step number 1'), findsOneWidget);
+      // The point of the fix: they did not have to give up the alarm for it.
+      expect(trip.trip!.alarmEnabled, isTrue);
+      expect(trip.showLiveTracking, isTrue);
+    });
+
+    testWidgets('the guide appears exactly once, never doubled', (t) async {
+      await pumpGuide(t);
+      await t.tap(find.text('Live map'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      // ActiveTripView stacks a collapsed guide sheet over the RESTING face.
+      // If that condition ignored live tracking, the rider would get the
+      // inline guide plus that sheet — two copies, the second sitting on the
+      // safety controls.
+      expect(find.byType(CommuteGuideSheet), findsOneWidget);
+      expect(find.text('Guide step number 1'), findsOneWidget);
+    });
+
+    testWidgets('the moon button goes back to the resting face', (t) async {
+      await pumpGuide(t);
+      await t.tap(find.text('Live map'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      await t.tap(find.byTooltip('Back to the resting screen'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Get some rest. We got you.'), findsOneWidget);
+      expect(find.byType(FlutterMap), findsNothing);
+      expect(trip.trip!.alarmEnabled, isTrue);
+    });
+
+    testWidgets('the safety controls survive the switch', (t) async {
+      await pumpGuide(t);
+      await t.tap(find.text('Live map'));
+      await t.pump();
+      await t.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('Slide to Stop'), findsOneWidget);
+      expect(find.text('SOS'), findsOneWidget);
+      expect(find.text('Fake Call'), findsOneWidget);
+    });
+
+    testWidgets('with the alarm OFF there is no moon button, because there is '
+        'no resting face to return to', (t) async {
+      trip.trip!.alarmEnabled = false;
+      await pumpGuide(t);
+
+      expect(find.byType(FlutterMap), findsOneWidget);
+      expect(find.byTooltip('Back to the resting screen'), findsNothing);
+    });
+  });
+
+  // ── One leg on the map, not the journey ───────────────────────────────
+  //
+  // Reported alongside the above: "after starting, the full preview is still
+  // there and not yet segmented... it should not show the whole path to the
+  // destination but only the path of the certain transport type."
+  group('the map draws the leg the rider is on', () {
+    // Three legs with visibly different geometry, so which one is drawn can be
+    // read straight off the rendered polyline.
+    List<GuideLeg> segmentedLegs() => [
+          GuideLeg(
+            step: RouteStep(
+                stepId: 's1',
+                suggestionId: 'sug',
+                stepNumber: 1,
+                transportMode: 'walk',
+                instruction: 'Walk to Terminal'),
+            startLat: 14.60,
+            startLng: 121.00,
+            endLat: 14.61,
+            endLng: 121.01,
+            path: const [
+              [14.60, 121.00],
+              [14.61, 121.01],
+            ],
+          ),
+          GuideLeg(
+            step: RouteStep(
+                stepId: 's2',
+                suggestionId: 'sug',
+                stepNumber: 2,
+                transportMode: 'jeepney',
+                instruction: 'Ride jeepney "SOME ROUTE" and alight at Stop'),
+            startLat: 14.61,
+            startLng: 121.01,
+            endLat: 14.64,
+            endLng: 121.04,
+            path: const [
+              [14.61, 121.01],
+              [14.62, 121.02],
+              [14.63, 121.03],
+              [14.64, 121.04],
+            ],
+          ),
+          GuideLeg(
+            step: RouteStep(
+                stepId: 's3',
+                suggestionId: 'sug',
+                stepNumber: 3,
+                transportMode: 'walk',
+                instruction: 'Walk to SM North EDSA'),
+            startLat: 14.64,
+            startLng: 121.04,
+            endLat: 14.6560,
+            endLng: 121.0300,
+            path: const [
+              [14.64, 121.04],
+              [14.6560, 121.0300],
+            ],
+          ),
+        ];
+
+    /// The route line actually rendered — the coloured stroke, not the white
+    /// casing drawn beneath it.
+    List<LatLng> drawnLine(WidgetTester t) {
+      final layer = t.widget<PolylineLayer>(find.byType(PolylineLayer).first);
+      return layer.polylines.last.points;
+    }
+
+    setUp(() => trip.guide = GuideProgress(segmentedLegs()));
+
+    testWidgets('on step 1 it draws the walk, not the whole journey',
+        (t) async {
+      await pumpGuide(t);
+
+      final line = drawnLine(t);
+      expect(line, hasLength(2),
+          reason: 'the walk to the terminal is a two-point line; anything '
+              'longer means the ride was drawn along with it');
+      expect(line.first.latitude, closeTo(14.60, 1e-9));
+      expect(line.last.latitude, closeTo(14.61, 1e-9));
+    });
+
+    testWidgets('advancing to the ride swaps the line over', (t) async {
+      await pumpGuide(t);
+      trip.markGuideLegDone();
+      await t.pump();
+
+      final line = drawnLine(t);
+      expect(line, hasLength(4), reason: 'the jeepney shape is now the line');
+      expect(line.last.latitude, closeTo(14.64, 1e-9));
+      expect(line.first.latitude, closeTo(14.61, 1e-9),
+          reason: 'the line starts where the rider boards, not at the origin — '
+              'the walk they already finished is no longer on the map');
+    });
+
+    testWidgets('a leg with no geometry still gets a line to head along',
+        (t) async {
+      // Synthetic suggestions have no shape for their fictional middle legs.
+      // Drawing nothing would leave the rider on a bare basemap with no
+      // indication of direction, which is worse than a visible approximation.
+      trip.guide = GuideProgress([
+        GuideLeg(
+          step: RouteStep(
+              stepId: 's1',
+              suggestionId: 'sug',
+              stepNumber: 1,
+              transportMode: 'walk',
+              instruction: 'Walk'),
+          endLat: 14.61,
+          endLng: 121.01,
+        ),
+      ]);
+      await pumpGuide(t);
+
+      expect(drawnLine(t), hasLength(2));
+    });
   });
 }
 

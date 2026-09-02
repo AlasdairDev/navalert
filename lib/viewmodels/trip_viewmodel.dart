@@ -115,6 +115,31 @@ class TripViewModel extends ChangeNotifier {
   /// favourites shortcut). Memory-only — see [GuideLeg].
   GuideProgress guide = GuideProgress(const []);
 
+  /// Whether the monitoring screen is showing the live tracking map and guide
+  /// rather than the resting alarm face (Figure 24).
+  ///
+  /// With the alarm ARMED the screen is deliberately calm — a moon badge and
+  /// "Get some rest. We got you." — because the rider has handed the trip over
+  /// and is expected to sleep. That is right for the rider who is sleeping and
+  /// wrong for the one who is not: arming the alarm used to REMOVE the map and
+  /// the live guide entirely, so a commuter who wanted both the alarm and the
+  /// directions had to choose, and the tracking was nowhere to be found.
+  ///
+  /// It lives here rather than in the widget's State so it survives an alarm
+  /// stage. A rider who opened tracking, then dismissed a Stage 1 alert, gets
+  /// tracking back — the state would otherwise be rebuilt away by the phase
+  /// switch, dumping them on the resting screen mid-journey.
+  ///
+  /// Never persisted, and reset by [startTrip]: it is a view of the current
+  /// trip, not a setting.
+  bool showLiveTracking = false;
+
+  void setShowLiveTracking(bool value) {
+    if (showLiveTracking == value) return;
+    showLiveTracking = value;
+    notifyListeners();
+  }
+
   Future<void> startTrip(Trip t, {List<GuideLeg> guideLegs = const []}) async {
     // Re-entrancy guard. A second startTrip (double-tapped "Start Trip", or a
     // new trip begun before the old one ended) would otherwise overwrite _sub
@@ -124,6 +149,7 @@ class TripViewModel extends ChangeNotifier {
     await _teardownMonitoring();
 
     guide = GuideProgress(guideLegs);
+    showLiveTracking = false;
     final avgReaction = await _db.averageAwakeSeconds();
     _engine = AdaptiveAlarmEngine(avgHistoricReactionSec: avgReaction);
     _firedStages.clear();
@@ -389,12 +415,28 @@ class TripViewModel extends ChangeNotifier {
     // is the product. A fault in step-advancement must never be able to stop a
     // stage from firing, so it runs after the alarm logic and swallows errors.
     try {
-      guide.update(pos.latitude, pos.longitude);
+      if (guide.update(pos.latitude, pos.longitude)) _tickHaptic();
     } catch (e) {
       debugPrint('NavAlert: guide advance failed — $e');
     }
 
     notifyListeners();
+  }
+
+  /// Pulses the phone because a guide step turned over on its own.
+  ///
+  /// The rider did not tap, so nothing else tells them it happened — and on a
+  /// moving jeepney their eyes are usually not on the phone. A short pulse is
+  /// the one channel that reaches them either way, and it is the cue every
+  /// navigation app already uses for a turn.
+  ///
+  /// DO NOT MODIFY LOGIC: fire-and-forget AND silent on failure. This runs
+  /// inside the GPS fix handler, where the alarm lives. A device with no
+  /// vibration motor — or any context where the platform channel is not bound —
+  /// otherwise raises an unhandled async error from a purely cosmetic cue, and
+  /// the enclosing try/catch cannot see it because it escapes across the await.
+  void _tickHaptic() {
+    unawaited(HapticFeedback.mediumImpact().catchError((Object _) {}));
   }
 
   /// Rider tapped "Done" on the current commute-guide leg.

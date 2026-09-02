@@ -39,9 +39,49 @@ never switch on.
 The primary action reads **"Start Trip"**, not "Enable Alarm" — what the button
 begins is trip *monitoring*, which is what carries the live guide. With the
 alarm **off**, the Active Trip screen is a live map with the guide floating over
-it. With the alarm **on**, it becomes the reassurance layout (moon badge, "Get
-some rest. We got you.") and the guide collapses to a handle, because that commuter
-has handed the trip over and is expected to sleep.
+it. With the alarm **on**, it *opens* on the reassurance layout (moon badge,
+"Get some rest. We got you.") and the guide collapses to a handle, because that
+commuter has handed the trip over and is expected to sleep.
+
+That resting screen is a **face, not a mode.** It used to be the only screen an
+alarm-armed trip had, which made the alarm and the live tracking mutually
+exclusive: arming the alarm removed the map and the guide outright, and testers
+reported the tracking as simply missing. The header's **Live map** button opens
+the full tracking layout with the alarm still armed, and its moon button returns
+to the resting face — the choice is the commuter's, per moment, not per trip.
+
+### The map shows the leg, not the journey
+
+Once a trip starts, the map draws **one segment at a time**: the walk to the
+terminal, then the ride, then the walk to the door, changing over as the guide
+does. Drawing the whole route is right on the planning screen, where the
+commuter is comparing options — and wrong afterwards, because a commuter walking
+to the terminal was also shown the entire jeepney ride with nothing to say which
+part of that line was theirs. The live map looked identical to the preview they
+had already read.
+
+A whole-journey polyline cannot be cut up after the fact: nothing in it marks
+where the walk ends and the ride begins. So each `GuideLeg` carries its **own**
+geometry, resolved once at Start Trip from the bundled shapes on disk. Rides are
+solid and drawn from the shape of the route the guide names, trimmed to the
+stops actually boarded and alighted at; walks are dotted straight lines, which
+say "head this way" rather than claiming a surveyed road.
+
+### Steps advance themselves
+
+Every leg knows where it ends, so the guide ticks over from GPS and the commuter
+does not have to. Rides complete within 150 m — early on purpose, since the step
+turning over as the vehicle nears the stop is the cue to stand up — and walks
+within 100 m, the same radius the rest of the app means by "you are standing
+here". A short haptic pulse marks each change, because on a moving jeepney the
+commuter's eyes are usually not on the phone.
+
+The one exception is deliberate. A *synthetic* suggestion's middle "transfer
+points" are places the fallback engine invented from a distance estimate;
+completing one from GPS would claim the commuter passed somewhere that does not
+exist. Those legs stay tap-only. Their two real ends — the origin and the
+destination — are not invented, and do advance. "Done" remains on every step as
+the override for a leg the GPS calls early or late.
 
 ### Escalation is sequential, and Stage 3 is earned
 
@@ -63,8 +103,9 @@ Two rules follow from the same principle:
 - **Snoozing returns one stage louder**, never the same stage. Re-firing Stage 1
   let a commuter idle at the gentlest alert while the vehicle kept closing.
 - **Arrival outranks overshoot.** Reaching the destination radius completes the
-  trip and ticks off the final guide step — which is a synthetic walking leg
-  with no coordinates, so it can never complete itself. Without that, arriving
+  trip and ticks off any guide steps still open — the backstop for a synthetic
+  leg, which has no coordinates and so can never complete itself. Without that,
+  arriving
   and walking on latched the overshoot detector and announced a missed stop the
   commuter had not missed. It is guarded on *monitoring*: if a stage is on screen
   the commuter has not answered it, and a sounding alarm is never stood down
@@ -279,7 +320,9 @@ Simplified with Douglas–Peucker at 8 m and stored as encoded polylines:
 **Phase 2 — at runtime.** The shape is looked up by the route name the commute
 guide tells the rider to board, then trimmed to the portion actually ridden. A
 stored shape runs terminal to terminal; drawing all of it puts tens of
-kilometres of line on the map for a two-kilometre trip.
+kilometres of line on the map for a two-kilometre trip. During a trip the trim
+is done **per leg**, between that leg's own boarding and alighting stops, which
+is what lets the map show one segment at a time.
 
 Two details that are not obvious:
 
@@ -384,14 +427,17 @@ covers Aurora DX / Fedora Atomic, where the toolchain must be installed into
 
 ```bash
 flutter analyze   # expect: No issues found
-flutter test      # expect: 321/321 passing
+flutter test      # expect: 352/352 passing
 ```
 
-**23 suites, 321 tests**, covering the adaptive alarm engine, the fare matrix
+**25 suites, 352 tests**, covering the adaptive alarm engine, the fare matrix
 and NCR bounds, the Dijkstra router against the real production GTFS feed, the
 full `TripViewModel` state machine driven from a mock GPS stream on a virtual
 clock, the commute-guide overlay geometry measured against a mounted widget
-tree, the SOS failure-code contract, the three-second accidental-trigger guard,
+tree, guide segmentation — that every leg carries its own endpoints, that the
+map draws the leg the commuter is on and swaps it over when the step does, and
+that a synthetic route's invented middle stays tap-only — the SOS failure-code
+contract, the three-second accidental-trigger guard,
 the disk tile cache, the distance rule behind current-location matching —
 including that an unknown position never counts as a match — and the offline
 route-shape geometry: polyline decoding against the Google reference vector and

@@ -259,13 +259,35 @@ class CommuteGuideSheet extends StatelessWidget {
                       ]),
                     ),
                   if (isCurrent)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
+                    Row(children: [
+                      // Says out loud what the guide is already doing. The
+                      // steps DO advance themselves from GPS on every leg that
+                      // knows where it ends — but the only thing on the card
+                      // was a "Done" button, so the screen read as a checklist
+                      // the rider was expected to tick, and they ticked it.
+                      // "Done" stays as the override for a leg the GPS calls
+                      // early or late; it is no longer the instruction.
+                      if (leg.canAutoAdvance)
+                        const Expanded(
+                          child: Row(children: [
+                            Icon(Icons.my_location,
+                                size: 12, color: NavAlertColors.success),
+                            SizedBox(width: 4),
+                            Flexible(
+                              child: Text('Advances automatically',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: NavAlertColors.textSecondary)),
+                            ),
+                          ]),
+                        )
+                      else
+                        const Spacer(),
+                      TextButton(
                         onPressed: vm.markGuideLegDone,
                         child: const Text('Done'),
                       ),
-                    ),
+                    ]),
                 ],
               ),
             ),

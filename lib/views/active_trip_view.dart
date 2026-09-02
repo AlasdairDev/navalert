@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../viewmodels/app_viewmodel.dart';
 import '../viewmodels/emergency_viewmodel.dart';
-import '../viewmodels/home_viewmodel.dart';
 import '../viewmodels/trip_viewmodel.dart';
 import 'commute_guide_sheet.dart';
 import 'commute_sheet_layout.dart';
@@ -94,14 +93,17 @@ class ActiveTripView extends StatelessWidget {
       // nothing else — a draggable panel over a Stage 3 wake-up would be both
       // a distraction and a mis-tap risk.
       //
-      // And only when the alarm is ARMED. With it off, _Monitoring switches to
-      // its guide-first layout and renders the very same guide inline, filling
-      // the body — stacking the draggable sheet as well would put the guide on
-      // screen twice, the second copy sitting over the controls.
+      // And only on the RESTING alarm face. Whenever _Monitoring switches to
+      // its guide-first layout — with the alarm off, or with it on and the
+      // rider having opened live tracking — that layout renders the very same
+      // guide inline, filling the body. Stacking the draggable sheet as well
+      // would put the guide on screen twice, the second copy sitting over the
+      // controls.
       child: Scaffold(
         body: vm.phase == TripPhase.monitoring &&
                 !vm.guide.isEmpty &&
-                trip.alarmEnabled
+                trip.alarmEnabled &&
+                !vm.showLiveTracking
             ? Stack(children: [
                 // Reserve the collapsed sheet's height so it can never sit on
                 // top of the SOS / Fake Call buttons.
@@ -130,7 +132,12 @@ class ActiveTripView extends StatelessWidget {
 ///    En Route, the destination, "Get some rest. We got you.", the moon badge,
 ///    the distance plate, Slide to Stop, SOS / Fake Call. The rider has handed
 ///    the trip over and is expected to sleep, so the reassurance that something
-///    is watching IS the screen.
+///    is watching IS the screen. This is the RESTING face, not the only one:
+///    arming the alarm used to take the live map and the commute guide off the
+///    screen altogether, which made the two features mutually exclusive and
+///    left the tracking with nowhere to be found. The header's map button opens
+///    the guide-first layout below with the alarm still armed
+///    (vm.showLiveTracking), and its moon button comes back here.
 ///  * alarm OFF — guide-first. Nothing is watching for them, so the moon badge
 ///    would be claiming a service that is switched off, and the steps are the
 ///    only reason they are here. The guide expands to fill the screen and the
@@ -144,7 +151,7 @@ class _Monitoring extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => vm.guide.isEmpty ||
-          vm.trip!.alarmEnabled
+          (vm.trip!.alarmEnabled && !vm.showLiveTracking)
       ? _alarmFirst(context)
       : _guideFirst(context);
 
@@ -174,8 +181,24 @@ class _Monitoring extends StatelessWidget {
             // inside the shell, with the bottom navigation still reachable.
             // This route covers the shell instead, so the arrow is what
             // restores that same freedom to leave.
-            const Align(
-                alignment: Alignment.centerLeft, child: _BackToShellButton()),
+            // Back on the left, live tracking on the right. The button sits
+            // in the row the back arrow already defines rather than below the
+            // distance plate, so it costs this column NO height: the Spacers
+            // here collapse to zero on a short screen, and anything that grows
+            // the column pushes Slide-to-Stop — the only way to end a trip —
+            // off the bottom of it.
+            Row(children: [
+              const _BackToShellButton(),
+              const Spacer(),
+              if (!vm.guide.isEmpty)
+                TextButton.icon(
+                  onPressed: () => vm.setShowLiveTracking(true),
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: const Text('Live map'),
+                  style: TextButton.styleFrom(
+                      foregroundColor: NavAlertColors.accent),
+                ),
+            ]),
             const Text('En Route',
                 style: TextStyle(color: NavAlertColors.textSecondary)),
             // Capped at two lines: at 26 px a long place name wrapped to four
@@ -387,13 +410,24 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
     final vm = widget.vm;
     final trip = vm.trip!;
     final screenH = MediaQuery.sizeOf(context).height;
-    // `read`, not `watch`: this widget already rebuilds on every GPS tick via
-    // the TripViewModel above it, and the planned path does not change during a
-    // trip — subscribing would only add rebuilds.
-    final routePath = context.read<HomeViewModel>().routePath;
     final rider = vm.currentLat != null && vm.currentLng != null
         ? LatLng(vm.currentLat!, vm.currentLng!)
         : null;
+
+    // The map draws the leg the rider is ON, not the journey — see TripMapView.
+    // Everything it needs comes off the guide, which is already the single
+    // source of truth for which step is live, so the line on the map and the
+    // highlighted card in the sheet can never disagree about it.
+    final leg = vm.guide.currentLeg;
+    final legEnd = leg != null && leg.canAutoAdvance
+        ? LatLng(leg.endLat!, leg.endLng!)
+        : null;
+    // Keyed on POSITION in the guide rather than on comparing coordinates: the
+    // last leg is the one that ends at the destination by construction, and a
+    // distance test would have to pick a threshold that is wrong for either a
+    // door-to-door walk or a drop-off across a wide avenue.
+    final onFinalLeg = !vm.guide.isComplete &&
+        vm.guide.currentIndex == vm.guide.legs.length - 1;
 
     return Stack(children: [
       Positioned.fill(
@@ -401,7 +435,10 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
           origin: LatLng(trip.originLat, trip.originLng),
           destination: LatLng(trip.destinationLat, trip.destinationLng),
           rider: rider,
-          routePath: routePath,
+          legPath: leg?.path ?? const [],
+          legEnd: legEnd,
+          legMode: leg?.step.transportMode ?? 'walk',
+          legEndIsDestination: onFinalLeg,
           obscuredBottom: _obscured,
         ),
       ),
@@ -531,6 +568,18 @@ class _GuideFirstMonitorState extends State<_GuideFirstMonitor> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Only with the alarm ARMED, because only then is there a
+                // resting face to go back to. With the alarm off this layout is
+                // the whole monitoring screen and the button would lead
+                // nowhere.
+                if (vm.trip!.alarmEnabled)
+                  IconButton(
+                    onPressed: () => vm.setShowLiveTracking(false),
+                    icon: const Icon(Icons.nightlight_round, size: 20),
+                    color: NavAlertColors.accent,
+                    tooltip: 'Back to the resting screen',
+                    visualDensity: VisualDensity.compact,
+                  ),
                 _AlarmToggleChip(vm: vm, compact: true),
               ]),
             ),

@@ -16,22 +16,35 @@ import 'commute_sheet_layout.dart';
 /// but had no way to see where they actually were. This is the map that answers
 /// that, with the guide floating over it.
 ///
+/// **It draws ONE LEG at a time**, not the journey. Drawing the whole route is
+/// right on the planning screen, where the rider is choosing between options
+/// and needs to see where each one goes. It is wrong once the trip has started:
+/// a rider walking to the terminal was shown the entire jeepney ride as well,
+/// with nothing to say which part of that line was the part they were on — so
+/// the live map looked identical to the preview they had already read, and
+/// answered a question they had stopped asking. The map now shows the walk,
+/// then the ride, then the walk to the door, changing over as the guide does.
+///
 /// UI/UX MAP (see legend in core/theme.dart):
 ///  [NEED] NavAlertMap.tiles (the disk-cached offline tile layer) ·
 ///         NavAlertMap.ncrConstraint · the follow-camera wiring
 ///         (onPositionChanged → tracker → _mover.animateTo) · the recenter
 ///         button's onPressed.
 ///  [EDIT] the blue dot and destination pin styling, the route line colours and
-///         widths, the recenter button's look and placement, the follow zoom.
+///         widths, the leg-end marker, the recenter button's look and
+///         placement, the follow zoom.
 ///  [WANT] a heading arrow instead of a plain dot, a "next turn" callout,
-///         dimming the route already travelled.
+///         fitting the camera to the whole leg when it changes over.
 class TripMapView extends StatefulWidget {
   const TripMapView({
     super.key,
     required this.origin,
     required this.destination,
     required this.rider,
-    required this.routePath,
+    required this.legPath,
+    required this.legEnd,
+    required this.legMode,
+    required this.legEndIsDestination,
     required this.obscuredBottom,
   });
 
@@ -45,9 +58,22 @@ class TripMapView extends StatefulWidget {
   /// The rider's last real GPS fix, or null when none has landed yet.
   final LatLng? rider;
 
-  /// The planned route, as `[lat, lng]` pairs from HomeViewModel.routePath.
-  /// Empty falls back to a straight origin→destination line.
-  final List<List<double>> routePath;
+  /// Geometry for the leg the rider is on RIGHT NOW, as `[lat, lng]` pairs.
+  /// Empty falls back to a straight line to [legEnd] — see [_legPoints].
+  final List<List<double>> legPath;
+
+  /// Where the current leg ends: the terminal to board at, the stop to get off
+  /// at, or the destination itself. Null when the guide is finished or was
+  /// never supplied, in which case the map falls back to the destination.
+  final LatLng? legEnd;
+
+  /// Transport mode of the current leg — 'walk' | 'jeepney' | 'bus' |
+  /// 'uv_express'. Chooses the line's colour and whether it is dotted.
+  final String legMode;
+
+  /// Whether [legEnd] IS the trip's destination, so the two are not pinned
+  /// twice on the same spot.
+  final bool legEndIsDestination;
 
   /// Logical pixels covered at the bottom of the map by the guide sheet and the
   /// safety footer. Drives the camera offset so the rider stays centred in what
@@ -184,14 +210,46 @@ class _TripMapViewState extends State<TripMapView>
     _followRider();
   }
 
+  /// The points to draw for the current leg.
+  ///
+  /// Falls back to a straight line rather than to nothing. A leg with no
+  /// resolved geometry is usually a walk, or a synthetic suggestion between
+  /// generic terminals — cases where the direction is known and the road is
+  /// not. Drawing nothing at all would leave the rider on a bare basemap with
+  /// no indication of which way to head, which is worse than an approximation
+  /// that visibly ignores the streets.
+  List<LatLng> _legPoints() {
+    if (widget.legPath.length >= 2) {
+      return widget.legPath
+          .map((p) => LatLng(p[0], p[1]))
+          .toList(growable: false);
+    }
+    final end = widget.legEnd ?? widget.destination;
+    // From the rider when there is a real fix, so the line starts where they
+    // are rather than at a planning coordinate they may have long left.
+    return [widget.rider ?? widget.origin, end];
+  }
+
+  /// The "this is where this leg finishes" marker: get off here, or board here.
+  static Widget _legEndBadge(bool walking) => Container(
+        width: 26,
+        height: 26,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: walking ? NavAlertColors.accent : const Color(0xFF4285F4),
+          border: Border.all(color: Colors.white, width: 3),
+          boxShadow: const [
+            BoxShadow(color: Colors.black38, blurRadius: 4),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final rider = widget.rider;
-    final path = widget.routePath.isNotEmpty
-        ? widget.routePath
-            .map((p) => LatLng(p[0], p[1]))
-            .toList(growable: false)
-        : [widget.origin, widget.destination];
+    final path = _legPoints();
+    final walking = widget.legMode == 'walk';
+    final legEnd = widget.legEnd;
 
     return Stack(children: [
       FlutterMap(
@@ -236,21 +294,56 @@ class _TripMapViewState extends State<TripMapView>
             // planning map draws it — the two screens show one route.
             Polyline(points: path, strokeWidth: 9, color: Colors.white),
             Polyline(
-                points: path,
-                strokeWidth: 5.5,
-                color: const Color(0xFF4285F4)),
+              points: path,
+              strokeWidth: 5.5,
+              // A walk is dotted and a ride is solid, the convention every
+              // commuter already reads off every other maps app. It also stops
+              // the straight-line walking geometry from being mistaken for a
+              // surveyed road: dots say "head this way", a solid line says
+              // "follow this".
+              pattern: walking
+                  ? const StrokePattern.dotted(spacingFactor: 1.8)
+                  : const StrokePattern.solid(),
+              color: walking
+                  ? NavAlertColors.accent
+                  : const Color(0xFF4285F4),
+            ),
           ]),
           MarkerLayer(markers: [
-            Marker(
-              point: widget.destination,
-              width: 44,
-              height: 44,
-              alignment: Alignment.topCenter,
-              child: const Icon(Icons.location_pin,
-                  color: NavAlertColors.danger,
-                  size: 44,
-                  shadows: [Shadow(color: Colors.black45, blurRadius: 6)]),
-            ),
+            // The destination pin stays on the map for the WHOLE trip, even
+            // while the drawn leg ends somewhere else. The leg is what to do
+            // next; the pin is what the rider is actually here for, and a
+            // navigation screen that hides it during the middle leg has lost
+            // the plot. Suppressed only when the leg marker would land on it.
+            if (!widget.legEndIsDestination)
+              Marker(
+                point: widget.destination,
+                width: 44,
+                height: 44,
+                alignment: Alignment.topCenter,
+                child: const Icon(Icons.location_pin,
+                    color: NavAlertColors.danger,
+                    size: 44,
+                    shadows: [Shadow(color: Colors.black45, blurRadius: 6)]),
+              ),
+            // Where THIS leg ends. On the final leg that is the destination, so
+            // it keeps the destination pin's look rather than introducing a
+            // second symbol for the same place.
+            if (legEnd != null)
+              Marker(
+                point: legEnd,
+                width: 44,
+                height: 44,
+                alignment: widget.legEndIsDestination
+                    ? Alignment.topCenter
+                    : Alignment.center,
+                child: widget.legEndIsDestination
+                    ? const Icon(Icons.location_pin,
+                        color: NavAlertColors.danger,
+                        size: 44,
+                        shadows: [Shadow(color: Colors.black45, blurRadius: 6)])
+                    : _legEndBadge(walking),
+              ),
           ]),
           // DO NOT MODIFY LOGIC: the dot renders ONLY for a real fix. Falling
           // back to the trip's origin would paint a planning coordinate — which

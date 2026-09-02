@@ -99,6 +99,10 @@ class RouteEngine {
     required double distanceKm,
     required TransportPreferences prefs,
     Map<String, List<GuideLeg>>? legsOut,
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
   }) {
     // Road distance ≈ 1.3 × straight-line distance in Metro Manila.
     final roadKm = math.max(0.5, distanceKm * 1.3);
@@ -150,8 +154,23 @@ class RouteEngine {
 
     if (legsOut != null) {
       for (final o in options) {
-        legsOut[o.suggestionId] =
-            o.steps.map((s) => GuideLeg(step: s)).toList();
+        // A synthetic route's middle "terminals" are fictional, so those legs
+        // stay coordinate-free and tap-only — that rule is load-bearing (see
+        // GuideProgress). But its two ENDS are not fictional: the rider really
+        // does start at the origin and really does finish at the destination.
+        // Giving those two real coordinates lets the first and last steps draw
+        // and complete themselves like any other, and costs the invariant
+        // nothing, because neither one is invented.
+        legsOut[o.suggestionId] = [
+          for (var i = 0; i < o.steps.length; i++)
+            GuideLeg(
+              step: o.steps[i],
+              startLat: i == 0 ? originLat : null,
+              startLng: i == 0 ? originLng : null,
+              endLat: i == o.steps.length - 1 ? destinationLat : null,
+              endLng: i == o.steps.length - 1 ? destinationLng : null,
+            ),
+        ];
       }
     }
     return _tagPair(options);
@@ -213,6 +232,10 @@ class RouteEngine {
     required String destinationLabel,
     required List<GtfsRouteMatch> matches,
     Map<String, List<GuideLeg>>? legsOut,
+    double? originLat,
+    double? originLng,
+    double? destinationLat,
+    double? destinationLng,
   }) {
     final options = <RouteSuggestion>[];
     for (final m in matches) {
@@ -259,20 +282,33 @@ class RouteEngine {
         ),
       ];
 
-      // The walk-to-board leg ends at the boarding stop and the ride ends at
-      // the alighting stop, both known precisely from the feed. The final walk
-      // ends at the destination, whose coordinates are not passed in here, so
-      // it stays manual — the destination alarm covers arrival anyway.
+      // Every leg end is a real surveyed point: the walk-to-board ends at the
+      // boarding stop, the ride at the alighting stop — both precise from the
+      // feed — and the final walk at the trip's own destination.
+      //
+      // That last one used to be left coordinate-free, which stranded the guide
+      // on its final step for the whole walk to the door: it could not
+      // auto-advance, so the rider had to notice and tap. The destination is
+      // not a guess, so there was never a reason to withhold it.
       legsOut?[suggestionId] = [
         GuideLeg(
             step: steps[0],
+            startLat: originLat,
+            startLng: originLng,
             endLat: m.boardStop.lat,
             endLng: m.boardStop.lng),
         GuideLeg(
             step: steps[1],
+            startLat: m.boardStop.lat,
+            startLng: m.boardStop.lng,
             endLat: m.alightStop.lat,
             endLng: m.alightStop.lng),
-        GuideLeg(step: steps[2]),
+        GuideLeg(
+            step: steps[2],
+            startLat: m.alightStop.lat,
+            startLng: m.alightStop.lng,
+            endLat: destinationLat,
+            endLng: destinationLng),
       ];
 
       options.add(RouteSuggestion(
@@ -336,7 +372,13 @@ class RouteEngine {
         steps.add(step);
         // Every leg end is a real surveyed coordinate, so the live commute
         // guide can advance itself geographically on all of them.
-        guide.add(GuideLeg(step: step, endLat: leg.toLat, endLng: leg.toLng));
+        guide.add(GuideLeg(
+          step: step,
+          startLat: leg.fromLat,
+          startLng: leg.fromLng,
+          endLat: leg.toLat,
+          endLng: leg.toLng,
+        ));
       }
 
       final ridden = j.legs.where((l) => !l.isWalk).toList();

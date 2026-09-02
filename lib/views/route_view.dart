@@ -358,12 +358,7 @@ class _RouteViewState extends State<RouteView> {
                         final tripVm = context.read<TripViewModel>();
                         final navigator = Navigator.of(context);
                         final messenger = ScaffoldMessenger.of(context);
-                        // Hand the chosen suggestion's guide legs to the trip. They
-                        // are memory-only (Table 24 has no coordinates), so this is
-                        // the one moment they can be transferred.
-                        final legs = context
-                            .read<HomeViewModel>()
-                            .legsFor(trip.selectedRouteSuggestionId);
+                        final home = context.read<HomeViewModel>();
                         // View sets the chosen config on the trip; TripViewModel
                         // .startTrip() persists it (keeps the DB out of the View).
                         trip
@@ -371,6 +366,19 @@ class _RouteViewState extends State<RouteView> {
                           ..vibrationOnlyMode = vibrationOnly
                           ..alarmEnabled = alarmEnabled;
                         Navigator.of(ctx).pop();
+                        // Hand the chosen suggestion's guide legs to the trip. They
+                        // are memory-only (Table 24 has no coordinates), so this is
+                        // the one moment they can be transferred.
+                        //
+                        // Awaited so each leg arrives carrying its OWN road
+                        // geometry: the trip map draws one segment at a time and
+                        // has no way to derive a leg's line from the journey's.
+                        // Resolved AFTER the sheet is popped, so no BuildContext
+                        // is read across the gap, and from the bundled shapes on
+                        // disk rather than the network — it cannot leave the rider
+                        // waiting on a dead connection.
+                        final legs = await home
+                            .legsWithGeometryFor(trip.selectedRouteSuggestionId);
                         // A failure inside startTrip (the trip write, the GPS stream,
                         // the foreground service) must SAY so and re-arm the button.
                         // Unguarded, the exception escaped the handler: the sheet had

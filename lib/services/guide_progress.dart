@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 
+import '../core/geo.dart';
 import '../models/guide_leg.dart';
 
 /// Tracks which commute-guide leg the rider is on during an active trip.
 ///
 /// Hybrid advancement:
-///  * **GTFS-matched legs** carry real coordinates and complete themselves once
-///    the rider comes within [arrivalRadiusM] of the alight stop.
+///  * **Legs with real coordinates** complete themselves once the rider comes
+///    within [radiusFor] the leg of where it ends — the alight stop on a ride,
+///    the terminal or the door on a walk.
 ///  * **Synthetic legs** have no coordinates and only ever advance on an
 ///    explicit tap — auto-advancing one would invent a location the rider never
 ///    passes.
@@ -19,11 +21,35 @@ class GuideProgress {
 
   final List<GuideLeg> legs;
 
-  /// How close the rider must be to a GTFS leg's alight stop for it to count as
+  /// How close the rider must be to a RIDE leg's alight stop for it to count as
   /// completed. Metro Manila stops sit close together, so this may fire
-  /// slightly early — acceptable, because the rider can always tap to correct
-  /// and a guide step is a display hint, not the destination alarm.
+  /// slightly early — acceptable, and on a ride it is actively useful: the step
+  /// turning over as the vehicle nears the stop is the cue to stand up. The
+  /// rider can always tap to correct, and a guide step is a display hint, not
+  /// the destination alarm.
   static const double arrivalRadiusM = 150;
+
+  /// The same, for a WALK leg — tighter, and deliberately the SAME number the
+  /// rest of the app already means by "you are standing at this place"
+  /// ([kAtLocationRadiusM]).
+  ///
+  /// A walk ends where the rider physically has to be: at the terminal they
+  /// board from, or at the door. 150 m is a block and a half away, and ticking
+  /// "Walk to Cubao Terminal" off from across an intersection tells them to
+  /// board a vehicle they are not yet standing next to. A ride is the opposite
+  /// case — turning the step over as the vehicle nears the stop is the cue to
+  /// stand up — so the two cannot share one number.
+  ///
+  /// Not tightened further than this on purpose. Urban GPS routinely reports
+  /// 30–50 m of error between buildings, and a radius the rider cannot reliably
+  /// enter is worse than one that fires early: it strands the guide on a step
+  /// they have finished and puts them back to tapping it themselves, which is
+  /// the exact failure automatic advancement exists to remove.
+  static const double walkArrivalRadiusM = kAtLocationRadiusM;
+
+  /// The radius [leg] completes within.
+  static double radiusFor(GuideLeg leg) =>
+      leg.step.transportMode == 'walk' ? walkArrivalRadiusM : arrivalRadiusM;
 
   int _index = 0;
 
@@ -69,7 +95,7 @@ class GuideProgress {
     final leg = currentLeg;
     if (leg == null || !leg.canAutoAdvance) return false;
     final d = _distanceM(lat, lng, leg.endLat!, leg.endLng!);
-    if (d > arrivalRadiusM) return false;
+    if (d > radiusFor(leg)) return false;
     _index++;
     return true;
   }

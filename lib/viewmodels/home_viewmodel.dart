@@ -436,6 +436,8 @@ class HomeViewModel extends ChangeNotifier {
   Future<List<RouteSuggestion>> _composeSuggestions(
       Trip trip, PlaceResult place, TransportPreferences prefs) async {
     _legsBySuggestion.clear();
+    // The resolved geometry describes THOSE legs; it must never outlive them.
+    _legPathCache.clear();
     guideUnavailableReason = null;
 
     // Scope limit: the fare matrix is the LTFRB Metro Manila rate structure and
@@ -502,6 +504,10 @@ class HomeViewModel extends ChangeNotifier {
       distanceKm: trip.distanceKm,
       prefs: prefs,
       legsOut: _legsBySuggestion,
+      originLat: trip.originLat,
+      originLng: trip.originLng,
+      destinationLat: trip.destinationLat,
+      destinationLng: trip.destinationLng,
     );
   }
 
@@ -510,6 +516,80 @@ class HomeViewModel extends ChangeNotifier {
   /// for an unknown id, so the trip screen simply shows no guide.
   List<GuideLeg> legsFor(String? suggestionId) =>
       suggestionId == null ? const [] : (_legsBySuggestion[suggestionId] ?? const []);
+
+  /// Resolved per-leg geometry, keyed by suggestion id. Cleared whenever
+  /// suggestions are recomposed, so it can never outlive the legs it describes.
+  final Map<String, List<GuideLeg>> _legPathCache = {};
+
+  /// The same legs as [legsFor], each carrying the road geometry for ITS OWN
+  /// segment.
+  ///
+  /// This is what lets the trip map draw one leg at a time. The planning map
+  /// draws a single polyline for the whole journey, which is right for choosing
+  /// a route — but wrong once the trip starts, because a rider walking to the
+  /// terminal is shown the entire jeepney ride as well and cannot tell which
+  /// part of the line is the part they are on. A whole-journey polyline cannot
+  /// be cut up after the fact either: nothing in it marks where the walk ends
+  /// and the ride begins.
+  ///
+  /// Resolved once per suggestion and cached, because it reads the bundled
+  /// shapes database and the geometry cannot change during a trip.
+  Future<List<GuideLeg>> legsWithGeometryFor(String? suggestionId) async {
+    if (suggestionId == null) return const [];
+    final cached = _legPathCache[suggestionId];
+    if (cached != null) return cached;
+    final legs = legsFor(suggestionId);
+    if (legs.isEmpty) return const [];
+    final out = <GuideLeg>[];
+    for (final leg in legs) {
+      out.add(leg.withPath(await _pathForLeg(leg)));
+    }
+    _legPathCache[suggestionId] = out;
+    return out;
+  }
+
+  /// Road geometry for one leg, or an empty list when the leg's own endpoints
+  /// are not both known (a synthetic middle leg between fictional transfer
+  /// points — there is no honest line to draw between two invented places).
+  ///
+  /// A RIDE leg is drawn from the bundled shape of the route the guide names,
+  /// trimmed to the stops the rider actually boards and alights at. Keyed on
+  /// the NAME rather than on proximity for the same reason the planning map is:
+  /// proximity draws whichever route runs near both ends, which is not
+  /// necessarily the one the rider was told to board.
+  ///
+  /// A WALK leg is drawn as a straight line between its endpoints, deliberately
+  /// and not as a fallback. Walking geometry would have to come off the
+  /// network, and this runs at Start Trip — the moment a commuter is least
+  /// likely to have signal and least willing to wait. A straight line over a
+  /// two-hundred-metre walk visibly ignores the road, which reads as the
+  /// approximation it is; a road path that silently failed to load would not.
+  Future<List<List<double>>> _pathForLeg(GuideLeg leg) async {
+    if (!leg.hasStart || !leg.canAutoAdvance) return const [];
+    final straight = <List<double>>[
+      [leg.startLat!, leg.startLng!],
+      [leg.endLat!, leg.endLng!],
+    ];
+    if (leg.step.transportMode == 'walk') return straight;
+    try {
+      final name = routeNameFromInstruction(leg.step.instruction);
+      if (name == null) return straight;
+      final path = await RouteShapeService.instance.pathForName(
+        name,
+        fromLat: leg.startLat!,
+        fromLng: leg.startLng!,
+        toLat: leg.endLat!,
+        toLng: leg.endLng!,
+      );
+      if (path == null || path.length < 2) return straight;
+      final trimmed = trimPolyline(path, leg.startLat!, leg.startLng!,
+          leg.endLat!, leg.endLng!);
+      return trimmed.length >= 2 ? trimmed : straight;
+    } catch (e) {
+      debugPrint('NavAlert: leg geometry unavailable — $e');
+      return straight;
+    }
+  }
 
   Future<void> _fetchRoadPath(Trip trip) async {
     loadingPath = true;
@@ -624,6 +704,8 @@ class HomeViewModel extends ChangeNotifier {
     selectedSuggestion = null;
     results = [];
     routePath = [];
+    _legsBySuggestion.clear();
+    _legPathCache.clear();
     notifyListeners();
   }
 }
