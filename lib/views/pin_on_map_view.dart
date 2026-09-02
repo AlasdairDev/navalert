@@ -141,7 +141,14 @@ class _PinOnMapViewState extends State<PinOnMapView> {
           // Picked-point summary + confirmation
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 18),
+            // DO NOT MODIFY LOGIC (the bottom inset): this panel is the last
+            // thing in a Scaffold body, and from Android 15 an app draws
+            // edge-to-edge — so the body runs BEHIND the navigation bar. With a
+            // flat 18 dp, "Confirm Drop-off Point" was drawn underneath it and
+            // the lower half of its hit box belonged to the system bar. Same
+            // defect, same fix, as the routes panel in route_view.
+            padding: EdgeInsets.fromLTRB(
+                20, 14, 20, 18 + MediaQuery.paddingOf(context).bottom),
             decoration: const BoxDecoration(
               color: NavAlertColors.background,
               borderRadius: BorderRadius.vertical(top: Radius.circular(24)),

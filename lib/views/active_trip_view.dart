@@ -1246,7 +1246,7 @@ class _OvershootConfirmed extends StatelessWidget {
                   const SizedBox(height: 6),
                   Text(
                       'You passed your destination by '
-                      '${m >= 1000 ? '${(m / 1000).toStringAsFixed(1)} kilometer(s)' : '${m.toStringAsFixed(0)} meters'}.',
+                      '${m >= 1000 ? '${(m / 1000).toStringAsFixed(1)} kilometers' : '${m.toStringAsFixed(0)} meters'}.',
                       textAlign: TextAlign.center,
                       style: const TextStyle(
                           color: NavAlertColors.textSecondary)),
