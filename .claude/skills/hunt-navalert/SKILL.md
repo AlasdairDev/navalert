@@ -115,10 +115,35 @@ bar instead. Traps that have already cost time here:
 
 ## What to sweep
 
-Screens: Home · search · pin-on-map · route suggestions · commute guide · trip
-settings · monitoring (alarm on **and** off) · live map · Alarm Stages 1/2/3 ·
-overshoot prompt and confirmation · arrival · History · Favorites · Add Favorite
-· Emergency · Settings and every sub-page · fake call.
+Start mechanically, so nothing is skipped by inattention:
+
+```bash
+HUNT_DIR=/tmp/hunt-$(date +%H%M) .claude/skills/hunt-navalert/sweep-ui.sh
+```
+
+That captures the five shell tabs and the Settings tail, computing the tab
+positions from `wm size` rather than hardcoding them. **Read every capture**
+before going further — clipped controls, text overflowing a card, anything drawn
+but unreachable.
+
+The first sweep of this app was driven by whatever came to mind next and missed
+the alarm-escalation defect completely; it only surfaced on a second pass that
+was asked for. An enumerated walk does not lose interest.
+
+Then drive the stateful flows by hand — they cannot be walked blind, because
+their button positions move between builds:
+
+| Reach | Screens |
+|---|---|
+| Home → search → suggestions | route cards, commute guide, trip settings |
+| Start Trip | monitoring **alarm ON** and **alarm OFF**, live map |
+| approach destination | Alarm Stage 1 → 2 → 3 |
+| drive past it | overshoot prompt, overshoot confirmed |
+| reach it | arrival summary |
+| Home → search → Pin on the map | pin-on-map confirm |
+| Favorites → ＋ | add favourite, then a trip from it |
+| Settings | emergency contacts (invalid **and** valid), recordings, Terms, Privacy |
+| Emergency | SOS with **no** contacts and with one, fake call |
 
 Conditions that have each produced a real bug here:
 
