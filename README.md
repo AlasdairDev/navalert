@@ -462,6 +462,22 @@ It reports every missing or mismatched tool with the command that fixes it, and
 covers Aurora DX / Fedora Atomic, where the toolchain must be installed into
 `$HOME` rather than layered onto the read-only system image.
 
+### Skills shipped with the repo
+
+Three of them, committed under `.claude/skills/` so they arrive with a clone —
+nothing to install, nothing to copy into `~/.claude/`:
+
+| | |
+|---|---|
+| **`/setup-navalert`** | get a machine building (Windows · macOS · Fedora Atomic) |
+| **`/run-navalert`** | get the app onto an emulator or handset |
+| **`/hunt-navalert`** | drive simulated GPS through whole commutes and hunt for bugs |
+
+Every helper inside them also runs from a plain shell, with no Claude Code
+involved. See **[SKILLS.md](SKILLS.md)** for what each one does and, more
+usefully, *why each is shaped the way it is* — most of those decisions are a
+failure somebody already paid for.
+
 ---
 
 ## Testing
