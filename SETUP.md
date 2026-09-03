@@ -1,7 +1,7 @@
 # NavAlert — Setup & Defense Preparation
 
 Installation and verification guide for developers and Capstone panelists
-testing **v1.1.0** on physical hardware.
+testing **v2.1.0** on physical hardware.
 
 > **Note on filename.** This repository is developed on a case-insensitive
 > filesystem, where `setup.md` and `SETUP.md` are the same file. Git tracks it
@@ -118,7 +118,7 @@ fault — do not "fix" them:
 
 ### Toolchain
 
-| Tool | Version used for v1.1.0 |
+| Tool | Version used for v2.1.0 |
 |---|---|
 | Flutter SDK | **3.41.9** (stable) |
 | Dart SDK | 3.11.5 — ships with Flutter |
@@ -149,7 +149,7 @@ flutter build apk --release
 packages. Nothing is downloaded by hand.
 
 > **Do not run `flutter pub upgrade`.** `pubspec.lock` pins the exact versions
-> v1.1.0 was built and tested against.
+> v2.1.0 was built and tested against.
 
 The build produces two byte-identical copies:
 
@@ -162,7 +162,7 @@ The build produces two byte-identical copies:
 
 ```bash
 flutter analyze     # expect: No issues found
-flutter test        # expect: 286 passing
+flutter test        # expect: 372 passing
 ```
 
 Respect every `// DO NOT MODIFY LOGIC - CAPSTONE DEFENSE CRITICAL:` block —
@@ -256,7 +256,59 @@ this feature exists to eliminate.
 Also worth confirming: with no prepaid load, the failure names the load rather
 than blaming the signal.
 
-### 4.6 Restricted settings (fresh sideload only)
+### 4.6 Commute guide, segmented (v2.1.0)
+
+Emulator-verifiable, unlike the rest of this section — but confirm it on
+hardware, because the failures it replaces were all layout and timing.
+
+1. Plan a trip with at least one ride leg. **Start Trip** with the destination
+   alarm **ON**.
+2. On the resting screen, tap **Live map** (top right).
+
+**Expect:** the map and the commute guide, with the alarm still armed and the
+chip still reading *Alarm on*. The moon button returns to the resting screen.
+Before v2.1.0 arming the alarm removed the map entirely.
+
+3. Look at the drawn line on step 1.
+
+**Expect:** the **walk only**, as a dotted line ending at the boarding stop —
+not the whole journey. Rides draw solid, on the route's real road geometry.
+
+4. Walk (or drive the emulator's GPS) to the boarding stop.
+
+**Expect:** the step ticks itself off with a green check and a short haptic, the
+line swaps to the ride, and you never press **Done**. "Done" remains as an
+override for a leg the GPS calls early or late.
+
+### 4.7 Offline map along the route (v2.1.0)
+
+1. **Online**, plan a trip and open **Show Commute Guide** — this warms the
+   tiles along the route (~130 for a 5 km commute).
+2. Put the phone in **airplane mode**.
+3. **Start Trip** and open the live map.
+
+**Expect:** streets, not blank grey, for the whole journey. Before v2.1.0 the
+trip map rendered nothing offline even with a full cache, because it requested
+a zoom nothing had ever fetched.
+
+> Panning well off the route still shows grey. That is deliberate: the warm is a
+> narrow ribbon, because OSM's Tile Usage Policy prohibits bulk downloading.
+
+### 4.8 Alarm escalation with GPS stalled (v2.1.0)
+
+The regression this exists for is invisible with a healthy GPS stream, so it has
+to be tested with fixes **stopped**.
+
+1. Arm the alarm and approach the destination until **Stage 1** appears.
+2. Stop moving, and do not touch the screen. On an emulator, issue no further
+   `geo fix`.
+
+**Expect:** **Stage 2 at 30 s** and **Stage 3 "WAKE UP" at 60 s**, on screen,
+with no new GPS fix. Before v2.1.0 the model escalated and played the tones
+while the screen stayed on Stage 1 — a commuter shown a Snooze button for an
+alarm that had reached Stage 3.
+
+### 4.9 Restricted settings (fresh sideload only)
 
 Only reproducible if the install was flagged as sideloaded — see
 [§2](#2-installation-over-usb).

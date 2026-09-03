@@ -7,8 +7,8 @@
 ![Dart](https://img.shields.io/badge/Dart-3.11-0175C2)
 ![Kotlin](https://img.shields.io/badge/native-Kotlin-7F52FF)
 ![Architecture](https://img.shields.io/badge/architecture-MVVM-7C6BC4)
-![Tests](https://img.shields.io/badge/tests-321%20passing-success)
-![Version](https://img.shields.io/badge/release-v1.1.0-B39DDB)
+![Tests](https://img.shields.io/badge/tests-372%20passing-success)
+![Version](https://img.shields.io/badge/release-v2.1.0-B39DDB)
 
 > Capstone Project — BSIT, Polytechnic University of the Philippines.
 >
@@ -98,18 +98,24 @@ gentler stages never played. Stages now advance one at a time, and a trip that
 starts inside the radius plays the whole sequence at a 5-second catch-up pace
 rather than the usual 30.
 
-Two rules follow from the same principle:
+Three rules follow from the same principle:
 
 - **Snoozing returns one stage louder**, never the same stage. Re-firing Stage 1
   let a commuter idle at the gentlest alert while the vehicle kept closing.
 - **Arrival outranks overshoot.** Reaching the destination radius completes the
   trip and ticks off any guide steps still open — the backstop for a synthetic
   leg, which has no coordinates and so can never complete itself. Without that,
-  arriving
-  and walking on latched the overshoot detector and announced a missed stop the
-  commuter had not missed. It is guarded on *monitoring*: if a stage is on screen
+  arriving and walking on latched the overshoot detector and announced a missed
+  stop the commuter had not missed. It is guarded on *monitoring*: if a stage is on screen
   the commuter has not answered it, and a sounding alarm is never stood down
   automatically.
+- **A stage must announce itself.** `_fireStage` notifies from inside, not at
+  its call sites. Fired from the GPS handler that is invisible — the fix handler
+  notifies once it returns — but fired from the escalation TIMER nothing did, so
+  an unattended Stage 1 advanced the model, played the Stage 2 tone and wrote the
+  alarm row while the SCREEN stayed on Stage 1 until the next fix rebuilt it.
+  With a live stream that is a second of lag; with fixes stalled in a tunnel it
+  is a commuter shown a Snooze button for an alarm that has reached Stage 3.
 
 **Signal Lost is silent.** Losing GPS still raises the banner, its Dismiss
 action and the log entry, but no longer sounds an alarm. A GPS gap is not
@@ -281,7 +287,9 @@ return.
   bundled GTFS feed are searched with **Dijkstra** over a long-lived worker
   isolate — no server, no network.
 - **Disk-cached OSM tiles.** A hand-written `CacheStore` persists tiles so the
-  map survives a force-close in a dead zone.
+  map survives a force-close in a dead zone, and the corridor along a planned
+  route is **warmed while the phone is still online** — see *Offline map tiles*
+  below.
 - **Route polyline** rendered on-device over those tiles, with the origin dot
   and destination pin.
 - **Adaptive launcher icon** generated across all five density buckets, with the
@@ -336,8 +344,9 @@ Two details that are not obvious:
   drew whichever route ran near both ends, asserting a ride that was never
   suggested.
 
-Verified on a device in **airplane mode**: a *Jeep: CUBAO DIVISORIA* trip drew
-its real road geometry with the network unreachable and map tiles blank.
+Verified on a device in **airplane mode**: a *Jeep: MURPHY 15TH AVE - STOP N
+SHOP* trip drew its real road geometry with the network unreachable — and, since
+v2.1.0, over a fully rendered basemap rather than blank grey (see below).
 
 ### Regenerating
 
@@ -353,6 +362,37 @@ which regenerates both in order and runs the consistency test. The generator
 also refuses to resume across a feed change: resume is keyed on route index, so
 continuing would keep old shapes under new indices and mix two feeds.
 
+### Offline map tiles
+
+Two findings from v2.1.0, both counter-intuitive enough to be worth recording.
+
+**The slow map was not the server.** The obvious suspect was
+`tile.openstreetmap.org` — rate-limited, no Southeast Asia presence. Measured
+over six tiles each, it answered in **35 ms** against MapTiler's **550 ms**, so
+moving the light basemap to MapTiler would have made it roughly fifteen times
+worse. The real cost was `retinaMode`: flutter_map only serves cheap retina when
+the URL carries a `{r}` placeholder pointing at a real @2x endpoint. OSM has
+none, so it *simulated* retina by fetching one zoom level deeper — **4× the
+tiles**, on every high-density phone. Retina is now decided per source: MapTiler
+takes the native @2x path, OSM turns it off.
+
+**The trip map was blank offline even with a full cache.** The Home map rendered
+Cubao from disk in airplane mode while the Active Trip map, on the same cache and
+the same area seconds later, rendered nothing. A `TileLayer` does not request the
+camera's zoom, it requests `zoom.round()`. Every other screen sits on a whole
+number — Home opens at 14 — so every other screen cached exactly what it
+displayed. The trip camera follows at **16.5, which rounds to 17**, and nothing
+had ever fetched zoom 17. `NavAlertMap.tripFollowZoom` is now the single source
+of truth and the prefetcher derives its zooms from it, so retuning the camera
+moves the warmed tiles with it.
+
+**Pre-caching is a ribbon, not a download.** OSM's Tile Usage Policy prohibits
+bulk fetching, so `TilePrefetchService` walks only the tiles the drawn route
+passes through, three wide, at two zooms, ordered from the START of the journey
+so a warm cut short caches the leg reached first — capped at 320 and issued four
+at a time. Measured on a device: **133 tiles** for a 5.2 km commute, after which
+the whole trip renders with the radio off.
+
 ---
 
 ## What actually works offline
@@ -361,12 +401,13 @@ continuing would keep old shapes under new indices and mix two feeds.
 |---|---|
 | Step-by-step commute guide (once planned) | ✅ |
 | Destination alarm, GPS monitoring, overshoot detection | ✅ |
-| Map tiles already viewed | ✅ (disk cache) |
+| Map tiles along a planned route | ✅ (pre-cached at planning time) |
+| Map tiles already viewed anywhere else | ✅ (disk cache) |
 | SOS SMS | ✅ (native `SmsManager`, no data required) |
 | Encrypted trip history / contacts / favourites | ✅ |
 | Destination **search** (Nominatim) | ❌ needs network |
 | Road **geometry** for the route polyline | ✅ (bundled shapes) |
-| **First** download of a given map tile | ❌ needs network |
+| **First** download of a tile away from the planned route | ❌ needs network |
 
 Planning a trip needs a connection **for search only**. Riding it does not, and
 neither does drawing the road it follows.
@@ -427,17 +468,19 @@ covers Aurora DX / Fedora Atomic, where the toolchain must be installed into
 
 ```bash
 flutter analyze   # expect: No issues found
-flutter test      # expect: 352/352 passing
+flutter test      # expect: 372/372 passing
 ```
 
-**25 suites, 352 tests**, covering the adaptive alarm engine, the fare matrix
+**26 suites, 372 tests**, covering the adaptive alarm engine, the fare matrix
 and NCR bounds, the Dijkstra router against the real production GTFS feed, the
 full `TripViewModel` state machine driven from a mock GPS stream on a virtual
 clock, the commute-guide overlay geometry measured against a mounted widget
 tree, guide segmentation — that every leg carries its own endpoints, that the
 map draws the leg the commuter is on and swaps it over when the step does, and
-that a synthetic route's invented middle stays tap-only — the SOS failure-code
-contract, the three-second accidental-trigger guard,
+that a synthetic route's invented middle stays tap-only — the route tile
+prefetcher, including the drift guard that the zoom it warms is the zoom the
+trip map actually asks for, the escalation NOTIFICATION driven purely by
+virtual time with no GPS fix delivered, the SOS failure-code contract, the three-second accidental-trigger guard,
 the disk tile cache, the distance rule behind current-location matching —
 including that an unknown position never counts as a match — and the offline
 route-shape geometry: polyline decoding against the Google reference vector and
