@@ -330,6 +330,52 @@ void main() {
       });
     });
 
+    test('a timer-driven escalation NOTIFIES, so the screen actually changes',
+        () {
+      // The regression this exists for. The test above asserts vm.phase, which
+      // is the MODEL — and the model always escalated correctly. The screen is
+      // driven by notifyListeners(), and _fireStage did not call it: fired from
+      // the GPS handler it was notified by the wrapper afterwards, fired from
+      // the escalation TIMER it was notified by nothing.
+      //
+      // So an unattended Stage 1 escalated internally, played the Stage 2 tone
+      // and wrote the alarm row, while the screen kept showing "Approaching
+      // Stop" with a Snooze button. Live GPS hides it — the next fix rebuilds
+      // within a second. It surfaces when fixes stall, in a tunnel or a dead
+      // zone, which is precisely when a commuter is most likely to be asleep.
+      fakeAsync((async) {
+        final vm = newVm();
+        vm.startTrip(buildTrip());
+        async.flushMicrotasks();
+
+        gps.add(fixAt(1000));
+        async.flushMicrotasks();
+        expect(vm.phase, TripPhase.alarmStage1);
+
+        // Count notifications from here on, and deliver NO further fixes — the
+        // timer must be able to drive the UI entirely on its own.
+        var notifications = 0;
+        void listener() => notifications++;
+        vm.addListener(listener);
+
+        async.elapse(const Duration(seconds: 31));
+
+        expect(vm.phase, TripPhase.alarmStage2);
+        expect(notifications, greaterThan(0),
+            reason: 'the model escalated but nothing told the screen — the '
+                'commuter is looking at a Stage 1 card for a Stage 2 alarm');
+
+        // And again, all the way to Stage 3, still without a single fix.
+        async.elapse(const Duration(seconds: 31));
+        expect(vm.phase, TripPhase.alarmStage3);
+        expect(notifications, greaterThan(1));
+
+        vm.removeListener(listener);
+        vm.dispose();
+        gps.close();
+      });
+    });
+
     test('a snoozed alarm comes back ONE STAGE LOUDER', () {
       fakeAsync((async) {
         final vm = newVm();

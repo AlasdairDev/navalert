@@ -511,6 +511,27 @@ class TripViewModel extends ChangeNotifier {
         highIntensity: _engine?.highIntensity ?? false);
     _pushHomeWidget(force: true);
     _scheduleEscalation(stage);
+    // DO NOT MODIFY LOGIC: notify HERE, inside _fireStage, not at the call
+    // sites.
+    //
+    // A stage is fired from two kinds of place: the GPS fix handler, which
+    // notifies afterwards anyway, and TIMERS — the escalation timer below and
+    // the snooze timer — which have no such wrapper. The snooze path spells out
+    // its own notifyListeners() and the escalation path did not, so an
+    // unattended Stage 1 escalated the model, played the Stage 2 tone and wrote
+    // the alarm row, while the SCREEN stayed on Stage 1 until the next fix
+    // arrived to rebuild it.
+    //
+    // On a phone with a live GPS stream that is a second of lag and invisible.
+    // It becomes real exactly when it matters most: with fixes stalled in a
+    // tunnel or a dead zone, the commuter is shown a gentle "Approaching Stop"
+    // with a Snooze button for an alarm that has actually reached Stage 3.
+    // Found on the emulator, where the alarm sat on Stage 1 for four minutes.
+    //
+    // Notifying from inside means no future caller can forget. The extra
+    // notification on the GPS path is free — Flutter coalesces rebuilds within
+    // a frame.
+    notifyListeners();
   }
 
   /// Figures 27–28: Stage 2 fires when Stage 1 is not dismissed within
