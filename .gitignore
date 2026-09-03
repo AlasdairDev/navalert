@@ -92,3 +92,7 @@ repair_build.ps1
 # pushed — artwork, not source, and it would bloat every clone. The screens they
 # specify are documented per-file in the `UI/UX MAP` headers in lib/views/.
 GUI NavAlert/
+
+# Python bytecode from the tooling in tool/ and .claude/skills/
+__pycache__/
+*.pyc
