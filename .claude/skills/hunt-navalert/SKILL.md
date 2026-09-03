@@ -1,9 +1,16 @@
 ---
 name: hunt-navalert
-description: Hunt for bugs in NavAlert on a real emulator by driving simulated GPS through whole commutes, then report findings bug-bounty style with severity, reproduction, root cause and a suggested fix. Use when asked to test, sweep, scan, QA, stress or find bugs in the app, or to verify a fix on a device rather than only in tests.
+description: Hunt for bugs in NavAlert on the Android EMULATOR by driving simulated GPS through whole commutes, then report findings bug-bounty style with severity, reproduction, root cause and a suggested fix. Use when asked to test, sweep, scan, QA, stress or find bugs in the app, or to verify a fix on a running app rather than only in unit tests. Emulator only — GPS simulation uses the emulator console, which physical handsets do not have.
 ---
 
 # Hunting bugs in NavAlert
+
+> **Emulator only.** Every command here drives GPS through `adb emu geo fix`,
+> which is an emulator-console command a physical handset does not have, and all
+> three scripts refuse anything that is not an `emulator-*` serial. What still
+> needs real hardware — SMS delivery, volume-key shortcuts, audio routing — is
+> the checklist in [SETUP.md](../../../SETUP.md) §4.1–4.5, and no amount of
+> simulated GPS substitutes for it.
 
 `flutter test` proves the state machine. It does not prove the app. Every defect
 found on the device in this project so far was invisible to a green suite:

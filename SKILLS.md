@@ -15,7 +15,7 @@ once.
 |---|---|
 | **`/setup-navalert`** | a machine cannot build or run the project |
 | **`/run-navalert`** | you want the app running on an emulator or handset |
-| **`/hunt-navalert`** | you want it tested, swept, or a fix proven on a device |
+| **`/hunt-navalert`** | you want it tested or swept on the **emulator** |
 
 > **They are ordinary scripts too.** Every helper below runs from a plain shell
 > without Claude Code. The skill is the method; the scripts are the hands.
@@ -76,7 +76,12 @@ emulator, hiding its side toolbar, snapping it to a size.
 
 ---
 
-## `/hunt-navalert` — find bugs on a real device
+## `/hunt-navalert` — find bugs on the emulator
+
+**Emulator only.** GPS is driven through `adb emu geo fix`, an emulator-console
+command physical handsets do not have, and every script refuses a non-`emulator-*`
+serial. Real hardware is still required for SMS delivery, volume-key shortcuts
+and audio routing — that is SETUP.md §4.1–4.5, and simulated GPS is no substitute.
 
 `flutter test` proves the state machine. It does not prove the app.
 

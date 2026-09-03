@@ -103,15 +103,18 @@ the app.
 Three skills are committed under `.claude/skills/`, so they are available the
 moment you open the cloned repo in Claude Code — `/setup-navalert` to get a
 machine building, `/run-navalert` to launch the app, and `/hunt-navalert` to
-drive simulated GPS through a commute and hunt for bugs on a device.
+drive simulated GPS through a commute and hunt for bugs on the emulator.
 **There is nothing to install and nothing to copy into `~/.claude/`** — if
 `/setup-navalert` does not appear, you have opened a folder other than the
 repository root.
 
 **[SKILLS.md](SKILLS.md)** introduces all three, including why each helper is
-built the way it is. Panelists reproducing §4 below will want `/hunt-navalert`:
-it drives the GPS traces those checks describe, from the bundled feed rather
-than from invented coordinates.
+built the way it is.
+
+`/hunt-navalert` is **emulator only** — it simulates GPS through the emulator
+console, which a handset does not have. It covers §4.6–4.8 below and is the
+fastest way to exercise a whole commute, but §4.1–4.5 need the real radio and
+cannot be faked.
 
 On **Aurora DX** or another Fedora Atomic image, `install-aurora.sh` beside them
 installs everything into `$HOME`. Do not `rpm-ostree install` the toolchain:

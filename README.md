@@ -471,7 +471,7 @@ nothing to install, nothing to copy into `~/.claude/`:
 |---|---|
 | **`/setup-navalert`** | get a machine building (Windows · macOS · Fedora Atomic) |
 | **`/run-navalert`** | get the app onto an emulator or handset |
-| **`/hunt-navalert`** | drive simulated GPS through whole commutes and hunt for bugs |
+| **`/hunt-navalert`** | drive simulated GPS through whole commutes and hunt for bugs (emulator only) |
 
 Every helper inside them also runs from a plain shell, with no Claude Code
 involved. See **[SKILLS.md](SKILLS.md)** for what each one does and, more
