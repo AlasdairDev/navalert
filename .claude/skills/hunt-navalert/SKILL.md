@@ -212,11 +212,18 @@ inverted: the tile server everyone suspected answered in 35 ms, while the
 Useful observations that do not need the UI:
 
 ```bash
+.claude/skills/hunt-navalert/logs.sh          # app's own reports, crashes, alive?
+.claude/skills/hunt-navalert/logs.sh clear    # isolate a hunt (hunt.sh does this)
+
 # what the app cached, and at which zooms — proves offline behaviour
 adb shell run-as ph.edu.pup.navalert find . | grep '\.tile$' | wc -l
-# the app's own reports
-adb logcat -d -t 300 | grep -i "NavAlert:"
 ```
+
+**Run `logs.sh` before trusting any capture.** A Flutter crash leaves the last
+frame on screen, so a dead app photographs exactly like a healthy one — a sweep
+can collect a folder of normal-looking screens belonging to a process that
+exited. It also surfaces the app's own `NavAlert: ...` reports, which are free
+evidence for a finding.
 
 **A regression test must be proven to fail without the fix.** Disable the fix,
 watch the test go red, restore it, watch it go green. In this project two

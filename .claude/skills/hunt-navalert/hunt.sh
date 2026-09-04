@@ -45,6 +45,9 @@ done
 echo "### hunt -> $HUNT_DIR"
 echo
 "$HERE/prep-device.sh" "${REBUILD[@]+"${REBUILD[@]}"}"
+# Clear the log AFTER preparing, so everything left belongs to this hunt and the
+# app's own "NavAlert: ..." reports are not buried under a boot's worth of noise.
+"$HERE/logs.sh" clear
 echo
 "$HERE/sweep-ui.sh"
 echo
@@ -56,5 +59,7 @@ cat <<NEXT
      with the four checks, and two "bugs" in the first sweep of this app were
      the hunter's own stray taps.
   3. Drive the stateful flows: alarm stages, overshoot, offline, empty states.
-     Screenshot before each tap; button positions move between builds.
+     Tap by LABEL with tap.sh; screenshot before and after.
+  4. Run logs.sh before trusting any capture. A Flutter crash leaves the last
+     frame on screen, so a dead app photographs exactly like a healthy one.
 NEXT

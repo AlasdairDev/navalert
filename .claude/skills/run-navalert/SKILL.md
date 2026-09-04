@@ -26,7 +26,14 @@ On Windows you'll typically be in PowerShell/cmd, not bash — use the Windows s
 
 ## Linux path (this laptop) — VERIFIED
 
-Flutter is not on this host, so **do not** try `flutter run`. Boot the emulator, install the prebuilt APK, drive it.
+Flutter **is** on this host (3.41.9), so `flutter run` works — it builds,
+installs and gives you hot reload. The prebuilt-APK route below is simply
+faster when an APK is already on the drive, and it is the only route on a
+machine that has not been through `/setup-navalert`.
+
+> This section said "Flutter is not on this host, so **do not** try `flutter
+> run`" while the header three lines above said it was installed. Corrected
+> 2026-09-04 after the contradiction was read past several times.
 
 ### 1. Boot the emulator (the `-gpu host` fix is mandatory)
 If `adb devices` already shows an `emulator-5554  device`, skip to step 2. Otherwise run the bundled helper (idempotent — no-ops if one is already up, waits for boot, fails loudly if qemu dies):
@@ -65,8 +72,11 @@ Verify with `grep -A4 '^\[Script-krohnkite\]' ~/.config/kwinrc` — if `ignoreCl
 is missing, the window *will* be re-tiled no matter what the rest of this says.
 The float toggle is kept as belt-and-braces. Note the guard's heuristic is weak (it treats any `x >= 100` as "already floating"), so it would misread a right-hand tile as floating.
   - The toolbar rule matches on window **type** (Utility=256) + class `Emulator`, NOT title (both windows briefly share the title `Emulator` at boot).
-  - **Resizing the device window used to "shift sizes"/jitter — that is a fractional-scaling bug, NOT Kröhnkite.** The emulator's bundled Qt ships only the `xcb` platform plugin (`~/Android/Sdk/emulator/lib64/qt/plugins/platforms/` has no Wayland plugin), so it is **always an XWayland client**. This display runs **scale 1.15 = 23/20**, and XWayland rounds logical->device pixels: only logical sizes that are **multiples of 20** convert exactly. In between the rounding is *non-monotonic* — measured logical width `503->568`, `504->570` (skips 569), `509->575`, `510->577` — so a smooth 1px drag steps the client buffer unevenly by 1-2px and the device framebuffer re-letterboxes on every step. Kröhnkite is cleared: `ignoreClass` already lists `Emulator,qemu-system-x86_64`, and programmatic geometry is stable across dozens of trials.
-    - **`resize-emulator.sh [fill|large|medium|small|<height>]`** sets a size that is an exact multiple of the scale denominator *and* matches the device aspect, so there is no rounding and no letterbox. `fill` gives 400x900 here. This is the reliable way to resize — prefer it over dragging.
+  - **Resizing the device window used to "shift sizes"/jitter — that is a fractional-scaling bug, NOT Kröhnkite.** The emulator's bundled Qt ships only the `xcb` platform plugin (`~/Android/Sdk/emulator/lib64/qt/plugins/platforms/` has no Wayland plugin), so it is **always an XWayland client**. This display **now runs at scale 1** (1920x1080), so the rounding below no
+    longer bites here — `resize` reports `snap=1px`. Kept for machines still on
+    a fractional scale, where it read: the display runs **scale 1.15 = 23/20**,
+    and XWayland rounds logical->device pixels: only logical sizes that are **multiples of 20** convert exactly. In between the rounding is *non-monotonic* — measured logical width `503->568`, `504->570` (skips 569), `509->575`, `510->577` — so a smooth 1px drag steps the client buffer unevenly by 1-2px and the device framebuffer re-letterboxes on every step. Kröhnkite is cleared: `ignoreClass` already lists `Emulator,qemu-system-x86_64`, and programmatic geometry is stable across dozens of trials.
+    - **`resize-emulator.sh [fill|large|medium|small|<height>]`** sets a size that is an exact multiple of the scale denominator *and* matches the device aspect, so there is no rounding and no letterbox. `fill` gives **471x1046** on this machine (measured 2026-09-04). This is the reliable way to resize — prefer it over dragging.
     - **`install-resize-snap.sh`** installs a persistent KWin script (`~/.local/share/kwin/scripts/navalert-emu-snap/`) that snaps the window to a clean size when you **finish** dragging its edge. It cannot make the drag itself smooth (inherent to XWayland + fractional scale) but the size you land on is always exact. Remove with `install-resize-snap.sh --remove`. Width is always re-derived from height, since the device has a fixed aspect.
     - **Separate bug, same script: *dragging* the window used to randomly resize it** ("small then big then medium"). That is **KWin's own tiling**, not Kröhnkite and not the scaling. This machine has custom tile zones configured in `~/.config/kwinrc` (`[Tiling][<desktop>][<output>]`, e.g. `0.25/0.5/0.25` and `0.5/0.5`) plus KWin's default drag-to-edge tiling, so dropping the window near an edge or zone snaps it to that tile — verified: quick-tile left/right gives `835x911`, top-left gives `835x456`. The window then carries a live `tile` object (`w.tile` was `KWin::Tile(0x...)`). `install-resize-snap.sh` now clears `w.tile` on `tileChanged`/`quickTileModeChanged` and restores the pre-drag size on `interactiveMoveResizeFinished`, so a drag can never change the size. Verified with real synthetic mouse drags (ydotool) to left/right/top/both corners: size preserved in all 6 cases.
     - Kröhnkite is **not** involved in either bug: `KrohnkiteNextLayout` / `Rotate` leave the emulator's geometry untouched. Polonium is installed but not loaded.
@@ -85,7 +95,10 @@ until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 ]
 ```bash
 adb install -r -t build/app/outputs/flutter-apk/app-debug.apk
 ```
-APKs live under `build/app/outputs/flutter-apk/` — **gitignored**, not in git: they're built on Windows and present on the shared DevSpace drive. On a fresh clone without them, rebuild on the Windows machine — this host can't build.
+APKs live under `build/app/outputs/flutter-apk/` — **gitignored**, so a fresh
+clone has none. Build one here with `flutter build apk --debug`, or just use
+`flutter run`. (This used to say the host could not build and to go to the
+Windows machine; it built the v2.1.0 release APK on 2026-09-03.)
 
 ### 3. Launch and give it real data
 ```bash
@@ -225,7 +238,10 @@ reports `snap=1px`. The section is kept for machines still on 1.15.
 
 ## Facts (all three machines)
 - **Package / activity:** `ph.edu.pup.navalert` / `.MainActivity`
-- **AVD:** `Pixel_6` (android-35 google_apis x86_64)
+- **AVD on this laptop:** `flutter_phone` — the only one present. Every boot
+  prints `Note: 'Pixel_6' not found; using the only AVD present:
+  flutter_phone`. `boot-emulator.sh` prefers `Pixel_6`, falls back to the
+  sole AVD, and stops if several exist. `emulator -list-avds` is the truth.
 - **Debug APK:** `build/app/outputs/flutter-apk/app-debug.apk`
 - **APK is gitignored** (`.gitignore: /build/`) — a fresh clone has none; `flutter run` builds one.
 - **Display scale on the Linux laptop:** 1.15 (1920x1080 panel -> 1670x940 logical). Window sizes must be multiples of **20** logical px to avoid XWayland rounding jitter.
