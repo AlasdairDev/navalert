@@ -37,15 +37,18 @@ checks would have.
 
 Before writing a report, answer all four:
 
-| Check | Command |
-|---|---|
-| Is the app actually foregrounded? | `adb shell dumpsys activity <pkg> \| grep -i resumed` |
-| Is the screen on and unlocked? | `adb shell dumpsys window \| grep -iE 'mAwake\|isKeyguardShowing'` |
-| Is the app busy or idle? | `adb shell top -n 1 -b \| grep navalert` |
-| Did the tap land where you think? | screenshot **after** the tap and look |
+```bash
+.claude/skills/hunt-navalert/check-env.sh
+```
+
+Four checks, one verdict: emulator present, screen on, keyguard dismissed,
+NavAlert foregrounded, and whether the app is busy or idle. It exits non-zero
+when the environment is dirty and names the fix for each failure.
 
 A frozen-looking UI at 0 % CPU with the app resumed is a real finding. The same
-thing with the screen asleep is your own fault.
+thing with the screen asleep is your own fault — and a sleeping screen is
+especially treacherous here, because it pauses the Flutter engine and stops its
+timers, so timer-driven behaviour simply never happens.
 
 ---
 
@@ -111,18 +114,32 @@ the road. `gps.sh route` reads the real thing out of `assets/gtfs/routes.json.gz
 
 ## Navigating the UI
 
-**Screenshot, read, then tap. Never replay coordinates from an earlier run.**
+**Tap by LABEL, not by coordinate.** Flutter exposes its semantics to
+uiautomator as `content-desc`, so controls can be found by name:
 
 ```bash
-S=.claude/skills/hunt-navalert/shot.sh
-HUNT_DIR=/tmp/hunt-$(date +%H%M) "$S" home
-adb shell input tap 540 2168
-"$S" after-tap
+T=.claude/skills/hunt-navalert/tap.sh
+
+$T --list                    # every label on screen right now
+$T --where "Start Trip"      # bounds and centre, without tapping
+$T "Show Commute Guide"      # tap it
 ```
 
-Button positions move. One padding change in this app relocated every primary
-button by about 126 px, and every stale coordinate then landed on the navigation
-bar instead. Traps that have already cost time here:
+Matching is a case-insensitive substring, and an **ambiguous match taps nothing**
+and lists the candidates — guessing between them is the failure this replaces. A
+miss prints every label actually on screen, which is usually the answer by
+itself.
+
+This removes the largest source of wasted time in a hunt. Button positions move:
+one padding change in this app relocated every primary button by about 126 px,
+and stale coordinates then landed on the navigation bar. In one sweep that
+opened the launcher, opened Assistant, and started a fake call — each of which
+had to be diagnosed before being dismissed as "not a bug".
+
+Screenshot anyway, before and after, with `shot.sh` — the label tells you what
+you hit, the screenshot tells you what happened.
+
+Traps that have already cost time here:
 
 - **The bottom ~130 px belong to the system bar** on an edge-to-edge screen. A
   tap on a *visible* button label can still go to the navigation bar. If a tap
@@ -168,9 +185,13 @@ their button positions move between builds:
 
 Conditions that have each produced a real bug here:
 
-- **Offline.** `adb shell cmd connectivity airplane-mode enable`. Plan online
-  first, then go offline before *Start Trip* — that is the commute the app is
-  built for and the least-tested path.
+- **Offline.** `net.sh off` / `net.sh on`. Plan online first, then go offline
+  before *Start Trip* — that is the commute the app is built for and the
+  least-tested path. Use the helper rather than airplane mode alone: on an
+  emulator wifi and data can survive it, and a "verified offline" run that was
+  quietly online manufactures false confidence in the one capability this app
+  is built around. `net.sh` pings afterwards and fails if the state it reports
+  is not the state you asked for.
 - **GPS stopped.** Deliver one fix and then none. Timer-driven behaviour is
   invisible while a live stream keeps rebuilding the screen; this is exactly how
   the escalation bug hid.
