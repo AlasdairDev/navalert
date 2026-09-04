@@ -4,23 +4,74 @@
 # ORDER MATTERS ON AN 8 GB MACHINE. Gradle and qemu must never be resident at
 # the same time: this laptop's only swap is zram (compressed RAM, not disk), so
 # there is no real overflow and the kernel LIVELOCKS instead of OOM-killing
-# anything. Build with the emulator down, stop the Gradle daemon, then boot.
+# anything. When a build IS needed, the emulator goes down first.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../../.." && pwd)"
 PKG=ph.edu.pup.navalert
 APK="$REPO/build/app/outputs/flutter-apk/app-debug.apk"
-SKIP_BUILD=0
-[ "${1:-}" = "--no-build" ] && SKIP_BUILD=1
+
+usage() {
+  cat <<USAGE
+usage: prep-device.sh [--rebuild] [--no-launch] [--help]
+
+Prepares an emulator for a hunt: build if needed, boot, install, grant
+permissions, keep the screen awake, and launch the app.
+
+  --rebuild     force a rebuild even if the APK is already current.
+                Takes the emulator DOWN first — Gradle and qemu must not
+                overlap on an 8 GB machine.
+  --no-launch   stop after installing; do not start the app.
+  --help        this text.
+
+By default nothing is rebuilt and no running emulator is disturbed when the
+APK is already newer than lib/, assets/ and pubspec.
+USAGE
+}
+
+REBUILD=0
+LAUNCH=1
+# DO NOT MODIFY LOGIC: unknown flags must ABORT, never fall through.
+# An earlier version accepted only `--no-build` and treated everything else —
+# including `--help` — as "build", so asking for help killed a running emulator
+# and started a full Gradle build. Anything unrecognised now stops here.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rebuild)   REBUILD=1 ;;
+    --no-launch) LAUNCH=0 ;;
+    --no-build)  REBUILD=0 ;;   # accepted for compatibility; now the default
+    -h|--help)   usage; exit 0 ;;
+    *) echo "ERROR: unknown option '$1'" >&2; echo >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
 
 cd "$REPO"
+command -v adb >/dev/null 2>&1 || { echo "ERROR: adb not on PATH" >&2; exit 1; }
 
-if [ "$SKIP_BUILD" -eq 0 ]; then
-  echo "==> stopping any emulator first (Gradle and qemu must not overlap)"
-  adb emu kill >/dev/null 2>&1 || true
-  sleep 4
-  echo "==> building debug APK"
+emulator_up() { adb devices 2>/dev/null | grep -qE 'emulator-[0-9]+[[:space:]]+device'; }
+
+# Is the APK newer than everything that goes into it?
+apk_current() {
+  [ -f "$APK" ] || return 1
+  local newer
+  newer=$(find lib assets pubspec.yaml pubspec.lock android/app/src/main \
+            -newer "$APK" -type f 2>/dev/null | head -1)
+  [ -z "$newer" ]
+}
+
+if [ "$REBUILD" -eq 1 ] || ! apk_current; then
+  if [ "$REBUILD" -eq 1 ]; then
+    echo "==> rebuild requested"
+  else
+    echo "==> APK is missing or older than the sources; rebuilding"
+  fi
+  if emulator_up; then
+    echo "==> stopping the emulator first (Gradle and qemu must not overlap)"
+    adb emu kill >/dev/null 2>&1 || true
+    sleep 4
+  fi
   # Debug, not release: debugPrint reaches logcat, which is how NavAlert reports
   # its own failures ("NavAlert: ..."). Release strips them and a hunt goes blind.
   flutter build apk --debug
@@ -28,13 +79,19 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
   # script and kills it (exit 144). Ask Gradle to stop instead.
   ./android/gradlew --stop >/dev/null 2>&1 || true
   sleep 2
+else
+  echo "==> APK is current; no build, and any running emulator is left alone"
 fi
 
 [ -f "$APK" ] || { echo "ERROR: no APK at $APK" >&2; exit 1; }
 
-echo "==> booting the emulator (memory-capped scope)"
-"$REPO/.claude/skills/run-navalert/boot-emulator.sh" "${AVD:-}" || true
-adb devices | grep -qE 'emulator-[0-9]+\s+device' || { echo "ERROR: no device" >&2; exit 1; }
+if emulator_up; then
+  echo "==> emulator already running"
+else
+  echo "==> booting the emulator (memory-capped scope)"
+  "$REPO/.claude/skills/run-navalert/boot-emulator.sh" "${AVD:-}" || true
+fi
+emulator_up || { echo "ERROR: no emulator after boot" >&2; exit 1; }
 
 echo "==> installing"
 adb install -r "$APK" | tail -1
@@ -46,7 +103,7 @@ done
 
 # Keep the device awake for the whole hunt. A screen that sleeps pauses the
 # Flutter engine, which stops its timers — and a stopped escalation timer looks
-# exactly like an alarm that refuses to escalate. Rule the environment out by
+# exactly like an alarm refusing to escalate. Rule the environment out by
 # construction rather than re-deriving it mid-report.
 echo "==> stay awake"
 adb shell svc power stayon true >/dev/null 2>&1 || true
@@ -57,6 +114,16 @@ adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true
 adb shell svc wifi enable  >/dev/null 2>&1 || true
 adb shell svc data enable  >/dev/null 2>&1 || true
 
-echo "==> free RAM after boot:"
+if [ "$LAUNCH" -eq 1 ]; then
+  echo "==> launching"
+  adb shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1 || true
+  # The emulator has no GPS until one is set, and the app refuses to plan from an
+  # unknown position rather than inventing one — without this you get "turn on
+  # GPS", not a map. Longitude first; see gps.sh.
+  adb emu geo fix 121.0108 14.5979 >/dev/null 2>&1 || true
+  echo "    started, GPS seeded at PUP Sta. Mesa (14.5979, 121.0108)"
+fi
+
+echo "==> free RAM:"
 free -h 2>/dev/null | head -2 || true
-echo "ready — launch with: adb shell am start -n $PKG/.MainActivity"
+echo "ready."

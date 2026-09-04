@@ -51,16 +51,30 @@ thing with the screen asleep is your own fault.
 
 ## Setup
 
+One command gets you to the point where judgement can start — emulator
+prepared, app running, every top-level screen already captured:
+
 ```bash
-.claude/skills/hunt-navalert/prep-device.sh          # build, boot, install, grant, stay awake
-.claude/skills/hunt-navalert/prep-device.sh --no-build   # reuse the APK on disk
-adb shell am start -n ph.edu.pup.navalert/.MainActivity
+.claude/skills/hunt-navalert/hunt.sh
+.claude/skills/hunt-navalert/hunt.sh --rebuild    # force a rebuild first
+HUNT_DIR=/tmp/my-hunt .claude/skills/hunt-navalert/hunt.sh
 ```
 
-Build with the emulator **down**. On an 8 GB machine Gradle and qemu together
-livelock the kernel — the only swap is zram, so there is no real overflow to
-spill into. `prep-device.sh` sequences this for you and stops the Gradle daemon
-before booting.
+Or the pieces separately:
+
+```bash
+.claude/skills/hunt-navalert/prep-device.sh   # build if needed, boot, install, launch
+.claude/skills/hunt-navalert/sweep-ui.sh      # capture the top-level screens
+```
+
+**Nothing is rebuilt unless it has to be.** `prep-device.sh` compares the APK
+against `lib/`, `assets/` and `pubspec`, and when it is already current it
+leaves a running emulator completely alone — so `/run-navalert` followed by a
+hunt does not tear down the emulator you just booted. `--rebuild` forces it.
+
+When a build IS needed the emulator goes down first: on an 8 GB machine Gradle
+and qemu together livelock the kernel, because the only swap is zram and there
+is no real overflow to spill into.
 
 It builds **debug** on purpose: `debugPrint` reaches logcat, and NavAlert reports
 its own failures there (`NavAlert: leg geometry unavailable — ...`). Release

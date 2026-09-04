@@ -95,7 +95,8 @@ screen is driven by `notifyListeners()` and nothing asserted that.
 ```bash
 H=.claude/skills/hunt-navalert
 
-$H/prep-device.sh                 # build, boot, install, grant, stay awake
+$H/hunt.sh                        # everything below, in one command
+$H/prep-device.sh                 # build if needed, boot, install, launch
 HUNT_DIR=/tmp/hunt $H/sweep-ui.sh # capture every top-level screen
 $H/gps.sh find "CUBAO"            # search the bundled feed
 $H/gps.sh route "MURPHY 15TH AVE - STOP N SHOP" 2 16
