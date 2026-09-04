@@ -116,6 +116,10 @@ console, which a handset does not have. It covers §4.6–4.8 below and is the
 fastest way to exercise a whole commute, but §4.1–4.5 need the real radio and
 cannot be faked.
 
+```bash
+.claude/skills/hunt-navalert/hunt.sh   # prepare, launch, capture every screen
+```
+
 On **Aurora DX** or another Fedora Atomic image, `install-aurora.sh` beside them
 installs everything into `$HOME`. Do not `rpm-ostree install` the toolchain:
 `/usr` is read-only there and layering slows every later image update, whereas

@@ -473,6 +473,11 @@ nothing to install, nothing to copy into `~/.claude/`:
 | **`/run-navalert`** | get the app onto an emulator or handset |
 | **`/hunt-navalert`** | drive simulated GPS through whole commutes and hunt for bugs (emulator only) |
 
+```bash
+.claude/skills/hunt-navalert/hunt.sh   # prepare an emulator, launch, capture every screen
+```
+
+
 Every helper inside them also runs from a plain shell, with no Claude Code
 involved. See **[SKILLS.md](SKILLS.md)** for what each one does and, more
 usefully, *why each is shaped the way it is* — most of those decisions are a

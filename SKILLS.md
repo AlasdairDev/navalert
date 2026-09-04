@@ -95,12 +95,30 @@ screen is driven by `notifyListeners()` and nothing asserted that.
 ```bash
 H=.claude/skills/hunt-navalert
 
-$H/hunt.sh                        # everything below, in one command
-$H/prep-device.sh                 # build if needed, boot, install, launch
-HUNT_DIR=/tmp/hunt $H/sweep-ui.sh # capture every top-level screen
+$H/hunt.sh                        # prepare, launch, capture every screen
+```
+
+That one command is the whole start of a hunt. The pieces, for when you want
+them individually:
+
+| Helper | Does |
+|---|---|
+| `prep-device.sh` | build only if the APK is stale, boot, install, grant, launch |
+| `sweep-ui.sh` | capture every top-level screen, so none is skipped |
+| `tap.sh "Start Trip"` | tap by **label**, never by coordinate |
+| `gps.sh route "..."` | drive a real route from the bundled feed |
+| `check-env.sh` | rule out the environment before filing anything |
+| `net.sh off\|on` | go offline, and verify it actually is |
+| `logs.sh` | the app's own reports, crashes, and whether it is still alive |
+| `shot.sh label` | numbered screenshot into the hunt folder |
+
+```bash
+$H/tap.sh --list                  # every label on screen right now
+$H/tap.sh "Show Commute Guide"    # tap it
 $H/gps.sh find "CUBAO"            # search the bundled feed
 $H/gps.sh route "MURPHY 15TH AVE - STOP N SHOP" 2 16
-$H/shot.sh label                  # numbered screenshot
+$H/net.sh off                     # offline, confirmed by a ping
+$H/logs.sh                        # did anything crash?
 ```
 
 ### Why the helpers are shaped the way they are
@@ -126,6 +144,18 @@ like an alarm refusing to escalate.
 **`sweep-ui.sh` computes tab positions from `wm size`.** A hardcoded y from
 another panel lands on the navigation bar and silently does nothing — the same
 trap that makes real taps vanish.
+
+**`tap.sh` finds controls by label, because coordinates were the largest source
+of waste.** Flutter exposes its semantics to uiautomator as `content-desc`, so a
+control can be resolved to real bounds and tapped at its true centre. An
+ambiguous match taps nothing and lists the candidates; guessing between them is
+the failure it replaces. It wakes the screen first — uiautomator on a sleeping
+one fails with "null root node returned by UiTestAutomationBridge", which names
+neither cause nor fix.
+
+**`logs.sh` catches what a screenshot cannot.** A Flutter crash leaves the last
+frame on screen, so a sweep can photograph a folder of healthy-looking pages
+belonging to a dead process.
 
 ### The rule it leads with
 
