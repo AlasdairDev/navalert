@@ -42,9 +42,18 @@ else
   echo "float: already floating (x=$x) — left as is"
 fi
 
-# place it comfortably on the right (draggable afterward)
+# Place it on one side of the screen, draggable afterward.
+#
+# LEFT by default. It used to be hard-coded right, which put the phone on top of
+# whatever was over there — on this setup that is the editor. Override per run
+# with EMU_SIDE=right, or pass `left`/`right` as the first argument.
+SIDE="${EMU_SIDE:-left}"
+case "${1:-}" in left|right) SIDE="$1" ;; esac
+[ "$SIDE" = "left" ] || [ "$SIDE" = "right" ] || SIDE=left
+
 S2="$(mktemp --suffix=.js)"
-cat > "$S2" <<'JS'
+printf 'var SIDE=%s;\n' "\"$SIDE\"" > "$S2"
+cat >> "$S2" <<'JS'
 var l=(typeof workspace.windowList==='function')?workspace.windowList():workspace.clientList();
 // Use the panel-aware work area so the whole phone fits on screen.
 var geo={x:0,y:0,width:1670,height:939};
@@ -55,10 +64,12 @@ var frameH=Math.round(geo.height-topM-botM);              // fill the height
 var frameW=Math.round((frameH-titleBar)*1080/2400);       // width from phone aspect
 for(var i=0;i<l.length;i++){var w=l[i];if(w.resourceClass==="Emulator"&&w.windowType===0){
   try{w.noBorder=false;}catch(e){}   // ensure a title bar so it can be dragged/closed
-  w.frameGeometry={x:Math.round(geo.x+geo.width-frameW-14),y:Math.round(geo.y+topM),width:frameW,height:frameH};
+  var fx = (SIDE==="left") ? Math.round(geo.x+14)
+                          : Math.round(geo.x+geo.width-frameW-14);
+  w.frameGeometry={x:fx,y:Math.round(geo.y+topM),width:frameW,height:frameH};
 }}
 JS
 gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.loadScript "$S2" >/dev/null 2>&1
 gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.start >/dev/null 2>&1
 rm -f "$S2"
-echo "float: placed on the right (draggable)"
+echo "float: placed on the $SIDE (draggable)"

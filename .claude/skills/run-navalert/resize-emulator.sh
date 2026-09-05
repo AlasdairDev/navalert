@@ -16,9 +16,14 @@
 # the width from the device aspect ratio so the phone fills the frame exactly.
 #
 # Usage:  resize-emulator.sh [fill|large|medium|small|<height-in-logical-px>]
+#         EMU_SIDE=left|right  (default: left)
 # KDE/KWin only; no-ops elsewhere.
 set -uo pipefail
 MODE="${1:-fill}"
+# LEFT by default. This used to park on the right unconditionally, which drops
+# the phone on top of whatever lives over there — the editor, on this setup.
+SIDE="${EMU_SIDE:-left}"
+[ "$SIDE" = "left" ] || [ "$SIDE" = "right" ] || SIDE=left
 command -v gdbus >/dev/null 2>&1 || { echo "resize: no gdbus (not KDE) — skipping"; exit 0; }
 
 # --- device aspect (from the running device, falls back to a 1080x2400 phone) ---
@@ -33,11 +38,11 @@ SNAP="$(awk -v s="$SCALE" 'BEGIN{
   for(q=1;q<=64;q++){v=s*q; if(v-int(v)<1e-6||int(v)+1-v<1e-6){print q; exit}}
   print 1}')"
 
-echo "resize: device=${DEV_W}x${DEV_H} scale=${SCALE} snap=${SNAP}px mode=${MODE}"
+echo "resize: device=${DEV_W}x${DEV_H} scale=${SCALE} snap=${SNAP}px mode=${MODE} side=${SIDE}"
 
 S="$(mktemp --suffix=.js)"
 cat > "$S" <<JS
-var SNAP=${SNAP}, ASPECT=${DEV_W}/${DEV_H}, MODE="${MODE}";
+var SNAP=${SNAP}, ASPECT=${DEV_W}/${DEV_H}, MODE="${MODE}", SIDE="${SIDE}";
 var l=(typeof workspace.windowList==='function')?workspace.windowList():workspace.clientList();
 var win=null;
 for(var i=0;i<l.length;i++){var w=l[i];if(w.resourceClass==="Emulator"&&w.windowType===0){win=w;}}
@@ -70,7 +75,14 @@ if(win){
   if(!W){ H=H0; W=Math.round(((H-dH)*ASPECT+dW)/SNAP)*SNAP; }
   if(W>ca.width){ W=Math.floor(ca.width/SNAP)*SNAP; }
 
-  var x=Math.round(ca.x+ca.width-W-SNAP);          // park on the right, still draggable
+  // Park on the chosen side, still draggable. LEFT by default — hard-coding the
+  // right put the phone on top of the editor on this setup.
+  //
+  // The margin is a snapped ~14px, not SNAP itself: at scale 1 SNAP is 1, which
+  // glued the window to the screen edge with no room to grab its border.
+  var MARGIN = Math.max(SNAP, Math.round(14/SNAP)*SNAP);
+  var x = (SIDE==="right") ? Math.round(ca.x+ca.width-W-MARGIN)
+                           : Math.round(ca.x+MARGIN);
   var y=Math.round(ca.y+(ca.height-H)/2);
   if(x<ca.x)x=ca.x; if(y<ca.y)y=ca.y;
   try{win.noBorder=false;}catch(e){}                // keep the titlebar for dragging

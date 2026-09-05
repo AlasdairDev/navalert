@@ -121,8 +121,12 @@ adb emu geo fix 121.0108 14.5979     # PUP Sta. Mesa — the usual demo origin
 # Run these AFTER launch (launching raises the toolbar / re-tiles the window).
 .claude/skills/run-navalert/set-3button-nav.sh
 .claude/skills/run-navalert/hide-emulator-toolbar.sh
-.claude/skills/run-navalert/float-emulator.sh
+.claude/skills/run-navalert/float-emulator.sh         # LEFT by default
 .claude/skills/run-navalert/resize-emulator.sh fill   # clean, jitter-free size
+
+# the phone sits on the LEFT; put it on the right instead with:
+EMU_SIDE=right .claude/skills/run-navalert/float-emulator.sh
+EMU_SIDE=right .claude/skills/run-navalert/resize-emulator.sh fill
 ```
 
 ### 4. Drive & verify
@@ -213,6 +217,18 @@ black with diagonal garbage that flickers.
 device is 1080x2400 (aspect 0.45), so the emulator letterboxes inside the tile
 and the leftover region is never painted — that undrawn buffer is the black area
 and the tearing. It is not a GPU fault and `-gpu host` does not prevent it.
+
+**The phone is placed on the LEFT** (`EMU_SIDE=right` to move it). It used to be
+hard-coded to the right, which dropped it on top of whatever was over there —
+the editor, on this setup.
+
+**Emulator window is solid black?** Its screen is asleep, not crashed — a dark
+display renders as a black window. Wake it:
+`adb shell input keyevent KEYCODE_WAKEUP`. To stop it recurring, note that
+`svc power stayon true` alone does nothing on an emulator (it means "while
+plugged in", and an emulator reports `AC powered: false`); it needs
+`adb shell dumpsys battery set ac 1` as well. `/hunt-navalert`'s
+`prep-device.sh` does both.
 
 **Fix — float it, then set an exact size:**
 ```bash
