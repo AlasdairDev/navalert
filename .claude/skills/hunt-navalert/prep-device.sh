@@ -103,11 +103,27 @@ done
 
 # Keep the device awake for the whole hunt. A screen that sleeps pauses the
 # Flutter engine, which stops its timers — and a stopped escalation timer looks
-# exactly like an alarm refusing to escalate. Rule the environment out by
-# construction rather than re-deriving it mid-report.
+# exactly like an alarm refusing to escalate. It also renders the emulator window
+# solid black, which reads as a crashed app rather than a dark screen.
+#
+# DO NOT MODIFY LOGIC: all three lines are needed, and `svc power stayon true`
+# ALONE DOES NOTHING HERE. It sets stay_on_while_plugged_in=15, meaning "stay on
+# while plugged in" — and an emulator reports `AC powered: false`, so it is never
+# plugged in and the flag never applies. Measured: with stayon set to 15 the
+# screen still slept and the window went black.
+#
+# `dumpsys battery set ac 1` makes the device report itself on AC, which is what
+# finally makes stayon mean something. The timeout is raised too, so the screen
+# survives even if the battery state is reset by something else.
 echo "==> stay awake"
 adb shell svc power stayon true >/dev/null 2>&1 || true
-adb shell settings put system screen_off_timeout 1800000 >/dev/null 2>&1 || true
+adb shell dumpsys battery set ac 1 >/dev/null 2>&1 || true
+adb shell settings put system screen_off_timeout 2147483647 >/dev/null 2>&1 || true
+# Report it, rather than claiming it. This step used to say "stay awake" and then
+# let the screen sleep half an hour later.
+_awake=$(adb shell dumpsys window 2>/dev/null | tr -d '\r' | grep -c "screenState=SCREEN_STATE_ON" || true)
+[ "${_awake:-0}" -gt 0 ] && echo "    screen on, sleep disabled" \
+                        || echo "    WARNING: screen still reports off" >&2
 
 echo "==> network on (go offline later with: adb shell cmd connectivity airplane-mode enable)"
 adb shell cmd connectivity airplane-mode disable >/dev/null 2>&1 || true

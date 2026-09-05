@@ -46,9 +46,22 @@ NavAlert foregrounded, and whether the app is busy or idle. It exits non-zero
 when the environment is dirty and names the fix for each failure.
 
 A frozen-looking UI at 0 % CPU with the app resumed is a real finding. The same
-thing with the screen asleep is your own fault — and a sleeping screen is
-especially treacherous here, because it pauses the Flutter engine and stops its
-timers, so timer-driven behaviour simply never happens.
+thing with the screen asleep is your own fault.
+
+**A sleeping screen is the most treacherous state on this list.** It pauses the
+Flutter engine and stops its timers, so timer-driven behaviour simply never
+happens — which is exactly how the alarm-escalation defect stayed hidden. It
+also renders the emulator window SOLID BLACK, which reads as a crashed app
+rather than a dark display, and it makes `uiautomator` fail with "null root node
+returned by UiTestAutomationBridge", a message that names neither cause nor fix.
+Three unrelated-looking symptoms, one cause.
+
+`prep-device.sh` disables sleep for you. Note that `svc power stayon true` alone
+does NOT work on an emulator: it means "stay on while plugged in", and an
+emulator reports `AC powered: false`, so the flag never applies. It takes
+`dumpsys battery set ac 1` as well.
+
+If you need the real battery state back: `adb shell dumpsys battery reset`.
 
 ---
 
